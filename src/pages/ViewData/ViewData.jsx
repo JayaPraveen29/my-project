@@ -17,14 +17,13 @@ export default function ViewData() {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
 
-  const baseFields = [
+  const baseFields = useMemo(() => [
     "PO", "Received On", "Bill Number", "Bill Date", "Name of the Supplier",
     "Supplier Place", "Section", "Size", "Item Length", "Width", "Number of items Supplied",
     "Quantity in Metric Tons", "Item Per Rate", "Bill Basic Amount", 
-    "Section Loading Charges", "Section Freight<", "Section Subtotal",
     "Loading Charges", "Freight<", "Others", "CGST", "SGST", "IGST", 
     "Total", "Freight>", "G. Total", "Net", "Landed Cost",
-  ];
+  ], []);
 
   const fields = useMemo(() => {
     const dynamicFields = [];
@@ -38,7 +37,7 @@ export default function ViewData() {
     }
     
     return [...dynamicFields, ...baseFields];
-  }, [unitFilter, workTypeFilter]);
+  }, [unitFilter, workTypeFilter, baseFields]);
 
   const fieldLabels = {
     "Unit": "Unit", 
@@ -57,9 +56,6 @@ export default function ViewData() {
     "Quantity in Metric Tons": "MT", 
     "Item Per Rate": "Rate",
     "Bill Basic Amount": "Amount",
-    "Section Loading Charges": "Sec Loading",
-    "Section Freight<": "Sec Freight<",
-    "Section Subtotal": "Sec Subtotal",
     "Loading Charges": "Loading", 
     "Freight<": "Freight\n<\n(GST)",
     "Others": "Others", 
@@ -226,7 +222,7 @@ export default function ViewData() {
     } catch (e) {}
     const dt = new Date(v);
     if (!isNaN(dt)) return dt;
-    const parts = v.toString().split(/[\/\-\s\.]/).map(p => p.trim());
+    const parts = v.toString().split(/[\\/\-\s.]/).map(p => p.trim());
     if (parts.length >= 3) {
       const [d, m, y] = parts;
       const maybe = new Date(`${y}-${m}-${d}`);
@@ -346,7 +342,7 @@ export default function ViewData() {
     
     console.log("Navigating to edit page with Document ID:", documentId);
     try {
-      navigate(`/update-data/${documentId}`); // Changed from /UpdateData/ to /update-data/
+      navigate(`/update-data/${documentId}`);  // CHANGED: lowercase with hyphen
     } catch (error) {
       console.error("Navigation error:", error);
       alert("Failed to navigate to edit page");
@@ -354,11 +350,11 @@ export default function ViewData() {
   };
 
   // Fields that should NOT be totaled
-  const noTotalFields = new Set([
+  const noTotalFields = useMemo(() => new Set([
     "Unit", "Work Type", "PO", "Received On", "Bill Number", "Bill Date", 
     "Name of the Supplier", "Supplier Place", "Section", "Size", 
     "Item Length", "Width", "Number of items Supplied", "Item Per Rate"
-  ]);
+  ]), []);
 
   const totals = useMemo(() => {
     const t = {};
@@ -376,7 +372,7 @@ export default function ViewData() {
     });
   
     return t;
-  }, [filteredData, fields]);
+  }, [filteredData, fields, noTotalFields]);
 
   const totalMT = totals["Quantity in Metric Tons"] || 0;
   const totalNet = totals["Net"] || 0;

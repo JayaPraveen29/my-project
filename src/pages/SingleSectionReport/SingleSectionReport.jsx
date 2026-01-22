@@ -228,9 +228,9 @@ export default function SingleSectionReport() {
     const doc = new jsPDF("p", "pt", "a4");
     let startY = 40;
 
-    let title = `Single Section Report - ${selectedSection} (Size: ${selectedSize})`;
-    if (selectedUnit !== "Group") title += ` | Unit: ${selectedUnit}`;
-    if (selectedWorkType !== "Group") title += ` | Work Type: ${selectedWorkType}`;
+    let title = `${selectedSection} ${selectedSize}`;
+    if (selectedUnit !== "Group") title += ` ${selectedUnit}`;
+    if (selectedWorkType !== "Group") title += ` ${selectedWorkType}`;
     
     doc.setFontSize(14);
     doc.text(title, 14, 25);
@@ -290,7 +290,6 @@ export default function SingleSectionReport() {
   return (
     <div className="single-section-container">
       <h1 className="single-section-heading">Single Section Report</h1>
-
       <div className="filter-container">
         <div className="filter-row">
           {/* Unit Dropdown */}
@@ -340,7 +339,9 @@ export default function SingleSectionReport() {
             <option value="">-- Select Size --</option>
             {sizes.map((size, idx) => <option key={idx} value={size}>{size}</option>)}
           </select>
+        </div>
 
+        <div className="button-row">
           <button onClick={clearFilters} className="btn-clear">
             Clear Filters
           </button>

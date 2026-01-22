@@ -199,32 +199,54 @@
   }
   
   /* Buttons */
-  .btn-clear {
-    padding: 10px 20px;
-    background-color: #95a5a6;
-    color: white;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    font-weight: 500;
-    transition: all 0.3s ease;
-    margin-left: auto;
+  /* Button row styling - separate row for buttons */
+.button-row {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-top: 15px;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+
+/* Buttons */
+.btn-clear {
+  padding: 10px 20px;
+  background-color: #95a5a6;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  flex-shrink: 0;
+}
+
+.btn-clear:hover {
+  background-color: #7f8c8d;
+  transform: translateY(-2px);
+}
+
+.btn-export {
+  padding: 10px 20px;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  flex-shrink: 0;
+}
+
+/* Update responsive breakpoint */
+@media (max-width: 768px) {
+  .button-row .btn-clear,
+  .button-row .btn-export {
+    width: 100%;
+    margin-left: 0;
+    margin-top: 10px;
   }
-  
-  .btn-clear:hover {
-    background-color: #7f8c8d;
-    transform: translateY(-2px);
-  }
-  
-  .btn-export {
-    padding: 10px 20px;
-    color: white;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    font-weight: 500;
-    transition: all 0.3s ease;
-  }
+}
   
   .btn-pdf {
     background-color: #e74c3c;

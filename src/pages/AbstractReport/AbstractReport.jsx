@@ -533,7 +533,9 @@ export default function AbstractReport() {
             onChange={(e) => setToDate(e.target.value)}
             className="filter-date"
           />
+        </div>
 
+        <div className="button-row">
           <button onClick={clearFilters} className="btn-clear">
             Clear Filters
           </button>

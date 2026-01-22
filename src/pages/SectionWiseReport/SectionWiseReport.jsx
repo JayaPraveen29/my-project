@@ -112,10 +112,10 @@ export default function SectionWiseReport() {
     // Add filter info if applicable
     if (selectedUnit !== "Group" || selectedWorkType !== "Group") {
       let filterText = "";
-      if (selectedUnit !== "Group") filterText += `Unit: ${selectedUnit}`;
+      if (selectedUnit !== "Group") filterText += selectedUnit;
       if (selectedWorkType !== "Group") {
-        if (filterText) filterText += " | ";
-        filterText += `Work Type: ${selectedWorkType}`;
+        if (filterText) filterText += " ";
+        filterText += selectedWorkType;
       }
       wsData.push([filterText]);
     }
@@ -239,10 +239,10 @@ export default function SectionWiseReport() {
     if (selectedUnit !== "Group" || selectedWorkType !== "Group") {
       doc.setFontSize(10);
       let filterText = "";
-      if (selectedUnit !== "Group") filterText += `Unit: ${selectedUnit}`;
+      if (selectedUnit !== "Group") filterText += selectedUnit;
       if (selectedWorkType !== "Group") {
-        if (filterText) filterText += " | ";
-        filterText += `Work Type: ${selectedWorkType}`;
+        if (filterText) filterText += " ";
+        filterText += selectedWorkType;
       }
       doc.text(filterText, 14, 35);
       startY = 50;

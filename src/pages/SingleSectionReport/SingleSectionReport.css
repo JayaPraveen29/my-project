@@ -1,4 +1,4 @@
-/* Single Section Report Container */
+
 .single-section-container {
     padding: 30px;
     background-color: var(--bg-primary);
@@ -13,7 +13,7 @@
     font-weight: 700;
   }
   
-  /* Filter Container */
+
   .filter-container {
     background-color: var(--bg-secondary);
     border-radius: 12px;
@@ -22,12 +22,27 @@
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   }
   
-  .filter-row {
-    display: flex;
-    align-items: center;
-    gap: 15px;
-    flex-wrap: wrap;
-  }
+  
+.filter-row {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  flex-wrap: wrap;
+}
+
+
+.button-row {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-top: 15px;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+
+.button-row .btn-clear {
+  margin-left: 0;
+}
   
   .filter-row label {
     font-weight: 500;
@@ -73,7 +88,7 @@
     cursor: pointer;
     font-weight: 500;
     transition: all 0.3s ease;
-    margin-left: auto;
+    flex-shrink: 0;
   }
   
   .btn-clear:hover {
@@ -89,6 +104,8 @@
     cursor: pointer;
     font-weight: 500;
     transition: all 0.3s ease;
+    flex-shrink: 0;
+   
   }
   
   .btn-export:disabled {
@@ -291,8 +308,8 @@
     .btn-clear,
     .btn-export {
       width: 100%;
-      margin-left: 0;
       margin-top: 10px;
+      margin-left: 0 !important;
     }
   
     .section-header {

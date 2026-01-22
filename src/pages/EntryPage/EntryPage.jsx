@@ -1214,9 +1214,9 @@ export default function EntryPage() {
                   <label>Section Loading</label>
                   <input 
                     type="number"
-                    step="0.01"
-                    value={item["Section Loading Charges"]} 
-                    onChange={e => handleManualEdit(item.id, "Section Loading Charges", e.target.value)}
+                    step="0.001"
+                    value={parseFloat(item["Section Loading Charges"]).toFixed(3)} 
+                    onChange={e => handleManualEdit(item.id, "Section Loading Charges", parseFloat(e.target.value))}
                   />
                 </div>
 
@@ -1224,9 +1224,9 @@ export default function EntryPage() {
                   <label>Section Freight&lt;</label>
                   <input 
                     type="number"
-                    step="0.01"
-                    value={item["Section Freight<"]} 
-                    onChange={e => handleManualEdit(item.id, "Section Freight<", e.target.value)}
+                    step="0.001"
+                    value={parseFloat(item["Section Freight<"]).toFixed(3)} 
+                    onChange={e => handleManualEdit(item.id, "Section Freight<", parseFloat(e.target.value))}
                   />
                 </div>
 

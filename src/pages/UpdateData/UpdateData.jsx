@@ -232,7 +232,7 @@ export default function UpdateData() {
       
       if (!docSnap.exists()) {
         alert("Entry not found!");
-        navigate("/ViewData");
+        navigate("/View-Data");
         return;
       }
       
@@ -546,6 +546,8 @@ export default function UpdateData() {
   const parseNum = (v) => parseFloat(v?.toString().replace(/,/g, "")) || 0;
   const formatNum = (n) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+  
+
   const formatDateForDisplay = (d) => {
     if (!d) return "";
     const [y, m, day] = d.split("-");
@@ -706,7 +708,7 @@ export default function UpdateData() {
       
       await updateDoc(doc(db, "entries", id), docData);
       alert("Entry Updated Successfully!");
-      navigate("/ViewData");
+      navigate("/View-Data");
     } catch (e) { 
       console.error(e); 
       alert("Update Error"); 
@@ -1043,9 +1045,9 @@ export default function UpdateData() {
                   <label>Section Loading</label>
                   <input 
                     type="number"
-                    step="0.01"
-                    value={item["Section Loading Charges"]} 
-                    onChange={e => handleManualEdit(item.id, "Section Loading Charges", e.target.value)}
+                    step="0.001"
+                    value={parseFloat(item["Section Loading Charges"]).toFixed(3)} 
+                    onChange={e => handleManualEdit(item.id, "Section Loading Charges", parseFloat(e.target.value))}
                   />
                 </div>
 
@@ -1053,9 +1055,9 @@ export default function UpdateData() {
                   <label>Section Freight&lt;</label>
                   <input 
                     type="number"
-                    step="0.01"
-                    value={item["Section Freight<"]} 
-                    onChange={e => handleManualEdit(item.id, "Section Freight<", e.target.value)}
+                    step="0.001"
+                    value={parseFloat(item["Section Freight<"]).toFixed(3)} 
+                    onChange={e => handleManualEdit(item.id, "Section Freight<", parseFloat(e.target.value))}
                   />
                 </div>
 
