@@ -1,0 +1,135 @@
+* {
+    box-sizing: border-box;
+    font-family: Arial, Helvetica, sans-serif;
+  }
+  
+  .outer-container {
+    min-height: 100vh;
+    width: 100%;
+    background-size: cover;
+    background-position: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  }
+  
+  .flex-card {
+    display: flex;
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 18px;
+    overflow: hidden;
+    max-width: 900px;
+    width: 100%;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.15),
+                0 15px 35px rgba(0, 0, 0, 0.1);
+  }
+  
+  /* Left Image */
+  .image-container {
+    flex: 45%;
+  }
+  
+  .image-container img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  
+  /* Right Form */
+  .form-card {
+    flex: 55%;
+    padding: 32px;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .title-small {
+    text-align: center;
+    color: #4da6ff;
+    font-weight: bold;
+    margin-bottom: 8px;
+  }
+  
+  .title-main {
+    text-align: center;
+    margin-bottom: 24px;
+  }
+  
+  .form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  
+  .form-control {
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .form-control label {
+    margin-bottom: 6px;
+    font-weight: 500;
+  }
+  
+  .form-control input {
+    padding: 10px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+    font-size: 14px;
+  }
+  
+  .form-control input:focus {
+    outline: none;
+    border-color: #4da6ff;
+  }
+  
+  .error {
+    color: red;
+    font-size: 12px;
+    margin-top: 4px;
+  }
+  
+  button {
+    padding: 12px;
+    background: #1976d2;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 16px;
+  }
+  
+  button:disabled {
+    background: #90caf9;
+    cursor: not-allowed;
+  }
+  
+  .link-center {
+    text-align: center;
+    margin-top: 8px;
+    color: #1976d2;
+    text-decoration: none;
+  }
+  
+  .divider {
+    text-align: center;
+    margin: 20px 0;
+    color: #777;
+  }
+  
+  .signup-text {
+    text-align: center;
+  }
+  
+  /* Responsive */
+  @media (max-width: 768px) {
+    .flex-card {
+      flex-direction: column;
+    }
+  
+    .image-container {
+      display: none;
+    }
+  }
+  

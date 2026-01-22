@@ -1,0 +1,322 @@
+/* Supplier Report Container */
+.supplier-report-container {
+    padding: 30px;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    min-height: 100vh;
+  }
+  
+  .supplier-report-heading {
+    font-size: 2rem;
+    margin-bottom: 30px;
+    color: var(--text-primary);
+    font-weight: 700;
+  }
+  
+  /* Filter Container */
+  .filter-container {
+    background-color: var(--bg-secondary);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 30px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+  
+  .filter-row {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    flex-wrap: nowrap;
+  }
+  
+  .filter-row label {
+    font-weight: 500;
+    white-space: nowrap;
+    color: var(--text-primary);
+    font-size: 0.95rem;
+  }
+  
+  .filter-select {
+    padding: 10px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    min-width: 150px;
+  }
+  
+  .filter-select:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+  }
+  
+  .filter-select:hover {
+    border-color: var(--accent-color);
+  }
+  
+  /* Buttons */
+  .btn-clear {
+    padding: 10px 20px;
+    background-color: #95a5a6;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    margin-left: auto;
+    white-space: nowrap;
+  }
+  
+  .btn-clear:hover {
+    background-color: #7f8c8d;
+    transform: translateY(-2px);
+  }
+  
+  .btn-export {
+    padding: 10px 20px;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+  }
+  
+  .btn-pdf {
+    background-color: #e74c3c;
+  }
+  
+  .btn-pdf:hover {
+    background-color: #c0392b;
+    transform: translateY(-2px);
+  }
+  
+  .btn-excel {
+    background-color: #217346;
+  }
+  
+  .btn-excel:hover {
+    background-color: #1a5c37;
+    transform: translateY(-2px);
+  }
+  
+  /* Table Container */
+  .table-container {
+    overflow-x: auto;
+    background-color: var(--bg-secondary);
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+  
+  .supplier-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.95rem;
+  }
+  
+  .supplier-table thead {
+    background-color: var(--table-header-bg);
+    color: var(--table-header-text);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  
+  .supplier-table th {
+    padding: 12px 10px;
+    text-align: center;
+    font-weight: 600;
+    border: 1px solid var(--border-color);
+    white-space: nowrap;
+    font-size: 0.9rem;
+  }
+  
+  .supplier-table tbody tr {
+    transition: background-color 0.2s ease;
+  }
+  
+  .supplier-table tbody tr:hover {
+    background-color: var(--hover-bg);
+  }
+  
+  .supplier-table td {
+    padding: 10px;
+    text-align: center;
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    font-size: 0.88rem;
+  }
+  
+  .text-left {
+    text-align: left !important;
+  }
+  
+  .text-right {
+    text-align: right !important;
+  }
+  
+  .text-center {
+    text-align: center !important;
+  }
+  
+  .total-row {
+    font-weight: bold;
+    background-color: #c0392b !important;
+    color: white !important;
+  }
+  
+  .total-row td {
+    color: white !important;
+    border-color: #a93226 !important;
+    font-size: 0.9rem;
+  }
+  
+  /* Empty State */
+  .empty-state {
+    text-align: center;
+    padding: 20px;
+    font-size: 1.1rem;
+    color: var(--text-secondary);
+  }
+  
+  /* Theme Variables */
+  :root {
+    --bg-primary: #ffffff;
+    --bg-secondary: #f8f9fa;
+    --bg-tertiary: #e9ecef;
+    --text-primary: #212529;
+    --text-secondary: #6c757d;
+    --border-color: #dee2e6;
+    --accent-color: #3498db;
+    --hover-bg: #e3f2fd;
+    --table-header-bg: #e6f0ff;
+    --table-header-text: #000000;
+  }
+  
+  [data-theme="dark"] {
+    --bg-primary: #1a1a1a;
+    --bg-secondary: #2a2a2a;
+    --bg-tertiary: #3a3a3a;
+    --text-primary: #ffffff;
+    --text-secondary: #b0b0b0;
+    --border-color: #444444;
+    --accent-color: #3498db;
+    --hover-bg: #333333;
+    --table-header-bg: #2c3e50;
+    --table-header-text: #ecf0f1;
+  }
+  
+  /* Responsive Design */
+  @media (max-width: 1024px) {
+    .supplier-report-heading {
+      font-size: 1.5rem;
+    }
+  
+    .filter-row {
+      gap: 10px;
+    }
+  }
+  
+  @media (max-width: 768px) {
+    .supplier-report-container {
+      padding: 20px;
+    }
+  
+    .filter-row {
+      flex-direction: column;
+      align-items: stretch;
+    }
+  
+    .filter-row label {
+      margin-bottom: 5px;
+    }
+  
+    .filter-select {
+      width: 100%;
+    }
+  
+    .btn-clear,
+    .btn-export {
+      width: 100%;
+      margin-left: 0;
+      margin-top: 10px;
+    }
+  
+    .table-container {
+      padding: 15px;
+    }
+  
+    .supplier-table {
+      font-size: 0.85rem;
+    }
+  
+    .supplier-table th,
+    .supplier-table td {
+      padding: 8px 6px;
+      font-size: 0.8rem;
+    }
+  
+    .total-row td {
+      font-size: 0.82rem;
+    }
+  
+    .empty-state {
+      padding: 40px 20px;
+      font-size: 1rem;
+    }
+  }
+  
+  /* Print Styles */
+  @media print {
+    .filter-container {
+      display: none;
+    }
+  
+    .supplier-report-container {
+      padding: 0;
+    }
+  
+    .supplier-table {
+      border: 1px solid #000;
+    }
+  
+    .supplier-table th,
+    .supplier-table td {
+      border: 1px solid #000;
+      color: #000;
+    }
+  
+    .table-container {
+      box-shadow: none;
+    }
+  }
+  
+  /* Scrollbar Styles */
+  .supplier-report-container::-webkit-scrollbar,
+  .table-container::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  
+  .supplier-report-container::-webkit-scrollbar-track,
+  .table-container::-webkit-scrollbar-track {
+    background: var(--bg-secondary);
+  }
+  
+  .supplier-report-container::-webkit-scrollbar-thumb,
+  .table-container::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 4px;
+  }
+  
+  .supplier-report-container::-webkit-scrollbar-thumb:hover,
+  .table-container::-webkit-scrollbar-thumb:hover {
+    background: var(--text-secondary);
+  }

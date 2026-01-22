@@ -1,0 +1,432 @@
+/* Bill Number Search Container */
+.bill-search-container {
+    padding: 30px;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    min-height: 100vh;
+  }
+  
+  .bill-search-heading {
+    font-size: 2rem;
+    margin-bottom: 30px;
+    color: var(--text-primary);
+    font-weight: 700;
+  }
+  
+  /* Search Section */
+  .search-section {
+    background-color: var(--bg-secondary);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+  
+  .search-input-wrapper {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  
+  .search-input {
+    flex: 1;
+    padding: 12px 16px;
+    font-size: 16px;
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    transition: all 0.3s ease;
+  }
+  
+  .search-input:focus {
+    outline: none;
+    border-color: #2196F3;
+    box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1);
+  }
+  
+  .clear-search-btn {
+    background-color: #e74c3c;
+    color: white;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+  }
+  
+  .clear-search-btn:hover {
+    background-color: #c0392b;
+    transform: translateY(-2px);
+  }
+  
+  .back-btn {
+    background-color: #e74c3c;
+    color: white;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+  }
+  
+  .back-btn:hover {
+    background-color: #c0392b;
+    transform: translateY(-2px);
+  }
+  
+  /* Bills Grid */
+  .bills-count {
+    color: var(--text-primary);
+    margin-bottom: 15px;
+    font-size: 1.1rem;
+  }
+  
+  .bills-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 15px;
+    margin-top: 20px;
+  }
+  
+  .bill-card {
+    background-color: var(--bg-primary);
+    border: 2px solid var(--border-color);
+    border-radius: 12px;
+    padding: 20px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  }
+  
+  .bill-card:hover {
+    border-color: #2196F3;
+    transform: translateY(-4px);
+    box-shadow: 0 6px 16px rgba(33, 150, 243, 0.2);
+  }
+  
+  .bill-number {
+    font-size: 1.2rem;
+    font-weight: bold;
+    color: #2196F3;
+    margin-bottom: 12px;
+  }
+  
+  .bill-info {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    margin: 6px 0;
+  }
+  
+  .bill-info strong {
+    color: var(--text-primary);
+  }
+  
+  /* Loading and No Results States */
+  .loading-state {
+    text-align: center;
+    padding: 40px;
+    font-size: 1.1rem;
+    color: #2196F3;
+  }
+  
+  .no-results {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-secondary);
+  }
+  
+  .no-results p {
+    font-size: 1.1rem;
+    margin-top: 15px;
+  }
+  
+  /* Entry Details */
+  .entry-details {
+    background-color: var(--bg-secondary);
+    border-radius: 12px;
+    padding: 25px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+  
+  .entry-details-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+    padding-bottom: 15px;
+    border-bottom: 2px solid var(--border-color);
+  }
+  
+  .entry-details-title {
+    margin: 0;
+    color: #2196F3;
+    font-size: 1.5rem;
+  }
+  
+  /* Detail Sections */
+  .detail-section {
+    margin-bottom: 30px;
+  }
+  
+  .detail-section h3 {
+    color: #2196F3;
+    border-bottom: 2px solid #2196F3;
+    padding-bottom: 10px;
+    margin-bottom: 20px;
+    font-size: 1.2rem;
+  }
+  
+  .detail-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+  }
+  
+  .detail-item {
+    padding: 15px;
+    background-color: var(--bg-primary);
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+  }
+  
+  .detail-label {
+    font-weight: 600;
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  
+  .detail-value {
+    font-size: 0.95rem;
+    color: var(--text-primary);
+    font-weight: 500;
+  }
+  
+  /* Items Table */
+  .items-table-wrapper {
+    overflow-x: auto;
+    margin-top: 15px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  }
+  
+  .items-table {
+    width: 100%;
+    border-collapse: collapse;
+    background-color: var(--bg-primary);
+  }
+  
+  .items-table th {
+    background-color: #2196F3;
+    color: #ffffff;
+    padding: 12px;
+    text-align: left;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.85rem;
+    border: 1px solid #1976D2;
+  }
+  
+  .items-table td {
+    padding: 12px;
+    text-align: left;
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    background-color: var(--bg-primary);
+  }
+  
+  .items-table tbody tr:nth-child(even) td {
+    background-color: var(--bg-tertiary);
+  }
+  
+  .items-table tbody tr:hover td {
+    background-color: #e3f2fd;
+    color: #000;
+  }
+  
+  /* Summary Card */
+  .summary-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 25px;
+    border-radius: 12px;
+    margin-top: 30px;
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3);
+  }
+  
+  .summary-card h3 {
+    margin-top: 0;
+    margin-bottom: 20px;
+    font-size: 1.3rem;
+    border-bottom: 2px solid rgba(255, 255, 255, 0.3);
+    padding-bottom: 10px;
+  }
+  
+  .summary-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    font-size: 1rem;
+  }
+  
+  .summary-row:last-child {
+    border-bottom: none;
+    font-size: 1.3rem;
+    font-weight: bold;
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 2px solid rgba(255, 255, 255, 0.3);
+  }
+  
+  /* Theme Variables */
+  :root {
+    --bg-primary: #ffffff;
+    --bg-secondary: #f8f9fa;
+    --bg-tertiary: #e9ecef;
+    --text-primary: #212529;
+    --text-secondary: #6c757d;
+    --border-color: #dee2e6;
+  }
+  
+  [data-theme="dark"] {
+    --bg-primary: #1a1a1a;
+    --bg-secondary: #2a2a2a;
+    --bg-tertiary: #3a3a3a;
+    --text-primary: #ffffff;
+    --text-secondary: #b0b0b0;
+    --border-color: #444444;
+  }
+  
+  /* Dark Theme Overrides */
+  [data-theme="dark"] .items-table th {
+    background-color: #1976D2;
+    border-color: #1565C0;
+  }
+  
+  [data-theme="dark"] .items-table tbody tr:hover td {
+    background-color: #2d4a6d;
+    color: #ffffff;
+  }
+  
+  [data-theme="dark"] .bill-info {
+    color: #b0b0b0;
+  }
+  
+  /* Responsive Design */
+  @media (max-width: 1024px) {
+    .bill-search-heading {
+      font-size: 1.5rem;
+    }
+  
+    .bills-grid {
+      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    }
+  }
+  
+  @media (max-width: 768px) {
+    .bill-search-container {
+      padding: 20px;
+    }
+  
+    .entry-details-header {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 15px;
+    }
+  
+    .back-btn {
+      width: 100%;
+      justify-content: center;
+    }
+  
+    .search-input-wrapper {
+      flex-direction: column;
+    }
+  
+    .clear-search-btn {
+      width: 100%;
+      justify-content: center;
+    }
+  
+    .bills-grid {
+      grid-template-columns: 1fr;
+    }
+  
+    .detail-grid {
+      grid-template-columns: 1fr;
+    }
+  
+    .items-table {
+      font-size: 0.8rem;
+    }
+  
+    .items-table th,
+    .items-table td {
+      padding: 8px;
+      font-size: 0.75rem;
+    }
+  
+    .summary-row {
+      font-size: 0.9rem;
+    }
+  
+    .summary-row:last-child {
+      font-size: 1.1rem;
+    }
+  }
+  
+  /* Print Styles */
+  @media print {
+    .search-section {
+      display: none;
+    }
+  
+    .back-btn {
+      display: none;
+    }
+  
+    .bill-search-container {
+      padding: 0;
+    }
+  
+    .entry-details {
+      box-shadow: none;
+    }
+  }
+  
+  /* Scrollbar Styles */
+  .bill-search-container::-webkit-scrollbar,
+  .items-table-wrapper::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  
+  .bill-search-container::-webkit-scrollbar-track,
+  .items-table-wrapper::-webkit-scrollbar-track {
+    background: var(--bg-secondary);
+  }
+  
+  .bill-search-container::-webkit-scrollbar-thumb,
+  .items-table-wrapper::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 4px;
+  }
+  
+  .bill-search-container::-webkit-scrollbar-thumb:hover,
+  .items-table-wrapper::-webkit-scrollbar-thumb:hover {
+    background: var(--text-secondary);
+  }
