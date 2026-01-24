@@ -118,6 +118,11 @@ export default function AbstractReport() {
         return sum + (Number(item["Bill Basic Amount"]) || 0);
       }, 0);
       
+      const entryFreight = Number(entry.finalTotals?.freight || entry["Freight"] || 0);
+      const entryCGST = Number(entry.finalTotals?.cgst || entry["CGST"] || 0);
+      const entrySGST = Number(entry.finalTotals?.sgst || entry["SGST"] || 0);
+      const entryIGST = Number(entry.finalTotals?.igst || entry["IGST"] || 0);
+      const entryTCS = Number(entry.finalTotals?.tcs || entry["TCS"] || 0);
       const entryNetAmount = Number(entry.finalTotals?.net || entry["Net"] || 0);
       
       itemsArray.forEach(item => {
@@ -127,9 +132,14 @@ export default function AbstractReport() {
         const qty = Number(item["Quantity in Metric Tons"]) || 0;
         const itemBasic = Number(item["Bill Basic Amount"]) || 0;
         
-        const itemNetAmount = entryTotalBasic > 0 
-          ? (itemBasic / entryTotalBasic) * entryNetAmount 
-          : 0;
+        const itemProportion = entryTotalBasic > 0 ? (itemBasic / entryTotalBasic) : 0;
+        const itemFreight = itemProportion * entryFreight;
+        const itemTotal = itemBasic + itemFreight;
+        const itemCGST = itemProportion * entryCGST;
+        const itemSGST = itemProportion * entrySGST;
+        const itemIGST = itemProportion * entryIGST;
+        const itemTCS = itemProportion * entryTCS;
+        const itemNetAmount = itemProportion * entryNetAmount;
 
         const key = `${section}|${size}`;
         if (!grouped[key]) {
@@ -140,11 +150,25 @@ export default function AbstractReport() {
             length: size,
             totalMt: itemLength,
             totalQty: qty,
+            totalBasic: itemBasic,
+            totalFreight: itemFreight,
+            totalAmount: itemTotal,
+            totalCGST: itemCGST,
+            totalSGST: itemSGST,
+            totalIGST: itemIGST,
+            totalTCS: itemTCS,
             totalNet: itemNetAmount
           };
         } else {
           grouped[key].totalMt += itemLength;
           grouped[key].totalQty += qty;
+          grouped[key].totalBasic += itemBasic;
+          grouped[key].totalFreight += itemFreight;
+          grouped[key].totalAmount += itemTotal;
+          grouped[key].totalCGST += itemCGST;
+          grouped[key].totalSGST += itemSGST;
+          grouped[key].totalIGST += itemIGST;
+          grouped[key].totalTCS += itemTCS;
           grouped[key].totalNet += itemNetAmount;
         }
       });
@@ -152,7 +176,9 @@ export default function AbstractReport() {
 
     const array = Object.values(grouped).map(item => ({
       ...item,
-      avgRate: item.totalQty > 0 ? item.totalNet / item.totalQty : 0
+      invoiceValuePerMT: item.totalQty > 0 ? item.totalBasic / item.totalQty : 0,
+      ratePerMT: item.totalQty > 0 ? item.totalAmount / item.totalQty : 0,
+      netRatePerMT: item.totalQty > 0 ? item.totalNet / item.totalQty : 0
     }));
 
     array.sort((a, b) => a.section.localeCompare(b.section));
@@ -170,6 +196,11 @@ export default function AbstractReport() {
         return sum + (Number(item["Bill Basic Amount"]) || 0);
       }, 0);
       
+      const entryFreight = Number(entry.finalTotals?.freight || entry["Freight"] || 0);
+      const entryCGST = Number(entry.finalTotals?.cgst || entry["CGST"] || 0);
+      const entrySGST = Number(entry.finalTotals?.sgst || entry["SGST"] || 0);
+      const entryIGST = Number(entry.finalTotals?.igst || entry["IGST"] || 0);
+      const entryTCS = Number(entry.finalTotals?.tcs || entry["TCS"] || 0);
       const entryNetAmount = Number(entry.finalTotals?.net || entry["Net"] || 0);
       
       itemsArray.forEach(item => {
@@ -179,9 +210,14 @@ export default function AbstractReport() {
         const qty = Number(item["Quantity in Metric Tons"]) || 0;
         const itemBasic = Number(item["Bill Basic Amount"]) || 0;
         
-        const itemNetAmount = entryTotalBasic > 0 
-          ? (itemBasic / entryTotalBasic) * entryNetAmount 
-          : 0;
+        const itemProportion = entryTotalBasic > 0 ? (itemBasic / entryTotalBasic) : 0;
+        const itemFreight = itemProportion * entryFreight;
+        const itemTotal = itemBasic + itemFreight;
+        const itemCGST = itemProportion * entryCGST;
+        const itemSGST = itemProportion * entrySGST;
+        const itemIGST = itemProportion * entryIGST;
+        const itemTCS = itemProportion * entryTCS;
+        const itemNetAmount = itemProportion * entryNetAmount;
 
         const key = `${section}|${size}`;
         if (!grouped[key]) {
@@ -194,10 +230,24 @@ export default function AbstractReport() {
         if (!grouped[key].units[unit]) {
           grouped[key].units[unit] = {
             totalQty: 0,
+            totalBasic: 0,
+            totalFreight: 0,
+            totalAmount: 0,
+            totalCGST: 0,
+            totalSGST: 0,
+            totalIGST: 0,
+            totalTCS: 0,
             totalNet: 0
           };
         }
         grouped[key].units[unit].totalQty += qty;
+        grouped[key].units[unit].totalBasic += itemBasic;
+        grouped[key].units[unit].totalFreight += itemFreight;
+        grouped[key].units[unit].totalAmount += itemTotal;
+        grouped[key].units[unit].totalCGST += itemCGST;
+        grouped[key].units[unit].totalSGST += itemSGST;
+        grouped[key].units[unit].totalIGST += itemIGST;
+        grouped[key].units[unit].totalTCS += itemTCS;
         grouped[key].units[unit].totalNet += itemNetAmount;
       });
     });
@@ -209,28 +259,68 @@ export default function AbstractReport() {
         size: item.size
       };
       let combinedQty = 0;
+      let combinedBasic = 0;
+      let combinedFreight = 0;
+      let combinedAmount = 0;
+      let combinedCGST = 0;
+      let combinedSGST = 0;
+      let combinedIGST = 0;
+      let combinedTCS = 0;
       let combinedNet = 0;
       
       GroupUnits.forEach(unit => {
         if (item.units[unit]) {
-          row[`${unit}_qty`] = item.units[unit].totalQty;
-          row[`${unit}_net`] = item.units[unit].totalNet;
-          row[`${unit}_rate`] = item.units[unit].totalQty > 0 
-            ? item.units[unit].totalNet / item.units[unit].totalQty 
-            : 0;
+          const u = item.units[unit];
+          row[`${unit}_qty`] = u.totalQty;
+          row[`${unit}_basic`] = u.totalBasic;
+          row[`${unit}_invoicePerMT`] = u.totalQty > 0 ? u.totalBasic / u.totalQty : 0;
+          row[`${unit}_freight`] = u.totalFreight;
+          row[`${unit}_total`] = u.totalAmount;
+          row[`${unit}_ratePerMT`] = u.totalQty > 0 ? u.totalAmount / u.totalQty : 0;
+          row[`${unit}_cgst`] = u.totalCGST;
+          row[`${unit}_sgst`] = u.totalSGST;
+          row[`${unit}_igst`] = u.totalIGST;
+          row[`${unit}_tcs`] = u.totalTCS;
+          row[`${unit}_net`] = u.totalNet;
+          row[`${unit}_netRatePerMT`] = u.totalQty > 0 ? u.totalNet / u.totalQty : 0;
           
-          combinedQty += item.units[unit].totalQty;
-          combinedNet += item.units[unit].totalNet;
+          combinedQty += u.totalQty;
+          combinedBasic += u.totalBasic;
+          combinedFreight += u.totalFreight;
+          combinedAmount += u.totalAmount;
+          combinedCGST += u.totalCGST;
+          combinedSGST += u.totalSGST;
+          combinedIGST += u.totalIGST;
+          combinedTCS += u.totalTCS;
+          combinedNet += u.totalNet;
         } else {
           row[`${unit}_qty`] = 0;
+          row[`${unit}_basic`] = 0;
+          row[`${unit}_invoicePerMT`] = 0;
+          row[`${unit}_freight`] = 0;
+          row[`${unit}_total`] = 0;
+          row[`${unit}_ratePerMT`] = 0;
+          row[`${unit}_cgst`] = 0;
+          row[`${unit}_sgst`] = 0;
+          row[`${unit}_igst`] = 0;
+          row[`${unit}_tcs`] = 0;
           row[`${unit}_net`] = 0;
-          row[`${unit}_rate`] = 0;
+          row[`${unit}_netRatePerMT`] = 0;
         }
       });
       
       row.combined_qty = combinedQty;
+      row.combined_basic = combinedBasic;
+      row.combined_invoicePerMT = combinedQty > 0 ? combinedBasic / combinedQty : 0;
+      row.combined_freight = combinedFreight;
+      row.combined_total = combinedAmount;
+      row.combined_ratePerMT = combinedQty > 0 ? combinedAmount / combinedQty : 0;
+      row.combined_cgst = combinedCGST;
+      row.combined_sgst = combinedSGST;
+      row.combined_igst = combinedIGST;
+      row.combined_tcs = combinedTCS;
       row.combined_net = combinedNet;
-      row.combined_rate = combinedQty > 0 ? combinedNet / combinedQty : 0;
+      row.combined_netRatePerMT = combinedQty > 0 ? combinedNet / combinedQty : 0;
       
       return row;
     });
@@ -250,24 +340,33 @@ export default function AbstractReport() {
   const formatRate = value => Math.ceil(Number(value)).toLocaleString("en-IN");
 
   const grandTotalQty = abstractData.reduce((sum, item) => sum + item.totalQty, 0);
+  const grandTotalBasic = abstractData.reduce((sum, item) => sum + item.totalBasic, 0);
+  const grandTotalFreight = abstractData.reduce((sum, item) => sum + item.totalFreight, 0);
+  const grandTotalAmount = abstractData.reduce((sum, item) => sum + item.totalAmount, 0);
+  const grandTotalCGST = abstractData.reduce((sum, item) => sum + item.totalCGST, 0);
+  const grandTotalSGST = abstractData.reduce((sum, item) => sum + item.totalSGST, 0);
+  const grandTotalIGST = abstractData.reduce((sum, item) => sum + item.totalIGST, 0);
+  const grandTotalTCS = abstractData.reduce((sum, item) => sum + item.totalTCS, 0);
   const grandTotalNet = abstractData.reduce((sum, item) => sum + item.totalNet, 0);
-  const grandAvgRate = grandTotalQty > 0 ? grandTotalNet / grandTotalQty : 0;
+  const grandInvoicePerMT = grandTotalQty > 0 ? grandTotalBasic / grandTotalQty : 0;
+  const grandRatePerMT = grandTotalQty > 0 ? grandTotalAmount / grandTotalQty : 0;
+  const grandNetRatePerMT = grandTotalQty > 0 ? grandTotalNet / grandTotalQty : 0;
 
   const showLengthColumn = selectedUnit === "Group";
 
   const exportPDF = () => {
-    const doc = new jsPDF("p", "pt", "a4");
-    doc.setFontSize(15);
+    const doc = new jsPDF("l", "pt", "a4");
+    doc.setFontSize(12);
   
     let heading = "Abstract of Raw Material Purchased";
     if (selectedUnit !== "Group") heading += ` - ${selectedUnit}`;
     if (selectedWorkType !== "Group") heading += ` (${selectedWorkType})`;
   
-    doc.text(heading, 40, 40);
+    doc.text(heading, 40, 30);
   
     if (fromDate || toDate) {
-      doc.setFontSize(10);
-      doc.text(`Period: ${fromDate || "Start"} to ${toDate || "End"}`, 40, 55);
+      doc.setFontSize(9);
+      doc.text(`Period: ${fromDate || "Start"} to ${toDate || "End"}`, 40, 45);
     }
   
     if (selectedUnit === "Group" && pivotData.length > 0) {
@@ -280,19 +379,35 @@ export default function AbstractReport() {
       const headRow2 = [];
   
       units.forEach(unit => {
-        headRow1.push({ content: unit, colSpan: 3 });
+        headRow1.push({ content: unit, colSpan: 12 });
         headRow2.push(
-          { content: "Mt." },
-          { content: "Value Rs." },
-          { content: "Avg Rate" }
+          { content: "MT" },
+          { content: "Inv Value/MT" },
+          { content: "Freight" },
+          { content: "Total" },
+          { content: "Rate/MT" },
+          { content: "CGST" },
+          { content: "SGST" },
+          { content: "IGST" },
+          { content: "TCS" },
+          { content: "Net Value" },
+          { content: "Net Rate/MT" }
         );
       });
   
-      headRow1.push({ content: "Total", colSpan: 3 });
+      headRow1.push({ content: "Total", colSpan: 12 });
       headRow2.push(
-        { content: "Mt." },
-        { content: "Value Rs." },
-        { content: "Avg Rate" }
+        { content: "MT" },
+        { content: "Inv Value/MT" },
+        { content: "Freight" },
+        { content: "Total" },
+        { content: "Rate/MT" },
+        { content: "CGST" },
+        { content: "SGST" },
+        { content: "IGST" },
+        { content: "TCS" },
+        { content: "Net Value" },
+        { content: "Net Rate/MT" }
       );
   
       const body = pivotData.map((item, index) => {
@@ -301,15 +416,31 @@ export default function AbstractReport() {
         units.forEach(unit => {
           row.push(
             formatMT(item[`${unit}_qty`] || 0),
+            formatRate(item[`${unit}_invoicePerMT`] || 0),
+            formatAmount(item[`${unit}_freight`] || 0),
+            formatAmount(item[`${unit}_total`] || 0),
+            formatRate(item[`${unit}_ratePerMT`] || 0),
+            formatAmount(item[`${unit}_cgst`] || 0),
+            formatAmount(item[`${unit}_sgst`] || 0),
+            formatAmount(item[`${unit}_igst`] || 0),
+            formatAmount(item[`${unit}_tcs`] || 0),
             formatAmount(item[`${unit}_net`] || 0),
-            formatRate(item[`${unit}_rate`] || 0)
+            formatRate(item[`${unit}_netRatePerMT`] || 0)
           );
         });
   
         row.push(
-          formatMT(item.total_qty || item.combined_qty || 0),
-          formatAmount(item.total_net || item.combined_net || 0),
-          formatRate(item.total_rate || item.combined_rate || 0)
+          formatMT(item.combined_qty || 0),
+          formatRate(item.combined_invoicePerMT || 0),
+          formatAmount(item.combined_freight || 0),
+          formatAmount(item.combined_total || 0),
+          formatRate(item.combined_ratePerMT || 0),
+          formatAmount(item.combined_cgst || 0),
+          formatAmount(item.combined_sgst || 0),
+          formatAmount(item.combined_igst || 0),
+          formatAmount(item.combined_tcs || 0),
+          formatAmount(item.combined_net || 0),
+          formatRate(item.combined_netRatePerMT || 0)
         );
   
         return row;
@@ -319,25 +450,43 @@ export default function AbstractReport() {
   
       units.forEach(unit => {
         const tQty = pivotData.reduce((s, x) => s + (x[`${unit}_qty`] || 0), 0);
+        const tBasic = pivotData.reduce((s, x) => s + (x[`${unit}_basic`] || 0), 0);
+        const tFreight = pivotData.reduce((s, x) => s + (x[`${unit}_freight`] || 0), 0);
+        const tTotal = pivotData.reduce((s, x) => s + (x[`${unit}_total`] || 0), 0);
+        const tCGST = pivotData.reduce((s, x) => s + (x[`${unit}_cgst`] || 0), 0);
+        const tSGST = pivotData.reduce((s, x) => s + (x[`${unit}_sgst`] || 0), 0);
+        const tIGST = pivotData.reduce((s, x) => s + (x[`${unit}_igst`] || 0), 0);
+        const tTCS = pivotData.reduce((s, x) => s + (x[`${unit}_tcs`] || 0), 0);
         const tNet = pivotData.reduce((s, x) => s + (x[`${unit}_net`] || 0), 0);
-        const tRate = tQty ? tNet / tQty : 0;
+        const tInvPerMT = tQty ? tBasic / tQty : 0;
+        const tRatePerMT = tQty ? tTotal / tQty : 0;
+        const tNetRatePerMT = tQty ? tNet / tQty : 0;
   
-        totalRow.push(formatMT(tQty), formatAmount(tNet), formatRate(tRate));
+        totalRow.push(formatMT(tQty), formatRate(tInvPerMT), formatAmount(tFreight), formatAmount(tTotal), formatRate(tRatePerMT), formatAmount(tCGST), formatAmount(tSGST), formatAmount(tIGST), formatAmount(tTCS), formatAmount(tNet), formatRate(tNetRatePerMT));
       });
   
-      const gQty = pivotData.reduce((s, x) => s + (x.total_qty || x.combined_qty || 0), 0);
-      const gNet = pivotData.reduce((s, x) => s + (x.total_net || x.combined_net || 0), 0);
-      const gRate = gQty ? gNet / gQty : 0;
+      const gQty = pivotData.reduce((s, x) => s + (x.combined_qty || 0), 0);
+      const gBasic = pivotData.reduce((s, x) => s + (x.combined_basic || 0), 0);
+      const gFreight = pivotData.reduce((s, x) => s + (x.combined_freight || 0), 0);
+      const gTotal = pivotData.reduce((s, x) => s + (x.combined_total || 0), 0);
+      const gCGST = pivotData.reduce((s, x) => s + (x.combined_cgst || 0), 0);
+      const gSGST = pivotData.reduce((s, x) => s + (x.combined_sgst || 0), 0);
+      const gIGST = pivotData.reduce((s, x) => s + (x.combined_igst || 0), 0);
+      const gTCS = pivotData.reduce((s, x) => s + (x.combined_tcs || 0), 0);
+      const gNet = pivotData.reduce((s, x) => s + (x.combined_net || 0), 0);
+      const gInvPerMT = gQty ? gBasic / gQty : 0;
+      const gRatePerMT = gQty ? gTotal / gQty : 0;
+      const gNetRatePerMT = gQty ? gNet / gQty : 0;
   
-      totalRow.push(formatMT(gQty), formatAmount(gNet), formatRate(gRate));
+      totalRow.push(formatMT(gQty), formatRate(gInvPerMT), formatAmount(gFreight), formatAmount(gTotal), formatRate(gRatePerMT), formatAmount(gCGST), formatAmount(gSGST), formatAmount(gIGST), formatAmount(gTCS), formatAmount(gNet), formatRate(gNetRatePerMT));
       body.push(totalRow);
   
       autoTable(doc, {
-        startY: fromDate || toDate ? 70 : 60,
+        startY: fromDate || toDate ? 55 : 45,
         head: [headRow1, headRow2],
         body: body,
         theme: "grid",
-        styles: { fontSize: 7, halign: "center", valign: "middle", cellPadding: 2 },
+        styles: { fontSize: 6, halign: "center", valign: "middle", cellPadding: 1 },
         headStyles: { 
           fillColor: [230, 240, 255],
           textColor: [0, 0, 0],
@@ -346,27 +495,21 @@ export default function AbstractReport() {
       });
   
     } else {
-      const headers = selectedUnit === "Group"
-        ? ["No.", "Unit", "Section", "Size", "Length", "Total Mt.", "Net Amount", "Avg Rate"]
-        : ["No.", "Section", "Size", "Total Mt.", "Net Amount", "Avg Rate"];
+      const headers = ["No.", "Section", "Size", "MT", "Invoice Value/MT", "Freight", "Total", "Rate/MT", "CGST", "SGST", "IGST", "TCS", "Net Value", "Net Rate/MT"];
   
       const body = abstractData.map((item, i) =>
-        selectedUnit === "Group"
-          ? [i + 1, item.Unit, item.section, item.size, formatQty(item.totalMt), formatMT(item.totalQty), formatAmount(item.totalNet), formatRate(item.avgRate)]
-          : [i + 1, item.section, item.size, formatMT(item.totalQty), formatAmount(item.totalNet), formatRate(item.avgRate)]
+        [i + 1, item.section, item.size, formatMT(item.totalQty), formatRate(item.invoiceValuePerMT), formatAmount(item.totalFreight), formatAmount(item.totalAmount), formatRate(item.ratePerMT), formatAmount(item.totalCGST), formatAmount(item.totalSGST), formatAmount(item.totalIGST), formatAmount(item.totalTCS), formatAmount(item.totalNet), formatRate(item.netRatePerMT)]
       );
   
       body.push(
-        selectedUnit === "Group"
-          ? ["", "", "TOTAL", "", "", formatMT(grandTotalQty), formatAmount(grandTotalNet), formatRate(grandAvgRate)]
-          : ["", "TOTAL", "", formatMT(grandTotalQty), formatAmount(grandTotalNet), formatRate(grandAvgRate)]
+        ["", "TOTAL", "", formatMT(grandTotalQty), formatRate(grandInvoicePerMT), formatAmount(grandTotalFreight), formatAmount(grandTotalAmount), formatRate(grandRatePerMT), formatAmount(grandTotalCGST), formatAmount(grandTotalSGST), formatAmount(grandTotalIGST), formatAmount(grandTotalTCS), formatAmount(grandTotalNet), formatRate(grandNetRatePerMT)]
       );
   
       autoTable(doc, {
         head: [headers],
         body: body,
-        startY: fromDate || toDate ? 70 : 60,
-        styles: { fontSize: 10, cellPadding: 4 },
+        startY: fromDate || toDate ? 55 : 45,
+        styles: { fontSize: 7, cellPadding: 2 },
         theme: "grid"
       });
     }
@@ -385,35 +528,57 @@ export default function AbstractReport() {
       const header2 = ["", "", ""];
   
       units.forEach(u => {
-        header1.push(u, "", "");
-        header2.push("Mt.", "Value Rs.", "Avg Rate");
+        header1.push(u, "", "", "", "", "", "", "", "", "", "", "");
+        header2.push("MT", "Inv Value/MT", "Freight", "Total", "Rate/MT", "CGST", "SGST", "IGST", "TCS", "Net Value", "Net Rate/MT");
       });
   
-      header1.push("Total", "", "");
-      header2.push("Mt.", "Value Rs.", "Avg Rate");
+      header1.push("Total", "", "", "", "", "", "", "", "", "", "", "");
+      header2.push("MT", "Inv Value/MT", "Freight", "Total", "Rate/MT", "CGST", "SGST", "IGST", "TCS", "Net Value", "Net Rate/MT");
   
       const rows = pivotData.map((item, i) => {
         const r = [i+1, item.section, item.size];
         units.forEach(u => {
           r.push(
             item[`${u}_qty`] || 0,
+            item[`${u}_invoicePerMT`] || 0,
+            item[`${u}_freight`] || 0,
+            item[`${u}_total`] || 0,
+            item[`${u}_ratePerMT`] || 0,
+            item[`${u}_cgst`] || 0,
+            item[`${u}_sgst`] || 0,
+            item[`${u}_igst`] || 0,
+            item[`${u}_tcs`] || 0,
             item[`${u}_net`] || 0,
-            item[`${u}_rate`] || 0
+            item[`${u}_netRatePerMT`] || 0
           );
         });
-        r.push(item.combined_qty||0, item.combined_net||0, item.combined_rate||0);
+        r.push(item.combined_qty||0, item.combined_invoicePerMT||0, item.combined_freight||0, item.combined_total||0, item.combined_ratePerMT||0, item.combined_cgst||0, item.combined_sgst||0, item.combined_igst||0, item.combined_tcs||0, item.combined_net||0, item.combined_netRatePerMT||0);
         return r;
       });
   
       const totalRow = ["", "TOTAL", ""];
       units.forEach(u => {
         const tq = pivotData.reduce((s,x)=>s+(x[`${u}_qty`]||0),0);
+        const tb = pivotData.reduce((s,x)=>s+(x[`${u}_basic`]||0),0);
+        const tf = pivotData.reduce((s,x)=>s+(x[`${u}_freight`]||0),0);
+        const tt = pivotData.reduce((s,x)=>s+(x[`${u}_total`]||0),0);
+        const tc = pivotData.reduce((s,x)=>s+(x[`${u}_cgst`]||0),0);
+        const ts = pivotData.reduce((s,x)=>s+(x[`${u}_sgst`]||0),0);
+        const ti = pivotData.reduce((s,x)=>s+(x[`${u}_igst`]||0),0);
+        const ttcs = pivotData.reduce((s,x)=>s+(x[`${u}_tcs`]||0),0);
         const tn = pivotData.reduce((s,x)=>s+(x[`${u}_net`]||0),0);
-        totalRow.push(tq, tn, tq?tn/tq:0);
+        totalRow.push(tq, tq?tb/tq:0, tf, tt, tq?tt/tq:0, tc, ts, ti, ttcs, tn, tq?tn/tq:0);
       });
       const gq = pivotData.reduce((s,x)=>s+(x.combined_qty||0),0);
+      const gb = pivotData.reduce((s,x)=>s+(x.combined_basic||0),0);
+      const gf = pivotData.reduce((s,x)=>s+(x.combined_freight||0),0);
+      const gt = pivotData.reduce((s,x)=>s+(x.combined_total||0),0);
+      const gc = pivotData.reduce((s,x)=>s+(x.combined_cgst||0),0);
+      const gs = pivotData.reduce((s,x)=>s+(x.combined_sgst||0),0);
+      const gi = pivotData.reduce((s,x)=>s+(x.combined_igst||0),0);
+      const gtcs = pivotData.reduce((s,x)=>s+(x.combined_tcs||0),0);
       const gn = pivotData.reduce((s,x)=>s+(x.combined_net||0),0);
-      totalRow.push(gq, gn, gq?gn/gq:0);
+      totalRow.push(gq, gq?gb/gq:0, gf, gt, gq?gt/gq:0, gc, gs, gi, gtcs, gn, gq?gn/gq:0);
   
       const ws = XLSX.utils.aoa_to_sheet([header1, header2, ...rows, totalRow]);
   
@@ -423,8 +588,8 @@ export default function AbstractReport() {
         {s:{r:0,c:2}, e:{r:1,c:2}},
       ];
       let c = 3;
-      units.forEach(()=>{ merges.push({s:{r:0,c}, e:{r:0,c:c+2}}); c+=3; });
-      merges.push({s:{r:0,c}, e:{r:0,c:c+2}});
+      units.forEach(()=>{ merges.push({s:{r:0,c}, e:{r:0,c:c+10}}); c+=11; });
+      merges.push({s:{r:0,c}, e:{r:0,c:c+10}});
       ws['!merges'] = merges;
   
       const range = XLSX.utils.decode_range(ws['!ref']);
@@ -433,7 +598,7 @@ export default function AbstractReport() {
           const addr = XLSX.utils.encode_cell({r:R,c:C});
           if(ws[addr]){
             ws[addr].t='n';
-            const pos=(C-3)%3;
+            const pos=(C-3)%11;
             ws[addr].z = pos===0?fmt3:fmt0;
           }
         }
@@ -443,29 +608,23 @@ export default function AbstractReport() {
       XLSX.utils.book_append_sheet(wb,ws,"Abstract Report");
   
     } else {
-      const headers = selectedUnit==="Group"
-        ?["No.","Unit","Section","Size","Length","Total Mt.","Net Amount","Avg Rate"]
-        :["No.","Section","Size","Total Mt.","Net Amount","Avg Rate"];
+      const headers = ["No.","Section","Size","MT","Invoice Value/MT","Freight","Total","Rate/MT","CGST","SGST","IGST","TCS","Net Value","Net Rate/MT"];
   
       const rows = abstractData.map((x,i)=>
-        selectedUnit==="Group"
-        ?[i+1,x.Unit,x.section,x.size,x.totalMt,x.totalQty,x.totalNet,x.avgRate]
-        :[i+1,x.section,x.size,x.totalQty,x.totalNet,x.avgRate]
+        [i+1,x.section,x.size,x.totalQty,x.invoiceValuePerMT,x.totalFreight,x.totalAmount,x.ratePerMT,x.totalCGST,x.totalSGST,x.totalIGST,x.totalTCS,x.totalNet,x.netRatePerMT]
       );
   
-      const totalRow = selectedUnit==="Group"
-        ?["","","TOTAL","","",grandTotalQty,grandTotalNet,grandAvgRate]
-        :["","TOTAL","",grandTotalQty,grandTotalNet,grandAvgRate];
+      const totalRow = ["","TOTAL","",grandTotalQty,grandInvoicePerMT,grandTotalFreight,grandTotalAmount,grandRatePerMT,grandTotalCGST,grandTotalSGST,grandTotalIGST,grandTotalTCS,grandTotalNet,grandNetRatePerMT];
   
       const ws = XLSX.utils.aoa_to_sheet([headers,...rows,totalRow]);
   
       const range=XLSX.utils.decode_range(ws['!ref']);
       for(let R=1;R<=range.e.r;R++){
-        for(let C=(selectedUnit==="Group"?5:3);C<=range.e.c;C++){
+        for(let C=3;C<=range.e.c;C++){
           const addr=XLSX.utils.encode_cell({r:R,c:C});
           if(ws[addr]){
             ws[addr].t='n';
-            ws[addr].z = (C===(selectedUnit==="Group"?5:3))?fmt3:fmt0;
+            ws[addr].z = (C===3)?fmt3:fmt0;
           }
         }
       }
@@ -557,21 +716,37 @@ export default function AbstractReport() {
                 <th rowSpan={2}>Section</th>
                 <th rowSpan={2}>Size</th>
                 {units.map((unit, i) => (
-                  <th key={i} colSpan={3}>{unit}</th>
+                  <th key={i} colSpan={11}>{unit}</th>
                 ))}
-                <th colSpan={3} className="total-header">Total</th>
+                <th colSpan={11} className="total-header">Total</th>
               </tr>
               <tr>
                 {units.map((unit, i) => (
                   <React.Fragment key={i}>
-                    <th>Mt.</th>
-                    <th>Value Rs.</th>
-                    <th>Avg Rate</th>
+                    <th>MT</th>
+                    <th>Inv Value/MT</th>
+                    <th>Freight</th>
+                    <th>Total</th>
+                    <th>Rate/MT</th>
+                    <th>CGST</th>
+                    <th>SGST</th>
+                    <th>IGST</th>
+                    <th>TCS</th>
+                    <th>Net Value</th>
+                    <th>Net Rate/MT</th>
                   </React.Fragment>
                 ))}
-                <th className="total-subheader">Mt.</th>
-                <th className="total-subheader">Value Rs.</th>
-                <th className="total-subheader">Avg Rate</th>
+                <th className="total-subheader">MT</th>
+                <th className="total-subheader">Inv Value/MT</th>
+                <th className="total-subheader">Freight</th>
+                <th className="total-subheader">Total</th>
+                <th className="total-subheader">Rate/MT</th>
+                <th className="total-subheader">CGST</th>
+                <th className="total-subheader">SGST</th>
+                <th className="total-subheader">IGST</th>
+                <th className="total-subheader">TCS</th>
+                <th className="total-subheader">Net Value</th>
+                <th className="total-subheader">Net Rate/MT</th>
               </tr>
             </thead>
             <tbody>
@@ -583,30 +758,83 @@ export default function AbstractReport() {
                   {units.map((unit, i) => (
                     <React.Fragment key={i}>
                       <td>{formatMT(item[`${unit}_qty`] || 0)}</td>
+                      <td>{formatRate(item[`${unit}_invoicePerMT`] || 0)}</td>
+                      <td>{formatAmount(item[`${unit}_freight`] || 0)}</td>
+                      <td>{formatAmount(item[`${unit}_total`] || 0)}</td>
+                      <td>{formatRate(item[`${unit}_ratePerMT`] || 0)}</td>
+                      <td>{formatAmount(item[`${unit}_cgst`] || 0)}</td>
+                      <td>{formatAmount(item[`${unit}_sgst`] || 0)}</td>
+                      <td>{formatAmount(item[`${unit}_igst`] || 0)}</td>
+                      <td>{formatAmount(item[`${unit}_tcs`] || 0)}</td>
                       <td>{formatAmount(item[`${unit}_net`] || 0)}</td>
-                      <td>{formatRate(item[`${unit}_rate`] || 0)}</td>
+                      <td>{formatRate(item[`${unit}_netRatePerMT`] || 0)}</td>
                     </React.Fragment>
                   ))}
                   <td className="total-cell">{formatMT(item.combined_qty || 0)}</td>
+                  <td className="total-cell">{formatRate(item.combined_invoicePerMT || 0)}</td>
+                  <td className="total-cell">{formatAmount(item.combined_freight || 0)}</td>
+                  <td className="total-cell">{formatAmount(item.combined_total || 0)}</td>
+                  <td className="total-cell">{formatRate(item.combined_ratePerMT || 0)}</td>
+                  <td className="total-cell">{formatAmount(item.combined_cgst || 0)}</td>
+                  <td className="total-cell">{formatAmount(item.combined_sgst || 0)}</td>
+                  <td className="total-cell">{formatAmount(item.combined_igst || 0)}</td>
+                  <td className="total-cell">{formatAmount(item.combined_tcs || 0)}</td>
                   <td className="total-cell">{formatAmount(item.combined_net || 0)}</td>
-                  <td className="total-cell">{formatRate(item.combined_rate || 0)}</td>
+                  <td className="total-cell">{formatRate(item.combined_netRatePerMT || 0)}</td>
                 </tr>
               ))}
               <tr className="total-row">
                 <td colSpan={3}>Total</td>
                 {units.map((unit, i) => {
                   const totalQty = pivotData.reduce((sum, item) => sum + (item[`${unit}_qty`] || 0), 0);
+                  const totalBasic = pivotData.reduce((sum, item) => sum + (item[`${unit}_basic`] || 0), 0);
+                  const totalFreight = pivotData.reduce((sum, item) => sum + (item[`${unit}_freight`] || 0), 0);
+                  const totalAmount = pivotData.reduce((sum, item) => sum + (item[`${unit}_total`] || 0), 0);
+                  const totalCGST = pivotData.reduce((sum, item) => sum + (item[`${unit}_cgst`] || 0), 0);
+                  const totalSGST = pivotData.reduce((sum, item) => sum + (item[`${unit}_sgst`] || 0), 0);
+                  const totalIGST = pivotData.reduce((sum, item) => sum + (item[`${unit}_igst`] || 0), 0);
+                  const totalTCS = pivotData.reduce((sum, item) => sum + (item[`${unit}_tcs`] || 0), 0);
                   const totalNet = pivotData.reduce((sum, item) => sum + (item[`${unit}_net`] || 0), 0);
-                  const avgRate = totalQty > 0 ? totalNet / totalQty : 0;
+                  const invPerMT = totalQty > 0 ? totalBasic / totalQty : 0;
+                  const ratePerMT = totalQty > 0 ? totalAmount / totalQty : 0;
+                  const netRatePerMT = totalQty > 0 ? totalNet / totalQty : 0;
                   return (
                     <React.Fragment key={i}>
                       <td>{formatMT(totalQty)}</td>
+                      <td>{formatRate(invPerMT)}</td>
+                      <td>{formatAmount(totalFreight)}</td>
+                      <td>{formatAmount(totalAmount)}</td>
+                      <td>{formatRate(ratePerMT)}</td>
+                      <td>{formatAmount(totalCGST)}</td>
+                      <td>{formatAmount(totalSGST)}</td>
+                      <td>{formatAmount(totalIGST)}</td>
+                      <td>{formatAmount(totalTCS)}</td>
                       <td>{formatAmount(totalNet)}</td>
-                      <td>{formatRate(avgRate)}</td>
+                      <td>{formatRate(netRatePerMT)}</td>
                     </React.Fragment>
                   );
                 })}
                 <td>{formatMT(pivotData.reduce((sum, item) => sum + (item.combined_qty || 0), 0))}</td>
+                <td>{formatRate(
+                  (() => {
+                    const totalQty = pivotData.reduce((sum, item) => sum + (item.combined_qty || 0), 0);
+                    const totalBasic = pivotData.reduce((sum, item) => sum + (item.combined_basic || 0), 0);
+                    return totalQty > 0 ? totalBasic / totalQty : 0;
+                  })()
+                )}</td>
+                <td>{formatAmount(pivotData.reduce((sum, item) => sum + (item.combined_freight || 0), 0))}</td>
+                <td>{formatAmount(pivotData.reduce((sum, item) => sum + (item.combined_total || 0), 0))}</td>
+                <td>{formatRate(
+                  (() => {
+                    const totalQty = pivotData.reduce((sum, item) => sum + (item.combined_qty || 0), 0);
+                    const totalAmount = pivotData.reduce((sum, item) => sum + (item.combined_total || 0), 0);
+                    return totalQty > 0 ? totalAmount / totalQty : 0;
+                  })()
+                )}</td>
+                <td>{formatAmount(pivotData.reduce((sum, item) => sum + (item.combined_cgst || 0), 0))}</td>
+                <td>{formatAmount(pivotData.reduce((sum, item) => sum + (item.combined_sgst || 0), 0))}</td>
+                <td>{formatAmount(pivotData.reduce((sum, item) => sum + (item.combined_igst || 0), 0))}</td>
+                <td>{formatAmount(pivotData.reduce((sum, item) => sum + (item.combined_tcs || 0), 0))}</td>
                 <td>{formatAmount(pivotData.reduce((sum, item) => sum + (item.combined_net || 0), 0))}</td>
                 <td>{formatRate(
                   (() => {
@@ -622,7 +850,7 @@ export default function AbstractReport() {
           <table className="abstract-table">
             <thead>
               <tr>
-                <th colSpan={showLengthColumn ? 8 : 7} className="table-title">
+                <th colSpan={14} className="table-title">
                   Abstract of Raw Material Purchased
                   {selectedUnit !== "Group" && ` - ${selectedUnit}`}
                   {selectedWorkType !== "Group" && ` (${selectedWorkType})`}
@@ -630,33 +858,53 @@ export default function AbstractReport() {
               </tr>
               <tr>
                 <th>No.</th>
-                {selectedUnit === "Group" && <th>Unit</th>}
                 <th>Section</th>
                 <th>Size</th>
-                {showLengthColumn && <th>Length</th>}
-                <th>Total Mt.</th>
-                <th>Net Amount</th>
-                <th>Avg Rate</th>
+                <th>MT</th>
+                <th>Invoice Value/MT</th>
+                <th>Freight</th>
+                <th>Total</th>
+                <th>Rate/MT</th>
+                <th>CGST</th>
+                <th>SGST</th>
+                <th>IGST</th>
+                <th>TCS</th>
+                <th>Net Value</th>
+                <th>Net Rate/MT</th>
               </tr>
             </thead>
             <tbody>
               {abstractData.map((item, index) => (
                 <tr key={index}>
                   <td>{index + 1}</td>
-                  {selectedUnit === "Group" && <td>{item.Unit}</td>}
                   <td className="text-left">{item.section}</td>
                   <td className="text-left">{item.size}</td>
-                  {showLengthColumn && <td>{formatQty(item.totalMt)}</td>}
                   <td>{formatMT(item.totalQty)}</td>
+                  <td>{formatRate(item.invoiceValuePerMT)}</td>
+                  <td>{formatAmount(item.totalFreight)}</td>
+                  <td>{formatAmount(item.totalAmount)}</td>
+                  <td>{formatRate(item.ratePerMT)}</td>
+                  <td>{formatAmount(item.totalCGST)}</td>
+                  <td>{formatAmount(item.totalSGST)}</td>
+                  <td>{formatAmount(item.totalIGST)}</td>
+                  <td>{formatAmount(item.totalTCS)}</td>
                   <td>{formatAmount(item.totalNet)}</td>
-                  <td>{formatRate(item.avgRate)}</td>
+                  <td>{formatRate(item.netRatePerMT)}</td>
                 </tr>
               ))}
               <tr className="total-row">
-                <td colSpan={showLengthColumn ? (selectedUnit === "Group" ? 5 : 4) : (selectedUnit === "Group" ? 4 : 3)}>Total</td>
+                <td colSpan={3}>Total</td>
                 <td>{formatMT(grandTotalQty)}</td>
+                <td>{formatRate(grandInvoicePerMT)}</td>
+                <td>{formatAmount(grandTotalFreight)}</td>
+                <td>{formatAmount(grandTotalAmount)}</td>
+                <td>{formatRate(grandRatePerMT)}</td>
+                <td>{formatAmount(grandTotalCGST)}</td>
+                <td>{formatAmount(grandTotalSGST)}</td>
+                <td>{formatAmount(grandTotalIGST)}</td>
+                <td>{formatAmount(grandTotalTCS)}</td>
                 <td>{formatAmount(grandTotalNet)}</td>
-                <td>{formatRate(grandAvgRate)}</td>
+                <td>{formatRate(grandNetRatePerMT)}</td>
               </tr>
             </tbody>
           </table>

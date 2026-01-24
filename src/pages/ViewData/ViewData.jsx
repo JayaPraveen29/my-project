@@ -80,7 +80,7 @@ export default function ViewData() {
           
           // Check if this is the new multi-item format
           if (data.items && Array.isArray(data.items)) {
-            // Calculate total basic amount for proportional distribution
+            // Calculate total basic amount for proportional distribution (only for GST and others)
             const entryTotalBasic = data.items.reduce((sum, item) => {
               return sum + (Number(item["Bill Basic Amount"]) || 0);
             }, 0);
@@ -89,13 +89,13 @@ export default function ViewData() {
             data.items.forEach((item, index) => {
               const itemBasic = Number(item["Bill Basic Amount"]) || 0;
               
-              // Calculate proportional share for this item
+              // Calculate proportional share for this item (for GST and Others only)
               const itemProportion = entryTotalBasic > 0 ? itemBasic / entryTotalBasic : 0;
               
               // Calculate GST values proportionally
               let cgst = 0, sgst = 0, igst = 0;
               let total = 0, gTotal = 0, net = 0;
-              let loadingCharges = 0, freightLess = 0, others = 0, freightGreater = 0;
+              let others = 0;
               
               if (data.gst) {
                 const totalGst = data.gst.totalGst || 0;
@@ -107,13 +107,15 @@ export default function ViewData() {
                 }
               }
               
-              // Distribute charges proportionally
+              // Distribute only "Others" proportionally
               if (data.charges) {
-                loadingCharges = (Number(data.charges["Loading Charges"]) || 0) * itemProportion;
-                freightLess = (Number(data.charges["Freight<"]) || 0) * itemProportion;
                 others = (Number(data.charges.Others) || 0) * itemProportion;
-                freightGreater = (Number(data.charges["Freight>"]) || 0) * itemProportion;
               }
+              
+              // Use the STORED section-specific values (not proportional)
+              const sectionLoading = Number(item["Section Loading Charges"]) || 0;
+              const sectionFreightLess = Number(item["Section Freight<"]) || 0;
+              const sectionFreightGreater = Number(item["Section Freight>"]) || 0;
               
               // Distribute totals proportionally
               if (data.finalTotals) {
@@ -141,15 +143,12 @@ export default function ViewData() {
                 "Quantity in Metric Tons": item["Quantity in Metric Tons"],
                 "Item Per Rate": item["Item Per Rate"],
                 "Bill Basic Amount": item["Bill Basic Amount"],
-                // Section-specific charges from the item itself
-                "Section Loading Charges": item["Section Loading Charges"] || 0,
-                "Section Freight<": item["Section Freight<"] || 0,
-                "Section Subtotal": item["Section Subtotal"] || 0,
-                // Entry-level proportional charges
-                "Loading Charges": loadingCharges,
-                "Freight<": freightLess,
+                // Use STORED section-specific charges from the item
+                "Loading Charges": sectionLoading,
+                "Freight<": sectionFreightLess,
+                "Freight>": sectionFreightGreater,
+                // Only "Others" is distributed proportionally
                 "Others": others,
-                "Freight>": freightGreater,
                 "CGST": cgst,
                 "SGST": sgst,
                 "IGST": igst,
@@ -342,7 +341,7 @@ export default function ViewData() {
     
     console.log("Navigating to edit page with Document ID:", documentId);
     try {
-      navigate(`/update-data/${documentId}`);  // CHANGED: lowercase with hyphen
+      navigate(`/update-data/${documentId}`);
     } catch (error) {
       console.error("Navigation error:", error);
       alert("Failed to navigate to edit page");

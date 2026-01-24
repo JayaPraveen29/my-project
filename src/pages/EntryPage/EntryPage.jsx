@@ -32,6 +32,7 @@ export default function EntryPage() {
       "Bill Basic Amount": 0,
       "Section Loading Charges": 0,
       "Section Freight<": 0,
+      "Section Freight>": 0,
       "Section Subtotal": 0,
     }
   ]);
@@ -292,18 +293,37 @@ export default function EntryPage() {
   };
   
   const getAvailableLengths = (selectedSection, selectedSize, selectedWidth) => {
-    if (!selectedSection || !selectedSize || !selectedWidth) return [];
+    if (!selectedSection || !selectedSize) return [];
     
     console.log("🔍 Getting lengths for section:", selectedSection, "size:", selectedSize, "width:", selectedWidth);
     
     const sectionObj = allSections.find(s => s.value === selectedSection);
     const sizeObj = allSizes.find(s => s.value === selectedSize);
+    
+    if (!sectionObj || !sizeObj) {
+      console.warn("⚠️ Section or Size not found!");
+      return [];
+    }
+    
+    // If no width is selected, return all lengths for this section+size combination
+    if (!selectedWidth) {
+      const relatedLengthIds = widthLengthRelations
+        .filter(rel => 
+          rel.sectionId === sectionObj.id && 
+          rel.sizeId === sizeObj.id
+        )
+        .map(rel => rel.lengthId);
+      
+      const availableLengths = allItemLengths.filter(length => relatedLengthIds.includes(length.id));
+      console.log("🔍 Available lengths (no width):", availableLengths);
+      return availableLengths;
+    }
+    
+    // If width is selected, filter by section+size+width
     const widthObj = allWidths.find(w => w.value === selectedWidth);
     
-    console.log("🔍 Found section:", sectionObj, "size:", sizeObj, "width:", widthObj);
-    
-    if (!sectionObj || !sizeObj || !widthObj) {
-      console.warn("⚠️ Section, Size, or Width not found!");
+    if (!widthObj) {
+      console.warn("⚠️ Width not found!");
       return [];
     }
     
@@ -316,14 +336,13 @@ export default function EntryPage() {
       .map(rel => rel.lengthId);
     
     console.log("🔍 Related length IDs:", relatedLengthIds);
-    console.log("🔍 Width-Length relations:", widthLengthRelations);
     
     const availableLengths = allItemLengths.filter(length => relatedLengthIds.includes(length.id));
     console.log("🔍 Available lengths:", availableLengths);
     
     return availableLengths;
   };
-  
+
   const getAvailablePlaces = (selectedSupplier) => {
     if (!selectedSupplier) return [];
     
@@ -364,7 +383,7 @@ export default function EntryPage() {
     let collectionName = "";
     let currentOptions = [];
     let setOptions = null;
-
+  
     if (type === "section") {
       collectionName = "sections";
       currentOptions = allSections;
@@ -502,43 +521,47 @@ export default function EntryPage() {
         }
       }
     }
-    // For itemLength, check if the same length exists for the CURRENT section+size+width
+    // For itemLength, check if the same length exists for the CURRENT section+size(+width optional)
     else if (type === "itemLength" && itemId !== "header") {
       const item = items.find(i => i.id === itemId);
-      if (item && item.Section && item.Size && item.Width) {
+      // Only require Section and Size (Width is optional)
+      if (item && item.Section && item.Size) {
         const sectionObj = allSections.find(s => s.value === item.Section);
         const sizeObj = allSizes.find(s => s.value === item.Size);
-        const widthObj = allWidths.find(w => w.value === item.Width);
-        if (sectionObj && sizeObj && widthObj) {
-          // Check if this section+size+width already has this length
+        
+        // If Width is provided, use it; otherwise, use null
+        const widthObj = item.Width ? allWidths.find(w => w.value === item.Width) : null;
+        
+        if (sectionObj && sizeObj) {
+          // Check if this combination already has this length
           const existingRelation = widthLengthRelations.find(rel => 
             rel.sectionId === sectionObj.id && 
             rel.sizeId === sizeObj.id &&
-            rel.widthId === widthObj.id &&
+            (widthObj ? rel.widthId === widthObj.id : rel.widthId === null) &&
             allItemLengths.find(l => l.id === rel.lengthId && l.value.toLowerCase() === trimmedValue.toLowerCase())
           );
           
           if (existingRelation) {
             const existingLength = allItemLengths.find(l => l.id === existingRelation.lengthId);
-            alert(`"${trimmedValue}" already exists for this section, size, and width. Using the existing entry.`);
+            alert(`"${trimmedValue}" already exists for this combination. Using the existing entry.`);
             setItems(items.map(i => i.id === itemId ? { ...i, "Item Length": existingLength.value } : i));
             return;
           }
           
-          // Check if length name exists globally - if so, reuse it
+          // Check if length name exists globally
           const existingLength = allItemLengths.find(opt => opt.value.toLowerCase() === trimmedValue.toLowerCase());
           if (existingLength) {
-            // Length exists but not for this section+size+width - create the relationship
+            // Create relationship with or without width
             await addDoc(collection(db, "widthLengthRelations"), {
               sectionId: sectionObj.id,
               sizeId: sizeObj.id,
-              widthId: widthObj.id,
+              widthId: widthObj ? widthObj.id : null, // Allow null width
               lengthId: existingLength.id
             });
             const widthLengthSnap = await getDocs(collection(db, "widthLengthRelations"));
             setWidthLengthRelations(widthLengthSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
             setItems(items.map(i => i.id === itemId ? { ...i, "Item Length": existingLength.value } : i));
-            alert(`Length "${trimmedValue}" linked to this section, size, and width successfully!`);
+            alert(`Length "${trimmedValue}" linked successfully!`);
             return;
           }
         }
@@ -563,12 +586,13 @@ export default function EntryPage() {
     }
   
     try {
+      // First, create the new document
       const docRef = await addDoc(collection(db, collectionName), { value: trimmedValue });
       const newOption = { id: docRef.id, value: trimmedValue, isManual: true };
       const updatedOptions = [...currentOptions, newOption].sort((a, b) => a.value.localeCompare(b.value));
       setOptions(updatedOptions);
   
-      // Create relationships based on type
+      // THEN create relationships based on type (AFTER docRef is defined)
       if (type === "place" && itemId === "header") {
         const currentSupplier = headerData["Name of the Supplier"];
         if (currentSupplier) {
@@ -618,21 +642,22 @@ export default function EntryPage() {
         }
       } else if (type === "itemLength" && itemId !== "header") {
         const item = items.find(i => i.id === itemId);
-        if (item && item.Section && item.Size && item.Width) {
+        if (item && item.Section && item.Size) { // Only require Section and Size
           const sectionObj = allSections.find(s => s.value === item.Section);
           const sizeObj = allSizes.find(s => s.value === item.Size);
-          const widthObj = allWidths.find(w => w.value === item.Width);
-          if (sectionObj && sizeObj && widthObj) {
+          const widthObj = item.Width ? allWidths.find(w => w.value === item.Width) : null;
+          
+          if (sectionObj && sizeObj) {
             await addDoc(collection(db, "widthLengthRelations"), {
               sectionId: sectionObj.id,
               sizeId: sizeObj.id,
-              widthId: widthObj.id,
-              lengthId: docRef.id
+              widthId: widthObj ? widthObj.id : null, // Allow null width
+              lengthId: docRef.id // NOW docRef is defined!
             });
             const widthLengthSnap = await getDocs(collection(db, "widthLengthRelations"));
             setWidthLengthRelations(widthLengthSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
           } else {
-            console.warn(`⚠️ Section, Size, or Width not found. Relationship not created.`);
+            console.warn(`⚠️ Section or Size not found. Relationship not created.`);
           }
         }
       }
@@ -735,19 +760,21 @@ export default function EntryPage() {
 
   const calculateSectionCharges = (itemId) => {
     const totalMT = getTotalMT();
-    if (totalMT === 0) return { loading: 0, freight: 0 };
+    if (totalMT === 0) return { loading: 0, freightLess: 0, freightGreater: 0 };
 
     const item = items.find(i => i.id === itemId);
-    if (!item) return { loading: 0, freight: 0 };
+    if (!item) return { loading: 0, freightLess: 0, freightGreater: 0 };
 
     const itemMT = parseNum(item["Quantity in Metric Tons"]);
     const totalLoading = parseNum(charges["Loading Charges"]);
-    const totalFreight = parseNum(charges["Freight<"]);
+    const totalFreightLess = parseNum(charges["Freight<"]);
+    const totalFreightGreater = parseNum(charges["Freight>"]);
 
     const sectionLoading = (totalLoading / totalMT) * itemMT;
-    const sectionFreight = (totalFreight / totalMT) * itemMT;
+    const sectionFreightLess = (totalFreightLess / totalMT) * itemMT;
+    const sectionFreightGreater = (totalFreightGreater / totalMT) * itemMT;
 
-    return { loading: sectionLoading, freight: sectionFreight };
+    return { loading: sectionLoading, freightLess: sectionFreightLess, freightGreater: sectionFreightGreater };
   };
 
   const calcBill = () => {
@@ -771,55 +798,63 @@ export default function EntryPage() {
   const billTotals = calcBill();
 
   const handleItemChange = (id, key, value) => {
-    setItems(items.map(item => {
-      if (item.id === id) {
-        const updated = { ...item, [key]: value };
-        
-        // Reset cascading dropdowns
-        if (key === "Section") { 
-          updated.Size = ""; 
-          updated.Width = ""; 
-          updated["Item Length"] = "";
-        }
-        if (key === "Size") { 
-          updated.Width = ""; 
-          updated["Item Length"] = "";
-        }
-        if (key === "Width") {
-          updated["Item Length"] = "";
-        }
-        
-        // Auto-calculate Bill Basic Amount if not manually edited
-        if (key === "Quantity in Metric Tons" || key === "Item Per Rate") {
-          if (!manualEdits[`${id}-billAmount`]) {
-            const qty = parseNum(updated["Quantity in Metric Tons"]);
-            const rate = parseNum(updated["Item Per Rate"]);
-            updated["Bill Basic Amount"] = qty * rate;
-          }
-        }
-
-        // Auto-calculate section charges if not manually edited
-        if (key === "Quantity in Metric Tons") {
-          const { loading, freight } = calculateSectionCharges(id);
-          if (!manualEdits[`${id}-sectionLoading`]) {
-            updated["Section Loading Charges"] = loading;
-          }
-          if (!manualEdits[`${id}-sectionFreight`]) {
-            updated["Section Freight<"] = freight;
-          }
-        }
-
-        // Calculate section subtotal
-        const basicAmt = parseNum(updated["Bill Basic Amount"]);
-        const loadingAmt = parseNum(updated["Section Loading Charges"]);
-        const freightAmt = parseNum(updated["Section Freight<"]);
-        updated["Section Subtotal"] = basicAmt + loadingAmt + freightAmt;
-
-        return updated;
+  setItems(items.map(item => {
+    if (item.id === id) {
+      const updated = { ...item, [key]: value };
+      
+      // Reset cascading dropdowns
+      if (key === "Section") { 
+        updated.Size = ""; 
+        updated.Width = ""; 
+        updated["Item Length"] = "";
       }
-      return item;
-    }));
-  };
+      if (key === "Size") { 
+        // Don't reset Width - it's optional
+        // Only reset Length if Width was already selected
+        if (!item.Width) {
+          updated["Item Length"] = "";
+        }
+      }
+      if (key === "Width") {
+        // When Width changes, reset Length
+        updated["Item Length"] = "";
+      }
+      
+      // Auto-calculate Bill Basic Amount if not manually edited
+      if (key === "Quantity in Metric Tons" || key === "Item Per Rate") {
+        if (!manualEdits[`${id}-billAmount`]) {
+          const qty = parseNum(updated["Quantity in Metric Tons"]);
+          const rate = parseNum(updated["Item Per Rate"]);
+          updated["Bill Basic Amount"] = qty * rate;
+        }
+      }
+
+      // Auto-calculate section charges if not manually edited
+      if (key === "Quantity in Metric Tons") {
+        const { loading, freightLess, freightGreater } = calculateSectionCharges(id);
+        if (!manualEdits[`${id}-sectionLoading`]) {
+          updated["Section Loading Charges"] = loading;
+        }
+        if (!manualEdits[`${id}-sectionFreightLess`]) {
+          updated["Section Freight<"] = freightLess;
+        }
+        if (!manualEdits[`${id}-sectionFreightGreater`]) {
+          updated["Section Freight>"] = freightGreater;
+        }
+      }
+
+      // Calculate section subtotal
+      const basicAmt = parseNum(updated["Bill Basic Amount"]);
+      const loadingAmt = parseNum(updated["Section Loading Charges"]);
+      const freightLessAmt = parseNum(updated["Section Freight<"]);
+      const freightGreaterAmt = parseNum(updated["Section Freight>"]);
+      updated["Section Subtotal"] = basicAmt + loadingAmt + freightLessAmt + freightGreaterAmt;
+
+      return updated;
+    }
+    return item;
+  }));
+};
 
   const handleManualEdit = (id, field, value) => {
     setManualEdits(prev => ({ ...prev, [`${id}-${field}`]: true }));
@@ -830,8 +865,9 @@ export default function EntryPage() {
         // Recalculate section subtotal
         const basicAmt = parseNum(updated["Bill Basic Amount"]);
         const loadingAmt = parseNum(updated["Section Loading Charges"]);
-        const freightAmt = parseNum(updated["Section Freight<"]);
-        updated["Section Subtotal"] = basicAmt + loadingAmt + freightAmt;
+        const freightLessAmt = parseNum(updated["Section Freight<"]);
+        const freightGreaterAmt = parseNum(updated["Section Freight>"]);
+        updated["Section Subtotal"] = basicAmt + loadingAmt + freightLessAmt + freightGreaterAmt;
         
         return updated;
       }
@@ -867,6 +903,7 @@ export default function EntryPage() {
           "Bill Basic Amount": parseNum(i["Bill Basic Amount"]),
           "Section Loading Charges": parseNum(i["Section Loading Charges"]),
           "Section Freight<": parseNum(i["Section Freight<"]),
+          "Section Freight>": parseNum(i["Section Freight>"]),
           "Section Subtotal": parseNum(i["Section Subtotal"])
         })),
         charges,
@@ -986,25 +1023,29 @@ export default function EntryPage() {
     if (totalMT === 0) return;
 
     setItems(prevItems => prevItems.map(item => {
-      const { loading, freight } = calculateSectionCharges(item.id);
+      const { loading, freightLess, freightGreater } = calculateSectionCharges(item.id);
       const updated = { ...item };
       
       if (!manualEdits[`${item.id}-sectionLoading`]) {
         updated["Section Loading Charges"] = loading;
       }
-      if (!manualEdits[`${item.id}-sectionFreight`]) {
-        updated["Section Freight<"] = freight;
+      if (!manualEdits[`${item.id}-sectionFreightLess`]) {
+        updated["Section Freight<"] = freightLess;
+      }
+      if (!manualEdits[`${item.id}-sectionFreightGreater`]) {
+        updated["Section Freight>"] = freightGreater;
       }
       
       // Recalculate subtotal
       const basicAmt = parseNum(updated["Bill Basic Amount"]);
       const loadingAmt = parseNum(updated["Section Loading Charges"]);
-      const freightAmt = parseNum(updated["Section Freight<"]);
-      updated["Section Subtotal"] = basicAmt + loadingAmt + freightAmt;
+      const freightLessAmt = parseNum(updated["Section Freight<"]);
+      const freightGreaterAmt = parseNum(updated["Section Freight>"]);
+      updated["Section Subtotal"] = basicAmt + loadingAmt + freightLessAmt + freightGreaterAmt;
       
       return updated;
     }));
-  }, [charges["Loading Charges"], charges["Freight<"]]);
+  }, [charges["Loading Charges"], charges["Freight<"], charges["Freight>"]]);
 
   // Recalculate all section charges when any item's MT changes
   useEffect(() => {
@@ -1012,9 +1053,10 @@ export default function EntryPage() {
     if (totalMT === 0) return;
     
     const totalLoading = parseNum(charges["Loading Charges"]);
-    const totalFreight = parseNum(charges["Freight<"]);
+    const totalFreightLess = parseNum(charges["Freight<"]);
+    const totalFreightGreater = parseNum(charges["Freight>"]);
     
-    if (totalLoading === 0 && totalFreight === 0) return;
+    if (totalLoading === 0 && totalFreightLess === 0 && totalFreightGreater === 0) return;
 
     setItems(prevItems => prevItems.map(item => {
       const itemMT = parseNum(item["Quantity in Metric Tons"]);
@@ -1023,19 +1065,23 @@ export default function EntryPage() {
       if (!manualEdits[`${item.id}-sectionLoading`]) {
         updated["Section Loading Charges"] = (totalLoading / totalMT) * itemMT;
       }
-      if (!manualEdits[`${item.id}-sectionFreight`]) {
-        updated["Section Freight<"] = (totalFreight / totalMT) * itemMT;
+      if (!manualEdits[`${item.id}-sectionFreightLess`]) {
+        updated["Section Freight<"] = (totalFreightLess / totalMT) * itemMT;
+      }
+      if (!manualEdits[`${item.id}-sectionFreightGreater`]) {
+        updated["Section Freight>"] = (totalFreightGreater / totalMT) * itemMT;
       }
       
       // Recalculate subtotal
       const basicAmt = parseNum(updated["Bill Basic Amount"]);
       const loadingAmt = parseNum(updated["Section Loading Charges"]);
-      const freightAmt = parseNum(updated["Section Freight<"]);
-      updated["Section Subtotal"] = basicAmt + loadingAmt + freightAmt;
+      const freightLessAmt = parseNum(updated["Section Freight<"]);
+      const freightGreaterAmt = parseNum(updated["Section Freight>"]);
+      updated["Section Subtotal"] = basicAmt + loadingAmt + freightLessAmt + freightGreaterAmt;
       
       return updated;
     }));
-  }, [items.map(i => parseNum(i["Quantity in Metric Tons"])).join(','), charges["Loading Charges"], charges["Freight<"]]);
+  }, [items.map(i => parseNum(i["Quantity in Metric Tons"])).join(','), charges["Loading Charges"], charges["Freight<"], charges["Freight>"]]);
 
   return (
     <div className="entry-container">
@@ -1231,6 +1277,16 @@ export default function EntryPage() {
                 </div>
 
                 <div className="entry-input">
+                  <label>Section Freight&gt;</label>
+                  <input 
+                    type="number"
+                    step="0.001"
+                    value={parseFloat(item["Section Freight>"]).toFixed(3)} 
+                    onChange={e => handleManualEdit(item.id, "Section Freight>", parseFloat(e.target.value))}
+                  />
+                </div>
+
+                <div className="entry-input">
                   <label>Section Subtotal</label>
                   <input 
                     type="text" 
@@ -1256,6 +1312,7 @@ export default function EntryPage() {
           "Bill Basic Amount": 0,
           "Section Loading Charges": 0,
           "Section Freight<": 0,
+          "Section Freight>": 0,
           "Section Subtotal": 0
         }])} type="button">
           <HiPlus /> Add Another Section
