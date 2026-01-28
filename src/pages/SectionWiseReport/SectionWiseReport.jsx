@@ -156,7 +156,6 @@ export default function SectionWiseReport() {
         });
 
         // Calculate totals
-        const totalItems = entries.reduce((sum, e) => sum + e.itemCount, 0);
         const totalQty = entries.reduce((sum, e) => sum + e.qty, 0);
         const totalAmount = entries.reduce((sum, e) => sum + e.amount, 0);
 
@@ -167,7 +166,7 @@ export default function SectionWiseReport() {
         totalRow.push(
           "TOTAL",
           "",
-          totalItems,
+          "",
           totalQty,
           totalAmount,
           calculateAvgRate(totalAmount, totalQty)
@@ -254,7 +253,6 @@ export default function SectionWiseReport() {
       Object.keys(sizes).sort().forEach(size => {
         const entries = sizes[size];
 
-        const totalItems = entries.reduce((sum, e) => sum + e.itemCount, 0);
         const totalQty = entries.reduce((sum, e) => sum + e.qty, 0);
         const totalAmount = entries.reduce((sum, e) => sum + e.amount, 0);
 
@@ -278,8 +276,9 @@ export default function SectionWiseReport() {
         });
 
         const totalRow = [
-          "TOTAL", "", 
-          totalItems.toLocaleString("en-IN"), 
+          "TOTAL", 
+          "", 
+          "",
           formatNumber(totalQty),
           formatAmount(totalAmount), 
           formatAmount(calculateAvgRate(totalAmount, totalQty))
@@ -381,7 +380,6 @@ export default function SectionWiseReport() {
             <div key={section} className="section-group">
               {Object.keys(groupedData[section]).sort().map(size => {
                 const entries = groupedData[section][size];
-                const totalItems = entries.reduce((sum, e) => sum + e.itemCount, 0);
                 const totalQty = entries.reduce((sum, e) => sum + e.qty, 0);
                 const totalAmount = entries.reduce((sum, e) => sum + e.amount, 0);
 
@@ -423,7 +421,7 @@ export default function SectionWiseReport() {
                             {showWorkTypeColumn && <td></td>}
                             <td className="text-left">TOTAL</td>
                             <td></td>
-                            <td className="text-right">{totalItems.toLocaleString("en-IN")}</td>
+                            <td></td>
                             <td className="text-right">{formatNumber(totalQty)}</td>
                             <td className="text-right">{formatAmount(totalAmount)}</td>
                             <td className="text-right">{formatAmount(calculateAvgRate(totalAmount, totalQty))}</td>

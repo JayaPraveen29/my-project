@@ -123,7 +123,6 @@ export default function SingleSectionReport() {
     wsData.push([]); // Empty row
 
     const entries = groupedData[selectedSection][selectedSize];
-    const totalItems = entries.reduce((s, e) => s + e.itemCount, 0);
     const totalQty = entries.reduce((s, e) => s + e.qty, 0);
     const totalAmount = entries.reduce((s, e) => s + e.amount, 0);
     const avgRate = calculateAvgRate(totalAmount, totalQty);
@@ -152,7 +151,7 @@ export default function SingleSectionReport() {
       "",
       "",
       "",
-      totalItems,
+      "",
       totalQty,
       totalAmount,
       avgRate
@@ -236,7 +235,6 @@ export default function SingleSectionReport() {
     doc.text(title, 14, 25);
 
     const entries = groupedData[selectedSection][selectedSize];
-    const totalItems = entries.reduce((s, e) => s + e.itemCount, 0);
     const totalQty = entries.reduce((s, e) => s + e.qty, 0);
     const totalAmount = entries.reduce((s, e) => s + e.amount, 0);
     const avgRate = calculateAvgRate(totalAmount, totalQty);
@@ -254,7 +252,7 @@ export default function SingleSectionReport() {
 
     tableData.push([
       "TOTAL", "", "", "",
-      totalItems.toLocaleString("en-IN"),
+      "",
       formatNumber(totalQty),
       formatAmount(totalAmount),
       formatAmount(avgRate)
@@ -376,7 +374,6 @@ export default function SingleSectionReport() {
 
           {(() => {
             const entries = groupedData[selectedSection][selectedSize];
-            const totalItems = entries.reduce((s, e) => s + e.itemCount, 0);
             const totalQty = entries.reduce((s, e) => s + e.qty, 0);
             const totalAmount = entries.reduce((s, e) => s + e.amount, 0);
             const avgRate = calculateAvgRate(totalAmount, totalQty);
@@ -410,7 +407,7 @@ export default function SingleSectionReport() {
                   ))}
                   <tr className="total-row">
                     <td colSpan={4}>TOTAL</td>
-                    <td>{totalItems.toLocaleString("en-IN")}</td>
+                    <td></td>
                     <td>{formatNumber(totalQty)}</td>
                     <td>{formatAmount(totalAmount)}</td>
                     <td>{formatAmount(avgRate)}</td>

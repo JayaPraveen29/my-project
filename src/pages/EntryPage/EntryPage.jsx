@@ -7,41 +7,22 @@ import "./EntryPage.css";
 export default function EntryPage() {
   const [loading, setLoading] = useState(false);
   const [entryNo, setEntryNo] = useState(1);
-
   const [unit, setUnit] = useState("");
   const [workType, setWorkType] = useState("");
   const [headerData, setHeaderData] = useState({
-    PO: "",
-    "Received On": "",
-    "Bill Number": "",
-    "Bill Date": "",
-    "Name of the Supplier": "",
-    "Supplier Place": "",
+    PO: "", "Received On": "", "Bill Number": "", "Bill Date": "",
+    "Name of the Supplier": "", "Supplier Place": "",
   });
 
-  const [items, setItems] = useState([
-    {
-      id: Date.now(),
-      Section: "",
-      Size: "",
-      Width: "",
-      "Item Length": "",
-      "Number of items Supplied": "",
-      "Quantity in Metric Tons": "",
-      "Item Per Rate": "",
-      "Bill Basic Amount": 0,
-      "Section Loading Charges": 0,
-      "Section Freight<": 0,
-      "Section Freight>": 0,
-      "Section Subtotal": 0,
-    }
-  ]);
+  const [items, setItems] = useState([{
+    id: Date.now(), Section: "", Size: "", Width: "", "Item Length": "",
+    "Number of items Supplied": "", "Quantity in Metric Tons": "", "Item Per Rate": "",
+    "Bill Basic Amount": 0, "Section Loading Charges": 0, "Section Freight<": 0,
+    "Section Freight>": 0, "Section Subtotal": 0,
+  }]);
 
   const [charges, setCharges] = useState({
-    "Loading Charges": "",
-    "Freight<": "",
-    Others: "",
-    "Freight>": "",
+    "Loading Charges": "", "Freight<": "", Others: "", "Freight>": "",
   });
 
   const [gstType, setGstType] = useState("AP");
@@ -49,7 +30,6 @@ export default function EntryPage() {
   const [sgstPercentage, setSgstPercentage] = useState("9");
   const [igstPercentage, setIgstPercentage] = useState("18");
 
-  // Master data
   const [allSections, setAllSections] = useState([]);
   const [allSizes, setAllSizes] = useState([]);
   const [allWidths, setAllWidths] = useState([]);
@@ -57,7 +37,6 @@ export default function EntryPage() {
   const [allSuppliers, setAllSuppliers] = useState([]);
   const [allPlaces, setAllPlaces] = useState([]);
 
-  // Relationship data
   const [sectionSizeRelations, setSectionSizeRelations] = useState([]);
   const [sizeWidthRelations, setSizeWidthRelations] = useState([]);
   const [widthLengthRelations, setWidthLengthRelations] = useState([]);
@@ -66,62 +45,50 @@ export default function EntryPage() {
   const [customInputs, setCustomInputs] = useState({});
   const [manualEdits, setManualEdits] = useState({});
 
-  // Clean up orphaned relationships
   const cleanupOrphanedRelations = async (sections, sizes, widths, lengths, suppliers, places, sectionSizeRels, sizeWidthRels, widthLengthRels, supplierPlaceRels) => {
     try {
       console.log("🧹 Checking for orphaned relationships...");
-      
       const sectionIds = new Set(sections.map(s => s.id));
       const sizeIds = new Set(sizes.map(s => s.id));
       const widthIds = new Set(widths.map(w => w.id));
       const lengthIds = new Set(lengths.map(l => l.id));
       const supplierIds = new Set(suppliers.map(s => s.id));
       const placeIds = new Set(places.map(p => p.id));
-
       let orphanedCount = 0;
 
-      // Clean sectionSizeRelations
       for (const rel of sectionSizeRels) {
         if (!sectionIds.has(rel.sectionId) || !sizeIds.has(rel.sizeId)) {
-          console.warn(`🗑️ Deleting orphaned sectionSizeRelation: sectionId=${rel.sectionId}, sizeId=${rel.sizeId}`);
+          console.warn(`🗑️ Deleting orphaned sectionSizeRelation`);
           await deleteDoc(doc(db, "sectionSizeRelations", rel.id));
           orphanedCount++;
         }
       }
 
-      // Clean sizeWidthRelations
       for (const rel of sizeWidthRels) {
         if (!sectionIds.has(rel.sectionId) || !sizeIds.has(rel.sizeId) || !widthIds.has(rel.widthId)) {
-          console.warn(`🗑️ Deleting orphaned sizeWidthRelation: sectionId=${rel.sectionId}, sizeId=${rel.sizeId}, widthId=${rel.widthId}`);
+          console.warn(`🗑️ Deleting orphaned sizeWidthRelation`);
           await deleteDoc(doc(db, "sizeWidthRelations", rel.id));
           orphanedCount++;
         }
       }
 
-      // Clean widthLengthRelations
       for (const rel of widthLengthRels) {
-        if (!sectionIds.has(rel.sectionId) || !sizeIds.has(rel.sizeId) || !widthIds.has(rel.widthId) || !lengthIds.has(rel.lengthId)) {
-          console.warn(`🗑️ Deleting orphaned widthLengthRelation: sectionId=${rel.sectionId}, sizeId=${rel.sizeId}, widthId=${rel.widthId}, lengthId=${rel.lengthId}`);
+        if (!sectionIds.has(rel.sectionId) || !sizeIds.has(rel.sizeId) || (rel.widthId !== null && !widthIds.has(rel.widthId)) || !lengthIds.has(rel.lengthId)) {
+          console.warn(`🗑️ Deleting orphaned widthLengthRelation`);
           await deleteDoc(doc(db, "widthLengthRelations", rel.id));
           orphanedCount++;
         }
       }
 
-      // Clean supplierPlaceRelations
       for (const rel of supplierPlaceRels) {
         if (!supplierIds.has(rel.supplierId) || !placeIds.has(rel.placeId)) {
-          console.warn(`🗑️ Deleting orphaned supplierPlaceRelation: supplierId=${rel.supplierId}, placeId=${rel.placeId}`);
+          console.warn(`🗑️ Deleting orphaned supplierPlaceRelation`);
           await deleteDoc(doc(db, "supplierPlaceRelations", rel.id));
           orphanedCount++;
         }
       }
 
-      if (orphanedCount > 0) {
-        console.log(`✅ Cleaned up ${orphanedCount} orphaned relationship(s)`);
-      } else {
-        console.log("✅ No orphaned relationships found");
-      }
-
+      console.log(orphanedCount > 0 ? `✅ Cleaned up ${orphanedCount} orphaned relationship(s)` : "✅ No orphaned relationships found");
     } catch (error) {
       console.error("❌ Error cleaning up orphaned relationships:", error);
     }
@@ -131,7 +98,6 @@ export default function EntryPage() {
     try {
       console.log("🔄 Starting to fetch dropdown options from Firebase...");
       
-      // Fetch master collections
       const sectionsSnap = await getDocs(collection(db, "sections"));
       const sizesSnap = await getDocs(collection(db, "sizes"));
       const widthsSnap = await getDocs(collection(db, "widths"));
@@ -140,42 +106,29 @@ export default function EntryPage() {
       const placesSnap = await getDocs(collection(db, "places"));
       
       const sections = sectionsSnap.docs.map(doc => ({
-        id: doc.id,
-        value: doc.data().value?.trim() || "",
-        isManual: true
+        id: doc.id, value: doc.data().value?.trim() || "", isManual: true
       })).filter(item => item.value).sort((a, b) => a.value.localeCompare(b.value));
 
       const sizes = sizesSnap.docs.map(doc => ({
-        id: doc.id,
-        value: doc.data().value?.trim() || "",
-        isManual: true
+        id: doc.id, value: doc.data().value?.trim() || "", isManual: true
       })).filter(item => item.value).sort((a, b) => a.value.localeCompare(b.value));
 
       const widths = widthsSnap.docs.map(doc => ({
-        id: doc.id,
-        value: doc.data().value?.trim() || "",
-        isManual: true
+        id: doc.id, value: doc.data().value?.trim() || "", isManual: true
       })).filter(item => item.value).sort((a, b) => a.value.localeCompare(b.value));
 
       const itemLengths = itemLengthsSnap.docs.map(doc => ({
-        id: doc.id,
-        value: doc.data().value?.trim() || "",
-        isManual: true
+        id: doc.id, value: doc.data().value?.trim() || "", isManual: true
       })).filter(item => item.value).sort((a, b) => a.value.localeCompare(b.value));
 
       const suppliers = suppliersSnap.docs.map(doc => ({
-        id: doc.id,
-        value: doc.data().value?.trim() || "",
-        isManual: true
+        id: doc.id, value: doc.data().value?.trim() || "", isManual: true
       })).filter(item => item.value).sort((a, b) => a.value.localeCompare(b.value));
 
       const places = placesSnap.docs.map(doc => ({
-        id: doc.id,
-        value: doc.data().value?.trim() || "",
-        isManual: true
+        id: doc.id, value: doc.data().value?.trim() || "", isManual: true
       })).filter(item => item.value).sort((a, b) => a.value.localeCompare(b.value));
 
-      // Fetch relationship collections
       const sectionSizeSnap = await getDocs(collection(db, "sectionSizeRelations"));
       const sizeWidthSnap = await getDocs(collection(db, "sizeWidthRelations"));
       const widthLengthSnap = await getDocs(collection(db, "widthLengthRelations"));
@@ -186,13 +139,8 @@ export default function EntryPage() {
       const widthLengthRels = widthLengthSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       const supplierPlaceRels = supplierPlaceSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-      // Clean up orphaned relationships
-      await cleanupOrphanedRelations(
-        sections, sizes, widths, itemLengths, suppliers, places,
-        sectionSizeRels, sizeWidthRels, widthLengthRels, supplierPlaceRels
-      );
+      await cleanupOrphanedRelations(sections, sizes, widths, itemLengths, suppliers, places, sectionSizeRels, sizeWidthRels, widthLengthRels, supplierPlaceRels);
 
-      // Refetch relationships after cleanup
       const cleanedSectionSizeSnap = await getDocs(collection(db, "sectionSizeRelations"));
       const cleanedSizeWidthSnap = await getDocs(collection(db, "sizeWidthRelations"));
       const cleanedWidthLengthSnap = await getDocs(collection(db, "widthLengthRelations"));
@@ -211,10 +159,6 @@ export default function EntryPage() {
       setSupplierPlaceRelations(cleanedSupplierPlaceSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       
       console.log("✅ Dropdown options and relationships fetched successfully!");
-      console.log("🔍 SECTIONS:", sections);
-      console.log("🔍 SIZES:", sizes);
-      console.log("🔍 SECTION-SIZE RELATIONS:", cleanedSectionSizeSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      
     } catch (error) {
       console.error("❌ Error fetching dropdown options:", error);
       alert("Error fetching data from Firebase");
@@ -235,138 +179,79 @@ export default function EntryPage() {
     fetchLastNo();
   }, []);
 
-  // Get available options based on cascading relationships
   const getAvailableSizes = (selectedSection) => {
     if (!selectedSection) return [];
-    
-    console.log("🔍 Getting sizes for section:", selectedSection);
-    console.log("🔍 All sections:", allSections);
-    console.log("🔍 All sizes:", allSizes);
-    console.log("🔍 Section-Size relations:", sectionSizeRelations);
-    
     const sectionObj = allSections.find(s => s.value === selectedSection);
-    console.log("🔍 Found section object:", sectionObj);
-    
-    if (!sectionObj) {
-      console.warn("⚠️ Section not found!");
-      return [];
-    }
-    
-    const relatedSizeIds = sectionSizeRelations
-      .filter(rel => rel.sectionId === sectionObj.id)
-      .map(rel => rel.sizeId);
-    
-    console.log("🔍 Related size IDs:", relatedSizeIds);
-    
-    const availableSizes = allSizes.filter(size => relatedSizeIds.includes(size.id));
-    console.log("🔍 Available sizes:", availableSizes);
-    
-    return availableSizes;
+    if (!sectionObj) return [];
+    const relatedSizeIds = sectionSizeRelations.filter(rel => rel.sectionId === sectionObj.id).map(rel => rel.sizeId);
+    return allSizes.filter(size => relatedSizeIds.includes(size.id));
   };
   
   const getAvailableWidths = (selectedSection, selectedSize) => {
     if (!selectedSection || !selectedSize) return [];
-    
-    console.log("🔍 Getting widths for section:", selectedSection, "size:", selectedSize);
-    
     const sectionObj = allSections.find(s => s.value === selectedSection);
     const sizeObj = allSizes.find(s => s.value === selectedSize);
-    
-    console.log("🔍 Found section:", sectionObj, "size:", sizeObj);
-    
-    if (!sectionObj || !sizeObj) {
-      console.warn("⚠️ Section or Size not found!");
-      return [];
-    }
-    
-    const relatedWidthIds = sizeWidthRelations
-      .filter(rel => rel.sectionId === sectionObj.id && rel.sizeId === sizeObj.id)
-      .map(rel => rel.widthId);
-    
-    console.log("🔍 Related width IDs:", relatedWidthIds);
-    console.log("🔍 Size-Width relations:", sizeWidthRelations);
-    
-    const availableWidths = allWidths.filter(width => relatedWidthIds.includes(width.id));
-    console.log("🔍 Available widths:", availableWidths);
-    
-    return availableWidths;
+    if (!sectionObj || !sizeObj) return [];
+    const relatedWidthIds = sizeWidthRelations.filter(rel => rel.sectionId === sectionObj.id && rel.sizeId === sizeObj.id).map(rel => rel.widthId);
+    return allWidths.filter(width => relatedWidthIds.includes(width.id));
   };
   
   const getAvailableLengths = (selectedSection, selectedSize, selectedWidth) => {
-    if (!selectedSection || !selectedSize) return [];
+    if (!selectedSection || !selectedSize) {
+      console.log("🔍 getAvailableLengths: Missing section or size");
+      return [];
+    }
     
-    console.log("🔍 Getting lengths for section:", selectedSection, "size:", selectedSize, "width:", selectedWidth);
+    console.log("🔍 getAvailableLengths called with:", { selectedSection, selectedSize, selectedWidth });
     
     const sectionObj = allSections.find(s => s.value === selectedSection);
     const sizeObj = allSizes.find(s => s.value === selectedSize);
     
+    console.log("🔍 Found objects:", { sectionObj, sizeObj });
+    
     if (!sectionObj || !sizeObj) {
-      console.warn("⚠️ Section or Size not found!");
+      console.log("⚠️ Section or Size object not found!");
       return [];
     }
     
-    // If no width is selected, return all lengths for this section+size combination
+    console.log("🔍 All widthLengthRelations:", widthLengthRelations);
+    
     if (!selectedWidth) {
-      const relatedLengthIds = widthLengthRelations
-        .filter(rel => 
-          rel.sectionId === sectionObj.id && 
-          rel.sizeId === sizeObj.id
-        )
-        .map(rel => rel.lengthId);
+      console.log("🔍 No width selected, looking for relations with widthId === null");
+      const relatedLengthIds = widthLengthRelations.filter(rel => {
+        const match = rel.sectionId === sectionObj.id && rel.sizeId === sizeObj.id && rel.widthId === null;
+        console.log(`🔍 Checking relation:`, rel, `Match: ${match}`);
+        return match;
+      }).map(rel => rel.lengthId);
       
+      console.log("🔍 Related length IDs (no width):", relatedLengthIds);
       const availableLengths = allItemLengths.filter(length => relatedLengthIds.includes(length.id));
       console.log("🔍 Available lengths (no width):", availableLengths);
       return availableLengths;
     }
     
-    // If width is selected, filter by section+size+width
     const widthObj = allWidths.find(w => w.value === selectedWidth);
-    
     if (!widthObj) {
-      console.warn("⚠️ Width not found!");
+      console.log("⚠️ Width object not found!");
       return [];
     }
     
-    const relatedLengthIds = widthLengthRelations
-      .filter(rel => 
-        rel.sectionId === sectionObj.id && 
-        rel.sizeId === sizeObj.id && 
-        rel.widthId === widthObj.id
-      )
-      .map(rel => rel.lengthId);
+    const relatedLengthIds = widthLengthRelations.filter(rel => 
+      rel.sectionId === sectionObj.id && rel.sizeId === sizeObj.id && rel.widthId === widthObj.id
+    ).map(rel => rel.lengthId);
     
-    console.log("🔍 Related length IDs:", relatedLengthIds);
-    
+    console.log("🔍 Related length IDs (with width):", relatedLengthIds);
     const availableLengths = allItemLengths.filter(length => relatedLengthIds.includes(length.id));
-    console.log("🔍 Available lengths:", availableLengths);
-    
+    console.log("🔍 Available lengths (with width):", availableLengths);
     return availableLengths;
   };
 
   const getAvailablePlaces = (selectedSupplier) => {
     if (!selectedSupplier) return [];
-    
-    console.log("🔍 Getting places for supplier:", selectedSupplier);
-    
     const supplierObj = allSuppliers.find(s => s.value === selectedSupplier);
-    console.log("🔍 Found supplier object:", supplierObj);
-    
-    if (!supplierObj) {
-      console.warn("⚠️ Supplier not found!");
-      return [];
-    }
-    
-    const relatedPlaceIds = supplierPlaceRelations
-      .filter(rel => rel.supplierId === supplierObj.id)
-      .map(rel => rel.placeId);
-    
-    console.log("🔍 Related place IDs:", relatedPlaceIds);
-    console.log("🔍 Supplier-Place relations:", supplierPlaceRelations);
-    
-    const availablePlaces = allPlaces.filter(place => relatedPlaceIds.includes(place.id));
-    console.log("🔍 Available places:", availablePlaces);
-    
-    return availablePlaces;
+    if (!supplierObj) return [];
+    const relatedPlaceIds = supplierPlaceRelations.filter(rel => rel.supplierId === supplierObj.id).map(rel => rel.placeId);
+    return allPlaces.filter(place => relatedPlaceIds.includes(place.id));
   };
 
   const handleAddCustomValue = async (itemId, type, value) => {
@@ -374,69 +259,34 @@ export default function EntryPage() {
       alert("Please enter a value!");
       return;
     }
-  
     const trimmedValue = value.trim();
-    
-    // Clear the input immediately to prevent duplicate submissions
     setCustomInputs(prev => ({ ...prev, [`${itemId}-${type}`]: { show: prev[`${itemId}-${type}`]?.show || false, value: "" } }));
     
-    let collectionName = "";
-    let currentOptions = [];
-    let setOptions = null;
-  
-    if (type === "section") {
-      collectionName = "sections";
-      currentOptions = allSections;
-      setOptions = setAllSections;
-    } else if (type === "size") {
-      collectionName = "sizes";
-      currentOptions = allSizes;
-      setOptions = setAllSizes;
-    } else if (type === "width") {
-      collectionName = "widths";
-      currentOptions = allWidths;
-      setOptions = setAllWidths;
-    } else if (type === "itemLength") {
-      collectionName = "itemLengths";
-      currentOptions = allItemLengths;
-      setOptions = setAllItemLengths;
-    } else if (type === "supplier") {
-      collectionName = "suppliers";
-      currentOptions = allSuppliers;
-      setOptions = setAllSuppliers;
-    } else if (type === "place") {
-      collectionName = "places";
-      currentOptions = allPlaces;
-      setOptions = setAllPlaces;
-    }
-  
-    // For places, check if the same place exists for the CURRENT supplier
+    let collectionName = "", currentOptions = [], setOptions = null;
+    if (type === "section") { collectionName = "sections"; currentOptions = allSections; setOptions = setAllSections; }
+    else if (type === "size") { collectionName = "sizes"; currentOptions = allSizes; setOptions = setAllSizes; }
+    else if (type === "width") { collectionName = "widths"; currentOptions = allWidths; setOptions = setAllWidths; }
+    else if (type === "itemLength") { collectionName = "itemLengths"; currentOptions = allItemLengths; setOptions = setAllItemLengths; }
+    else if (type === "supplier") { collectionName = "suppliers"; currentOptions = allSuppliers; setOptions = setAllSuppliers; }
+    else if (type === "place") { collectionName = "places"; currentOptions = allPlaces; setOptions = setAllPlaces; }
+
     if (type === "place" && itemId === "header") {
       const currentSupplier = headerData["Name of the Supplier"];
       if (currentSupplier) {
         const supplierObj = allSuppliers.find(s => s.value === currentSupplier);
         if (supplierObj) {
-          // Check if this supplier already has this place
           const existingRelation = supplierPlaceRelations.find(rel => 
-            rel.supplierId === supplierObj.id && 
-            allPlaces.find(p => p.id === rel.placeId && p.value.toLowerCase() === trimmedValue.toLowerCase())
+            rel.supplierId === supplierObj.id && allPlaces.find(p => p.id === rel.placeId && p.value.toLowerCase() === trimmedValue.toLowerCase())
           );
-          
           if (existingRelation) {
             const existingPlace = allPlaces.find(p => p.id === existingRelation.placeId);
             alert(`"${trimmedValue}" already exists for this supplier. Using the existing entry.`);
             setHeaderData(prev => ({ ...prev, "Supplier Place": existingPlace.value }));
             return;
           }
-          
-          // Check if place name exists globally - if so, reuse it
           const existingPlace = allPlaces.find(opt => opt.value.toLowerCase() === trimmedValue.toLowerCase());
           if (existingPlace) {
-            // Place exists but not for this supplier - create the relationship
-            await addDoc(collection(db, "supplierPlaceRelations"), {
-              supplierId: supplierObj.id,
-              placeId: existingPlace.id
-            });
+            await addDoc(collection(db, "supplierPlaceRelations"), { supplierId: supplierObj.id, placeId: existingPlace.id });
             const supplierPlaceSnap = await getDocs(collection(db, "supplierPlaceRelations"));
             setSupplierPlaceRelations(supplierPlaceSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
             setHeaderData(prev => ({ ...prev, "Supplier Place": existingPlace.value }));
@@ -446,33 +296,23 @@ export default function EntryPage() {
         }
       }
     } 
-    // For size, check if the same size exists for the CURRENT section
     else if (type === "size" && itemId !== "header") {
       const item = items.find(i => i.id === itemId);
       if (item && item.Section) {
         const sectionObj = allSections.find(s => s.value === item.Section);
         if (sectionObj) {
-          // Check if this section already has this size
           const existingRelation = sectionSizeRelations.find(rel => 
-            rel.sectionId === sectionObj.id && 
-            allSizes.find(s => s.id === rel.sizeId && s.value.toLowerCase() === trimmedValue.toLowerCase())
+            rel.sectionId === sectionObj.id && allSizes.find(s => s.id === rel.sizeId && s.value.toLowerCase() === trimmedValue.toLowerCase())
           );
-          
           if (existingRelation) {
             const existingSize = allSizes.find(s => s.id === existingRelation.sizeId);
             alert(`"${trimmedValue}" already exists for this section. Using the existing entry.`);
             setItems(items.map(i => i.id === itemId ? { ...i, Size: existingSize.value } : i));
             return;
           }
-          
-          // Check if size name exists globally - if so, reuse it
           const existingSize = allSizes.find(opt => opt.value.toLowerCase() === trimmedValue.toLowerCase());
           if (existingSize) {
-            // Size exists but not for this section - create the relationship
-            await addDoc(collection(db, "sectionSizeRelations"), {
-              sectionId: sectionObj.id,
-              sizeId: existingSize.id
-            });
+            await addDoc(collection(db, "sectionSizeRelations"), { sectionId: sectionObj.id, sizeId: existingSize.id });
             const sectionSizeSnap = await getDocs(collection(db, "sectionSizeRelations"));
             setSectionSizeRelations(sectionSizeSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
             setItems(items.map(i => i.id === itemId ? { ...i, Size: existingSize.value } : i));
@@ -482,36 +322,24 @@ export default function EntryPage() {
         }
       }
     }
-    // For width, check if the same width exists for the CURRENT section+size
     else if (type === "width" && itemId !== "header") {
       const item = items.find(i => i.id === itemId);
       if (item && item.Section && item.Size) {
         const sectionObj = allSections.find(s => s.value === item.Section);
         const sizeObj = allSizes.find(s => s.value === item.Size);
         if (sectionObj && sizeObj) {
-          // Check if this section+size already has this width
           const existingRelation = sizeWidthRelations.find(rel => 
-            rel.sectionId === sectionObj.id && 
-            rel.sizeId === sizeObj.id &&
-            allWidths.find(w => w.id === rel.widthId && w.value.toLowerCase() === trimmedValue.toLowerCase())
+            rel.sectionId === sectionObj.id && rel.sizeId === sizeObj.id && allWidths.find(w => w.id === rel.widthId && w.value.toLowerCase() === trimmedValue.toLowerCase())
           );
-          
           if (existingRelation) {
             const existingWidth = allWidths.find(w => w.id === existingRelation.widthId);
             alert(`"${trimmedValue}" already exists for this section and size. Using the existing entry.`);
             setItems(items.map(i => i.id === itemId ? { ...i, Width: existingWidth.value } : i));
             return;
           }
-          
-          // Check if width name exists globally - if so, reuse it
           const existingWidth = allWidths.find(opt => opt.value.toLowerCase() === trimmedValue.toLowerCase());
           if (existingWidth) {
-            // Width exists but not for this section+size - create the relationship
-            await addDoc(collection(db, "sizeWidthRelations"), {
-              sectionId: sectionObj.id,
-              sizeId: sizeObj.id,
-              widthId: existingWidth.id
-            });
+            await addDoc(collection(db, "sizeWidthRelations"), { sectionId: sectionObj.id, sizeId: sizeObj.id, widthId: existingWidth.id });
             const sizeWidthSnap = await getDocs(collection(db, "sizeWidthRelations"));
             setSizeWidthRelations(sizeWidthSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
             setItems(items.map(i => i.id === itemId ? { ...i, Width: existingWidth.value } : i));
@@ -521,42 +349,27 @@ export default function EntryPage() {
         }
       }
     }
-    // For itemLength, check if the same length exists for the CURRENT section+size(+width optional)
     else if (type === "itemLength" && itemId !== "header") {
       const item = items.find(i => i.id === itemId);
-      // Only require Section and Size (Width is optional)
       if (item && item.Section && item.Size) {
         const sectionObj = allSections.find(s => s.value === item.Section);
         const sizeObj = allSizes.find(s => s.value === item.Size);
-        
-        // If Width is provided, use it; otherwise, use null
         const widthObj = item.Width ? allWidths.find(w => w.value === item.Width) : null;
-        
         if (sectionObj && sizeObj) {
-          // Check if this combination already has this length
           const existingRelation = widthLengthRelations.find(rel => 
-            rel.sectionId === sectionObj.id && 
-            rel.sizeId === sizeObj.id &&
-            (widthObj ? rel.widthId === widthObj.id : rel.widthId === null) &&
+            rel.sectionId === sectionObj.id && rel.sizeId === sizeObj.id && (widthObj ? rel.widthId === widthObj.id : rel.widthId === null) &&
             allItemLengths.find(l => l.id === rel.lengthId && l.value.toLowerCase() === trimmedValue.toLowerCase())
           );
-          
           if (existingRelation) {
             const existingLength = allItemLengths.find(l => l.id === existingRelation.lengthId);
             alert(`"${trimmedValue}" already exists for this combination. Using the existing entry.`);
             setItems(items.map(i => i.id === itemId ? { ...i, "Item Length": existingLength.value } : i));
             return;
           }
-          
-          // Check if length name exists globally
           const existingLength = allItemLengths.find(opt => opt.value.toLowerCase() === trimmedValue.toLowerCase());
           if (existingLength) {
-            // Create relationship with or without width
             await addDoc(collection(db, "widthLengthRelations"), {
-              sectionId: sectionObj.id,
-              sizeId: sizeObj.id,
-              widthId: widthObj ? widthObj.id : null, // Allow null width
-              lengthId: existingLength.id
+              sectionId: sectionObj.id, sizeId: sizeObj.id, widthId: widthObj ? widthObj.id : null, lengthId: existingLength.id
             });
             const widthLengthSnap = await getDocs(collection(db, "widthLengthRelations"));
             setWidthLengthRelations(widthLengthSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -567,45 +380,33 @@ export default function EntryPage() {
         }
       }
     }
-    // For suppliers and sections (no cascading), check if item already exists by value
     else if (type === "supplier" || type === "section") {
       const existingItem = currentOptions.find(opt => opt.value.toLowerCase() === trimmedValue.toLowerCase());
-      
       if (existingItem) {
         alert(`"${trimmedValue}" already exists. Using the existing entry.`);
-        
-        // Auto-select the existing item
         if (type === "supplier") {
           setHeaderData(prev => ({ ...prev, "Name of the Supplier": existingItem.value }));
         } else if (type === "section") {
           setItems(items.map(item => item.id === itemId ? { ...item, Section: existingItem.value } : item));
         }
-        
         return;
       }
     }
-  
+
     try {
-      // First, create the new document
       const docRef = await addDoc(collection(db, collectionName), { value: trimmedValue });
       const newOption = { id: docRef.id, value: trimmedValue, isManual: true };
       const updatedOptions = [...currentOptions, newOption].sort((a, b) => a.value.localeCompare(b.value));
       setOptions(updatedOptions);
-  
-      // THEN create relationships based on type (AFTER docRef is defined)
+
       if (type === "place" && itemId === "header") {
         const currentSupplier = headerData["Name of the Supplier"];
         if (currentSupplier) {
           const supplierObj = allSuppliers.find(s => s.value === currentSupplier);
           if (supplierObj) {
-            await addDoc(collection(db, "supplierPlaceRelations"), {
-              supplierId: supplierObj.id,
-              placeId: docRef.id
-            });
+            await addDoc(collection(db, "supplierPlaceRelations"), { supplierId: supplierObj.id, placeId: docRef.id });
             const supplierPlaceSnap = await getDocs(collection(db, "supplierPlaceRelations"));
             setSupplierPlaceRelations(supplierPlaceSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-          } else {
-            console.warn(`⚠️ Supplier "${currentSupplier}" not found. Relationship not created.`);
           }
         }
       } else if (type === "size" && itemId !== "header") {
@@ -613,14 +414,9 @@ export default function EntryPage() {
         if (item && item.Section) {
           const sectionObj = allSections.find(s => s.value === item.Section);
           if (sectionObj) {
-            await addDoc(collection(db, "sectionSizeRelations"), {
-              sectionId: sectionObj.id,
-              sizeId: docRef.id
-            });
+            await addDoc(collection(db, "sectionSizeRelations"), { sectionId: sectionObj.id, sizeId: docRef.id });
             const sectionSizeSnap = await getDocs(collection(db, "sectionSizeRelations"));
             setSectionSizeRelations(sectionSizeSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-          } else {
-            console.warn(`⚠️ Section "${item.Section}" not found. Relationship not created.`);
           }
         }
       } else if (type === "width" && itemId !== "header") {
@@ -629,39 +425,27 @@ export default function EntryPage() {
           const sectionObj = allSections.find(s => s.value === item.Section);
           const sizeObj = allSizes.find(s => s.value === item.Size);
           if (sectionObj && sizeObj) {
-            await addDoc(collection(db, "sizeWidthRelations"), {
-              sectionId: sectionObj.id,
-              sizeId: sizeObj.id,
-              widthId: docRef.id
-            });
+            await addDoc(collection(db, "sizeWidthRelations"), { sectionId: sectionObj.id, sizeId: sizeObj.id, widthId: docRef.id });
             const sizeWidthSnap = await getDocs(collection(db, "sizeWidthRelations"));
             setSizeWidthRelations(sizeWidthSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-          } else {
-            console.warn(`⚠️ Section or Size not found. Relationship not created.`);
           }
         }
       } else if (type === "itemLength" && itemId !== "header") {
         const item = items.find(i => i.id === itemId);
-        if (item && item.Section && item.Size) { // Only require Section and Size
+        if (item && item.Section && item.Size) {
           const sectionObj = allSections.find(s => s.value === item.Section);
           const sizeObj = allSizes.find(s => s.value === item.Size);
           const widthObj = item.Width ? allWidths.find(w => w.value === item.Width) : null;
-          
           if (sectionObj && sizeObj) {
             await addDoc(collection(db, "widthLengthRelations"), {
-              sectionId: sectionObj.id,
-              sizeId: sizeObj.id,
-              widthId: widthObj ? widthObj.id : null, // Allow null width
-              lengthId: docRef.id // NOW docRef is defined!
+              sectionId: sectionObj.id, sizeId: sizeObj.id, widthId: widthObj ? widthObj.id : null, lengthId: docRef.id
             });
             const widthLengthSnap = await getDocs(collection(db, "widthLengthRelations"));
             setWidthLengthRelations(widthLengthSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-          } else {
-            console.warn(`⚠️ Section or Size not found. Relationship not created.`);
           }
         }
       }
-  
+
       alert(`${type.charAt(0).toUpperCase() + type.slice(1)} "${trimmedValue}" added successfully!`);
     } catch (error) {
       console.error(`Error adding ${type}:`, error);
@@ -674,42 +458,22 @@ export default function EntryPage() {
       alert("Only manually created values can be deleted!");
       return;
     }
-  
     const confirmDelete = window.confirm(`Are you sure you want to delete "${optionToDelete.value}"?`);
     if (!confirmDelete) return;
-  
-    let collectionName = "";
-    let fieldName = "";
-  
-    if (type === "section") {
-      collectionName = "sections";
-      fieldName = "Section";
-    } else if (type === "size") {
-      collectionName = "sizes";
-      fieldName = "Size";
-    } else if (type === "width") {
-      collectionName = "widths";
-      fieldName = "Width";
-    } else if (type === "itemLength") {
-      collectionName = "itemLengths";
-      fieldName = "Item Length";
-    } else if (type === "supplier") {
-      collectionName = "suppliers";
-      fieldName = "Name of the Supplier";
-    } else if (type === "place") {
-      collectionName = "places";
-      fieldName = "Supplier Place";
-    }
-  
+
+    let collectionName = "", fieldName = "";
+    if (type === "section") { collectionName = "sections"; fieldName = "Section"; }
+    else if (type === "size") { collectionName = "sizes"; fieldName = "Size"; }
+    else if (type === "width") { collectionName = "widths"; fieldName = "Width"; }
+    else if (type === "itemLength") { collectionName = "itemLengths"; fieldName = "Item Length"; }
+    else if (type === "supplier") { collectionName = "suppliers"; fieldName = "Name of the Supplier"; }
+    else if (type === "place") { collectionName = "places"; fieldName = "Supplier Place"; }
+
     try {
       console.log(`🗑️ Deleting ${type}: ${optionToDelete.value} (ID: ${optionToDelete.id})`);
-      
-      // Delete from Firestore
       await deleteDoc(doc(db, collectionName, optionToDelete.id));
-      
       console.log(`✅ Successfully deleted from Firestore`);
-  
-      // Clear from form fields
+
       if (type === "supplier" || type === "place") {
         if (headerData[fieldName] === optionToDelete.value) {
           setHeaderData(prev => ({ ...prev, [fieldName]: "" }));
@@ -722,22 +486,16 @@ export default function EntryPage() {
           return item;
         }));
       }
-  
+
       console.log(`🔄 Re-fetching all master data...`);
-      
-      // Re-fetch all data to get updated lists and cleaned relationships
       await fetchMasterData();
-  
       console.log(`✅ Data re-fetched successfully`);
-  
       alert(`${type.charAt(0).toUpperCase() + type.slice(1)} "${optionToDelete.value}" deleted successfully!`);
-      
     } catch (error) {
       console.error(`❌ Error deleting ${type}:`, error);
       alert(`Error deleting ${type}. Please try again.`);
     }
   };
-
 
   const parseNum = (v) => parseFloat(v?.toString().replace(/,/g, "")) || 0;
   const formatNum = (n) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -754,121 +512,72 @@ export default function EntryPage() {
     return `${y}-${m}-${day}`;
   };
 
-  const getTotalMT = () => {
-    return items.reduce((sum, item) => sum + parseNum(item["Quantity in Metric Tons"]), 0);
-  };
+  const getTotalMT = () => items.reduce((sum, item) => sum + parseNum(item["Quantity in Metric Tons"]), 0);
 
   const calculateSectionCharges = (itemId) => {
     const totalMT = getTotalMT();
     if (totalMT === 0) return { loading: 0, freightLess: 0, freightGreater: 0 };
-
     const item = items.find(i => i.id === itemId);
     if (!item) return { loading: 0, freightLess: 0, freightGreater: 0 };
-
     const itemMT = parseNum(item["Quantity in Metric Tons"]);
     const totalLoading = parseNum(charges["Loading Charges"]);
     const totalFreightLess = parseNum(charges["Freight<"]);
     const totalFreightGreater = parseNum(charges["Freight>"]);
-
-    const sectionLoading = (totalLoading / totalMT) * itemMT;
-    const sectionFreightLess = (totalFreightLess / totalMT) * itemMT;
-    const sectionFreightGreater = (totalFreightGreater / totalMT) * itemMT;
-
-    return { loading: sectionLoading, freightLess: sectionFreightLess, freightGreater: sectionFreightGreater };
+    return {
+      loading: (totalLoading / totalMT) * itemMT,
+      freightLess: (totalFreightLess / totalMT) * itemMT,
+      freightGreater: (totalFreightGreater / totalMT) * itemMT
+    };
   };
 
   const calcBill = () => {
     const basicTotal = items.reduce((sum, item) => sum + parseNum(item["Bill Basic Amount"]), 0);
     const baseAmount = basicTotal + parseNum(charges["Loading Charges"]) + parseNum(charges["Freight<"]) + parseNum(charges.Others);
-    
     let gst = 0;
     if (gstType === "AP") {
       gst = baseAmount * (parseNum(cgstPercentage) + parseNum(sgstPercentage)) / 100;
     } else {
       gst = baseAmount * (parseNum(igstPercentage) / 100);
     }
-
     const total = baseAmount + gst;
     const gTotal = total + parseNum(charges["Freight>"]);
     const net = gTotal - gst;
-
     return { basicTotal, gst, total, gTotal, net };
   };
 
   const billTotals = calcBill();
 
   const handleItemChange = (id, key, value) => {
-  setItems(items.map(item => {
-    if (item.id === id) {
-      const updated = { ...item, [key]: value };
-      
-      // Reset cascading dropdowns
-      if (key === "Section") { 
-        updated.Size = ""; 
-        updated.Width = ""; 
-        updated["Item Length"] = "";
-      }
-      if (key === "Size") { 
-        // Don't reset Width - it's optional
-        // Only reset Length if Width was already selected
-        if (!item.Width) {
-          updated["Item Length"] = "";
+    setItems(items.map(item => {
+      if (item.id === id) {
+        const updated = { ...item, [key]: value };
+        if (key === "Section") { updated.Size = ""; updated.Width = ""; updated["Item Length"] = ""; }
+        if (key === "Size") { if (!item.Width) updated["Item Length"] = ""; }
+        if (key === "Width") { updated["Item Length"] = ""; }
+        if (key === "Quantity in Metric Tons" || key === "Item Per Rate") {
+          if (!manualEdits[`${id}-billAmount`]) {
+            updated["Bill Basic Amount"] = parseNum(updated["Quantity in Metric Tons"]) * parseNum(updated["Item Per Rate"]);
+          }
         }
-      }
-      if (key === "Width") {
-        // When Width changes, reset Length
-        updated["Item Length"] = "";
-      }
-      
-      // Auto-calculate Bill Basic Amount if not manually edited
-      if (key === "Quantity in Metric Tons" || key === "Item Per Rate") {
-        if (!manualEdits[`${id}-billAmount`]) {
-          const qty = parseNum(updated["Quantity in Metric Tons"]);
-          const rate = parseNum(updated["Item Per Rate"]);
-          updated["Bill Basic Amount"] = qty * rate;
+        if (key === "Quantity in Metric Tons") {
+          const { loading, freightLess, freightGreater } = calculateSectionCharges(id);
+          if (!manualEdits[`${id}-sectionLoading`]) updated["Section Loading Charges"] = loading;
+          if (!manualEdits[`${id}-sectionFreightLess`]) updated["Section Freight<"] = freightLess;
+          if (!manualEdits[`${id}-sectionFreightGreater`]) updated["Section Freight>"] = freightGreater;
         }
+        updated["Section Subtotal"] = parseNum(updated["Bill Basic Amount"]) + parseNum(updated["Section Loading Charges"]) + parseNum(updated["Section Freight<"]) + parseNum(updated["Section Freight>"]);
+        return updated;
       }
-
-      // Auto-calculate section charges if not manually edited
-      if (key === "Quantity in Metric Tons") {
-        const { loading, freightLess, freightGreater } = calculateSectionCharges(id);
-        if (!manualEdits[`${id}-sectionLoading`]) {
-          updated["Section Loading Charges"] = loading;
-        }
-        if (!manualEdits[`${id}-sectionFreightLess`]) {
-          updated["Section Freight<"] = freightLess;
-        }
-        if (!manualEdits[`${id}-sectionFreightGreater`]) {
-          updated["Section Freight>"] = freightGreater;
-        }
-      }
-
-      // Calculate section subtotal
-      const basicAmt = parseNum(updated["Bill Basic Amount"]);
-      const loadingAmt = parseNum(updated["Section Loading Charges"]);
-      const freightLessAmt = parseNum(updated["Section Freight<"]);
-      const freightGreaterAmt = parseNum(updated["Section Freight>"]);
-      updated["Section Subtotal"] = basicAmt + loadingAmt + freightLessAmt + freightGreaterAmt;
-
-      return updated;
-    }
-    return item;
-  }));
-};
+      return item;
+    }));
+  };
 
   const handleManualEdit = (id, field, value) => {
     setManualEdits(prev => ({ ...prev, [`${id}-${field}`]: true }));
     setItems(items.map(item => {
       if (item.id === id) {
         const updated = { ...item, [field]: value };
-        
-        // Recalculate section subtotal
-        const basicAmt = parseNum(updated["Bill Basic Amount"]);
-        const loadingAmt = parseNum(updated["Section Loading Charges"]);
-        const freightLessAmt = parseNum(updated["Section Freight<"]);
-        const freightGreaterAmt = parseNum(updated["Section Freight>"]);
-        updated["Section Subtotal"] = basicAmt + loadingAmt + freightLessAmt + freightGreaterAmt;
-        
+        updated["Section Subtotal"] = parseNum(updated["Bill Basic Amount"]) + parseNum(updated["Section Loading Charges"]) + parseNum(updated["Section Freight<"]) + parseNum(updated["Section Freight>"]);
         return updated;
       }
       return item;
@@ -877,13 +586,10 @@ export default function EntryPage() {
   
   const handleHeaderChange = (key, value) => {
     if (["Received On", "Bill Date"].includes(key)) {
-      const formattedDate = formatDateForDisplay(value);
-      setHeaderData((prev) => ({ ...prev, [key]: formattedDate }));
+      setHeaderData(prev => ({ ...prev, [key]: formatDateForDisplay(value) }));
     } else {
-      setHeaderData((prev) => ({ ...prev, [key]: value }));
+      setHeaderData(prev => ({ ...prev, [key]: value }));
     }
-
-    // Reset place when supplier changes
     if (key === "Name of the Supplier") {
       setHeaderData(prev => ({ ...prev, "Supplier Place": "" }));
     }
@@ -894,10 +600,7 @@ export default function EntryPage() {
     setLoading(true);
     try {
       const docData = {
-        ...headerData,
-        No: entryNo,
-        Unit: unit,
-        "Work Type": workType,
+        ...headerData, No: entryNo, Unit: unit, "Work Type": workType,
         items: items.map(i => ({
           ...i,
           "Bill Basic Amount": parseNum(i["Bill Basic Amount"]),
@@ -907,44 +610,25 @@ export default function EntryPage() {
           "Section Subtotal": parseNum(i["Section Subtotal"])
         })),
         charges,
-        gst: { 
-          type: gstType, 
-          cgstP: cgstPercentage, 
-          sgstP: sgstPercentage, 
-          igstP: igstPercentage, 
-          totalGst: billTotals.gst 
-        },
+        gst: { type: gstType, cgstP: cgstPercentage, sgstP: sgstPercentage, igstP: igstPercentage, totalGst: billTotals.gst },
         finalTotals: billTotals,
         createdAt: new Date()
       };
       await addDoc(collection(db, "entries"), docData);
       alert("Bill Saved Successfully!");
       window.location.reload();
-    } catch (e) { 
-      console.error(e); 
-      alert("Save Error"); 
-    } finally { 
-      setLoading(false); 
-    }
+    } catch (e) { console.error(e); alert("Save Error"); } 
+    finally { setLoading(false); }
   };
 
   const toggleCustomInput = (itemId, type) => {
     const key = `${itemId}-${type}`;
-    setCustomInputs(prev => ({
-      ...prev,
-      [key]: {
-        show: !prev[key]?.show,
-        value: prev[key]?.value || ""
-      }
-    }));
+    setCustomInputs(prev => ({ ...prev, [key]: { show: !prev[key]?.show, value: prev[key]?.value || "" } }));
   };
 
   const setCustomInputValue = (itemId, type, value) => {
     const key = `${itemId}-${type}`;
-    setCustomInputs(prev => ({
-      ...prev,
-      [key]: { ...prev[key], value }
-    }));
+    setCustomInputs(prev => ({ ...prev, [key]: { ...prev[key], value } }));
   };
 
   const getCustomInputState = (itemId, type) => {
@@ -954,17 +638,12 @@ export default function EntryPage() {
 
   const renderDropdownWithCustom = (label, value, onChange, options, itemId, type, showCount = true) => {
     const customState = getCustomInputState(itemId, type);
-    
     return (
       <div className="entry-input">
         <label>{label} {showCount && `(${options.length} options)`}</label>
         <div className="dropdown-container">
           <div className="dropdown-row">
-            <select 
-              className="dropdown-select"
-              value={value} 
-              onChange={onChange}
-            >
+            <select className="dropdown-select" value={value} onChange={onChange}>
               <option value="">Select {label}</option>
               {options.map(opt => <option key={opt.value} value={opt.value}>{opt.value}</option>)}
             </select>
@@ -975,37 +654,22 @@ export default function EntryPage() {
           {customState.show && (
             <div className="custom-input-section">
               <div className="custom-input-row">
-                <input
-                  type="text"
-                  className="custom-input-field"
-                  value={customState.value}
+                <input type="text" className="custom-input-field" value={customState.value}
                   onChange={e => setCustomInputValue(itemId, type, e.target.value)}
                   placeholder={`Enter new ${label.toLowerCase()}`}
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter') {
-                      handleAddCustomValue(itemId, type, customState.value);
-                    }
-                  }}
+                  onKeyPress={e => { if (e.key === 'Enter') handleAddCustomValue(itemId, type, customState.value); }}
                 />
-                <button className="btn-add-custom" onClick={() => handleAddCustomValue(itemId, type, customState.value)} type="button">
-                  Add
-                </button>
+                <button className="btn-add-custom" onClick={() => handleAddCustomValue(itemId, type, customState.value)} type="button">Add</button>
               </div>
               <div className="manual-values-list">
-                <div className="custom-values-header">
-                  Manually Created Values
-                </div>
+                <div className="custom-values-header">Manually Created Values</div>
                 {options.filter(opt => opt.isManual).length === 0 ? (
-                  <div className="no-manual-values">
-                    No manually created values yet
-                  </div>
+                  <div className="no-manual-values">No manually created values yet</div>
                 ) : (
                   options.filter(opt => opt.isManual).map(opt => (
                     <div key={opt.id} className="manual-value-item">
                       <span className="manual-value-text">{opt.value}</span>
-                      <button className="btn-delete-value" onClick={() => handleDeleteValue(type, opt)} type="button">
-                        Delete
-                      </button>
+                      <button className="btn-delete-value" onClick={() => handleDeleteValue(type, opt)} type="button">Delete</button>
                     </div>
                   ))
                 )}
@@ -1017,68 +681,34 @@ export default function EntryPage() {
     );
   };
 
-  // Recalculate section charges when total charges change
   useEffect(() => {
     const totalMT = getTotalMT();
     if (totalMT === 0) return;
-
     setItems(prevItems => prevItems.map(item => {
       const { loading, freightLess, freightGreater } = calculateSectionCharges(item.id);
       const updated = { ...item };
-      
-      if (!manualEdits[`${item.id}-sectionLoading`]) {
-        updated["Section Loading Charges"] = loading;
-      }
-      if (!manualEdits[`${item.id}-sectionFreightLess`]) {
-        updated["Section Freight<"] = freightLess;
-      }
-      if (!manualEdits[`${item.id}-sectionFreightGreater`]) {
-        updated["Section Freight>"] = freightGreater;
-      }
-      
-      // Recalculate subtotal
-      const basicAmt = parseNum(updated["Bill Basic Amount"]);
-      const loadingAmt = parseNum(updated["Section Loading Charges"]);
-      const freightLessAmt = parseNum(updated["Section Freight<"]);
-      const freightGreaterAmt = parseNum(updated["Section Freight>"]);
-      updated["Section Subtotal"] = basicAmt + loadingAmt + freightLessAmt + freightGreaterAmt;
-      
+      if (!manualEdits[`${item.id}-sectionLoading`]) updated["Section Loading Charges"] = loading;
+      if (!manualEdits[`${item.id}-sectionFreightLess`]) updated["Section Freight<"] = freightLess;
+      if (!manualEdits[`${item.id}-sectionFreightGreater`]) updated["Section Freight>"] = freightGreater;
+      updated["Section Subtotal"] = parseNum(updated["Bill Basic Amount"]) + parseNum(updated["Section Loading Charges"]) + parseNum(updated["Section Freight<"]) + parseNum(updated["Section Freight>"]);
       return updated;
     }));
   }, [charges["Loading Charges"], charges["Freight<"], charges["Freight>"]]);
 
-  // Recalculate all section charges when any item's MT changes
   useEffect(() => {
     const totalMT = getTotalMT();
     if (totalMT === 0) return;
-    
     const totalLoading = parseNum(charges["Loading Charges"]);
     const totalFreightLess = parseNum(charges["Freight<"]);
     const totalFreightGreater = parseNum(charges["Freight>"]);
-    
     if (totalLoading === 0 && totalFreightLess === 0 && totalFreightGreater === 0) return;
-
     setItems(prevItems => prevItems.map(item => {
       const itemMT = parseNum(item["Quantity in Metric Tons"]);
       const updated = { ...item };
-      
-      if (!manualEdits[`${item.id}-sectionLoading`]) {
-        updated["Section Loading Charges"] = (totalLoading / totalMT) * itemMT;
-      }
-      if (!manualEdits[`${item.id}-sectionFreightLess`]) {
-        updated["Section Freight<"] = (totalFreightLess / totalMT) * itemMT;
-      }
-      if (!manualEdits[`${item.id}-sectionFreightGreater`]) {
-        updated["Section Freight>"] = (totalFreightGreater / totalMT) * itemMT;
-      }
-      
-      // Recalculate subtotal
-      const basicAmt = parseNum(updated["Bill Basic Amount"]);
-      const loadingAmt = parseNum(updated["Section Loading Charges"]);
-      const freightLessAmt = parseNum(updated["Section Freight<"]);
-      const freightGreaterAmt = parseNum(updated["Section Freight>"]);
-      updated["Section Subtotal"] = basicAmt + loadingAmt + freightLessAmt + freightGreaterAmt;
-      
+      if (!manualEdits[`${item.id}-sectionLoading`]) updated["Section Loading Charges"] = (totalLoading / totalMT) * itemMT;
+      if (!manualEdits[`${item.id}-sectionFreightLess`]) updated["Section Freight<"] = (totalFreightLess / totalMT) * itemMT;
+      if (!manualEdits[`${item.id}-sectionFreightGreater`]) updated["Section Freight>"] = (totalFreightGreater / totalMT) * itemMT;
+      updated["Section Subtotal"] = parseNum(updated["Bill Basic Amount"]) + parseNum(updated["Section Loading Charges"]) + parseNum(updated["Section Freight<"]) + parseNum(updated["Section Freight>"]);
       return updated;
     }));
   }, [items.map(i => parseNum(i["Quantity in Metric Tons"])).join(','), charges["Loading Charges"], charges["Freight<"], charges["Freight>"]]);
@@ -1086,7 +716,6 @@ export default function EntryPage() {
   return (
     <div className="entry-container">
       <h1 className="entry-heading">Entry Page</h1>
-
       <div className="entry-top-inputs">
         <div className="unit-dropdown-wrapper">
           <label className="unit-dropdown-label">Unit</label>
@@ -1096,7 +725,6 @@ export default function EntryPage() {
             <option value="ST">ST</option>
           </select>
         </div>
-        
         <div className="unit-dropdown-wrapper">
           <label className="unit-dropdown-label">Work Type</label>
           <select className="unit-dropdown" value={workType} onChange={e => setWorkType(e.target.value)}>
@@ -1111,67 +739,30 @@ export default function EntryPage() {
         <div className="entry-grid">
           <div className="entry-input">
             <label>PO</label>
-            <input 
-              type="text"
-              value={headerData.PO}
-              onChange={e => handleHeaderChange("PO", e.target.value)}
-            />
+            <input type="text" value={headerData.PO} onChange={e => handleHeaderChange("PO", e.target.value)} />
           </div>
-
           <div className="entry-input">
             <label>Received On</label>
-            <input 
-              type="date"
-              value={formatDateForInput(headerData["Received On"])}
-              onChange={e => handleHeaderChange("Received On", e.target.value)}
-            />
+            <input type="date" value={formatDateForInput(headerData["Received On"])} onChange={e => handleHeaderChange("Received On", e.target.value)} />
           </div>
-
           <div className="entry-input">
             <label>Bill Number</label>
-            <input 
-              type="text"
-              value={headerData["Bill Number"]}
-              onChange={e => handleHeaderChange("Bill Number", e.target.value)}
-            />
+            <input type="text" value={headerData["Bill Number"]} onChange={e => handleHeaderChange("Bill Number", e.target.value)} />
           </div>
-
           <div className="entry-input">
             <label>Bill Date</label>
-            <input 
-              type="date"
-              value={formatDateForInput(headerData["Bill Date"])}
-              onChange={e => handleHeaderChange("Bill Date", e.target.value)}
-            />
+            <input type="date" value={formatDateForInput(headerData["Bill Date"])} onChange={e => handleHeaderChange("Bill Date", e.target.value)} />
           </div>
-
-          {renderDropdownWithCustom(
-            "Name of the Supplier",
-            headerData["Name of the Supplier"],
-            (e) => handleHeaderChange("Name of the Supplier", e.target.value),
-            allSuppliers,
-            "header",
-            "supplier"
-          )}
-
-          {renderDropdownWithCustom(
-            "Supplier Place",
-            headerData["Supplier Place"],
-            (e) => handleHeaderChange("Supplier Place", e.target.value),
-            getAvailablePlaces(headerData["Name of the Supplier"]),
-            "header",
-            "place"
-          )}
+          {renderDropdownWithCustom("Name of the Supplier", headerData["Name of the Supplier"], e => handleHeaderChange("Name of the Supplier", e.target.value), allSuppliers, "header", "supplier")}
+          {renderDropdownWithCustom("Supplier Place", headerData["Supplier Place"], e => handleHeaderChange("Supplier Place", e.target.value), getAvailablePlaces(headerData["Name of the Supplier"]), "header", "place")}
         </div>
 
         <hr />
         <h3>Sections / Items</h3>
-        
         {items.map((item, index) => {
           const availSizes = getAvailableSizes(item.Section);
           const availWidths = getAvailableWidths(item.Section, item.Size);
           const availLengths = getAvailableLengths(item.Section, item.Size, item.Width);
-
           return (
             <div key={item.id} className="section-card">
               {items.length > 1 && (
@@ -1181,119 +772,41 @@ export default function EntryPage() {
               )}
               <h4>Section Row #{index + 1}</h4>
               <div className="section-grid">
-                {renderDropdownWithCustom(
-                  "Section",
-                  item.Section,
-                  (e) => handleItemChange(item.id, "Section", e.target.value),
-                  allSections,
-                  item.id,
-                  "section"
-                )}
-
-                {renderDropdownWithCustom(
-                  "Size",
-                  item.Size,
-                  (e) => handleItemChange(item.id, "Size", e.target.value),
-                  availSizes,
-                  item.id,
-                  "size"
-                )}
-
-                {renderDropdownWithCustom(
-                  "Width",
-                  item.Width,
-                  (e) => handleItemChange(item.id, "Width", e.target.value),
-                  availWidths,
-                  item.id,
-                  "width"
-                )}
-
-                {renderDropdownWithCustom(
-                  "Item Length",
-                  item["Item Length"],
-                  (e) => handleItemChange(item.id, "Item Length", e.target.value),
-                  availLengths,
-                  item.id,
-                  "itemLength"
-                )}
-
+                {renderDropdownWithCustom("Section", item.Section, e => handleItemChange(item.id, "Section", e.target.value), allSections, item.id, "section")}
+                {renderDropdownWithCustom("Size", item.Size, e => handleItemChange(item.id, "Size", e.target.value), availSizes, item.id, "size")}
+                {renderDropdownWithCustom("Width", item.Width, e => handleItemChange(item.id, "Width", e.target.value), availWidths, item.id, "width")}
+                {renderDropdownWithCustom("Item Length", item["Item Length"], e => handleItemChange(item.id, "Item Length", e.target.value), availLengths, item.id, "itemLength")}
                 <div className="entry-input">
                   <label>Number of Items Supplied</label>
-                  <input 
-                    type="number" 
-                    value={item["Number of items Supplied"]} 
-                    onChange={e => handleItemChange(item.id, "Number of items Supplied", e.target.value)} 
-                  />
+                  <input type="number" value={item["Number of items Supplied"]} onChange={e => handleItemChange(item.id, "Number of items Supplied", e.target.value)} />
                 </div>
-
                 <div className="entry-input">
                   <label>Qty (MT)</label>
-                  <input 
-                    type="number" 
-                    step="0.01"
-                    value={item["Quantity in Metric Tons"]} 
-                    onChange={e => handleItemChange(item.id, "Quantity in Metric Tons", e.target.value)} 
-                  />
+                  <input type="number" step="0.01" value={item["Quantity in Metric Tons"]} onChange={e => handleItemChange(item.id, "Quantity in Metric Tons", e.target.value)} />
                 </div>
-
                 <div className="entry-input">
                   <label>Rate</label>
-                  <input 
-                    type="number" 
-                    step="0.01"
-                    value={item["Item Per Rate"]} 
-                    onChange={e => handleItemChange(item.id, "Item Per Rate", e.target.value)} 
-                  />
+                  <input type="number" step="0.01" value={item["Item Per Rate"]} onChange={e => handleItemChange(item.id, "Item Per Rate", e.target.value)} />
                 </div>
-
                 <div className="entry-input">
                   <label>Basic Amt</label>
-                  <input 
-                    type="number"
-                    step="0.01"
-                    value={item["Bill Basic Amount"]} 
-                    onChange={e => handleManualEdit(item.id, "Bill Basic Amount", e.target.value)}
-                  />
+                  <input type="number" step="0.01" value={item["Bill Basic Amount"]} onChange={e => handleManualEdit(item.id, "Bill Basic Amount", e.target.value)} />
                 </div>
-
                 <div className="entry-input">
                   <label>Section Loading</label>
-                  <input 
-                    type="number"
-                    step="0.001"
-                    value={parseFloat(item["Section Loading Charges"]).toFixed(3)} 
-                    onChange={e => handleManualEdit(item.id, "Section Loading Charges", parseFloat(e.target.value))}
-                  />
+                  <input type="number" step="0.001" value={parseFloat(item["Section Loading Charges"]).toFixed(3)} onChange={e => handleManualEdit(item.id, "Section Loading Charges", parseFloat(e.target.value))} />
                 </div>
-
                 <div className="entry-input">
                   <label>Section Freight&lt;</label>
-                  <input 
-                    type="number"
-                    step="0.001"
-                    value={parseFloat(item["Section Freight<"]).toFixed(3)} 
-                    onChange={e => handleManualEdit(item.id, "Section Freight<", parseFloat(e.target.value))}
-                  />
+                  <input type="number" step="0.001" value={parseFloat(item["Section Freight<"]).toFixed(3)} onChange={e => handleManualEdit(item.id, "Section Freight<", parseFloat(e.target.value))} />
                 </div>
-
                 <div className="entry-input">
                   <label>Section Freight&gt;</label>
-                  <input 
-                    type="number"
-                    step="0.001"
-                    value={parseFloat(item["Section Freight>"]).toFixed(3)} 
-                    onChange={e => handleManualEdit(item.id, "Section Freight>", parseFloat(e.target.value))}
-                  />
+                  <input type="number" step="0.001" value={parseFloat(item["Section Freight>"]).toFixed(3)} onChange={e => handleManualEdit(item.id, "Section Freight>", parseFloat(e.target.value))} />
                 </div>
-
                 <div className="entry-input">
                   <label>Section Subtotal</label>
-                  <input 
-                    type="text" 
-                    readOnly 
-                    value={formatNum(parseNum(item["Section Subtotal"]))} 
-                    className="readonly-field"
-                  />
+                  <input type="text" readOnly value={formatNum(parseNum(item["Section Subtotal"]))} className="readonly-field" />
                 </div>
               </div>
             </div>
@@ -1301,19 +814,9 @@ export default function EntryPage() {
         })}
 
         <button className="add-section-btn" onClick={() => setItems([...items, { 
-          id: Date.now(), 
-          Section: "", 
-          Size: "", 
-          Width: "", 
-          "Item Length": "",
-          "Number of items Supplied": "",
-          "Quantity in Metric Tons": "", 
-          "Item Per Rate": "", 
-          "Bill Basic Amount": 0,
-          "Section Loading Charges": 0,
-          "Section Freight<": 0,
-          "Section Freight>": 0,
-          "Section Subtotal": 0
+          id: Date.now(), Section: "", Size: "", Width: "", "Item Length": "", "Number of items Supplied": "",
+          "Quantity in Metric Tons": "", "Item Per Rate": "", "Bill Basic Amount": 0,
+          "Section Loading Charges": 0, "Section Freight<": 0, "Section Freight>": 0, "Section Subtotal": 0
         }])} type="button">
           <HiPlus /> Add Another Section
         </button>
@@ -1323,12 +826,7 @@ export default function EntryPage() {
           {Object.keys(charges).map(key => (
             <div className="entry-input" key={key}>
               <label>{key}</label>
-              <input 
-                type="number"
-                step="0.01" 
-                value={charges[key]} 
-                onChange={e => setCharges({...charges, [key]: e.target.value})} 
-              />
+              <input type="number" step="0.01" value={charges[key]} onChange={e => setCharges({...charges, [key]: e.target.value})} />
             </div>
           ))}
         </div>
@@ -1338,49 +836,17 @@ export default function EntryPage() {
             <div className="gst-section">
               <h4>GST Details</h4>
               <div className="gst-radio-group">
-                <label>
-                  <input 
-                    type="radio" 
-                    checked={gstType === "AP"} 
-                    onChange={()=>setGstType("AP")} 
-                  /> AP 
-                </label>
-                <label>
-                  <input 
-                    type="radio" 
-                    checked={gstType === "OTHER"} 
-                    onChange={()=>setGstType("OTHER")} 
-                  /> Other 
-                </label>
+                <label><input type="radio" checked={gstType === "AP"} onChange={()=>setGstType("AP")} /> AP</label>
+                <label><input type="radio" checked={gstType === "OTHER"} onChange={()=>setGstType("OTHER")} /> Other</label>
               </div>
               <div className="gst-inputs">
                 {gstType === "AP" ? (
                   <>
-                    <input 
-                      type="number"
-                      step="0.01"
-                      className="gst-input" 
-                      value={cgstPercentage} 
-                      onChange={e=>setCgstPercentage(e.target.value)} 
-                    /> % CGST 
-                    <input 
-                      type="number"
-                      step="0.01"
-                      className="gst-input" 
-                      value={sgstPercentage} 
-                      onChange={e=>setSgstPercentage(e.target.value)} 
-                    /> % SGST
+                    <input type="number" step="0.01" className="gst-input" value={cgstPercentage} onChange={e=>setCgstPercentage(e.target.value)} /> % CGST 
+                    <input type="number" step="0.01" className="gst-input" value={sgstPercentage} onChange={e=>setSgstPercentage(e.target.value)} /> % SGST
                   </>
                 ) : (
-                  <>
-                    <input 
-                      type="number"
-                      step="0.01"
-                      className="gst-input" 
-                      value={igstPercentage} 
-                      onChange={e=>setIgstPercentage(e.target.value)} 
-                    /> % IGST
-                  </>
+                  <><input type="number" step="0.01" className="gst-input" value={igstPercentage} onChange={e=>setIgstPercentage(e.target.value)} /> % IGST</>
                 )}
               </div>
             </div>
@@ -1393,11 +859,7 @@ export default function EntryPage() {
           </div>
         </div>
 
-        <button 
-          className="entry-submit" 
-          onClick={handleSubmit} 
-          disabled={loading}
-        >
+        <button className="entry-submit" onClick={handleSubmit} disabled={loading}>
           {loading ? "Processing..." : `Submit Entry #${entryNo}`}
         </button>
       </div>

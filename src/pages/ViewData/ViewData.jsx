@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { db } from "../../firebase";
-import { collection, getDocs, doc, deleteDoc } from "firebase/firestore";
+import { collection, getDocs, doc, deleteDoc, getDoc, updateDoc } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 import "./ViewData.css";
 import jsPDF from "jspdf";
@@ -19,7 +19,7 @@ export default function ViewData() {
 
   const baseFields = useMemo(() => [
     "PO", "Received On", "Bill Number", "Bill Date", "Name of the Supplier",
-    "Supplier Place", "Section", "Size", "Item Length", "Width", "Number of items Supplied",
+    "Supplier Place", "Section", "Size", "Width", "Item Length", "Number of items Supplied",
     "Quantity in Metric Tons", "Item Per Rate", "Bill Basic Amount", 
     "Loading Charges", "Freight<", "Others", "CGST", "SGST", "IGST", 
     "Total", "Freight>", "G. Total", "Net", "Landed Cost",
@@ -50,8 +50,8 @@ export default function ViewData() {
     "Supplier Place": "Place", 
     "Section": "Section", 
     "Size": "Size",
+    "Width": "Width",
     "Item Length": "Length", 
-    "Width": "Width", 
     "Number of items Supplied": "Items",
     "Quantity in Metric Tons": "MT", 
     "Item Per Rate": "Rate",
@@ -69,132 +69,134 @@ export default function ViewData() {
     "Landed Cost": "Landed Cost"
   };
 
-  useEffect(() => {
-    async function fetchData() {
-      try {
-        const querySnapshot = await getDocs(collection(db, "entries"));
-        const items = [];
+  const fetchData = async () => {
+    try {
+      const querySnapshot = await getDocs(collection(db, "entries"));
+      const items = [];
+      
+      querySnapshot.docs.forEach((d) => {
+        const data = d.data();
         
-        querySnapshot.docs.forEach((d) => {
-          const data = d.data();
+        // Check if this is the new multi-item format
+        if (data.items && Array.isArray(data.items)) {
+          // Calculate total basic amount for proportional distribution (only for GST and others)
+          const entryTotalBasic = data.items.reduce((sum, item) => {
+            return sum + (Number(item["Bill Basic Amount"]) || 0);
+          }, 0);
           
-          // Check if this is the new multi-item format
-          if (data.items && Array.isArray(data.items)) {
-            // Calculate total basic amount for proportional distribution (only for GST and others)
-            const entryTotalBasic = data.items.reduce((sum, item) => {
-              return sum + (Number(item["Bill Basic Amount"]) || 0);
-            }, 0);
+          // Create a separate row for each item in the items array
+          data.items.forEach((item, index) => {
+            const itemBasic = Number(item["Bill Basic Amount"]) || 0;
             
-            // Create a separate row for each item in the items array
-            data.items.forEach((item, index) => {
-              const itemBasic = Number(item["Bill Basic Amount"]) || 0;
-              
-              // Calculate proportional share for this item (for GST and Others only)
-              const itemProportion = entryTotalBasic > 0 ? itemBasic / entryTotalBasic : 0;
-              
-              // Calculate GST values proportionally
-              let cgst = 0, sgst = 0, igst = 0;
-              let total = 0, gTotal = 0, net = 0;
-              let others = 0;
-              
-              if (data.gst) {
-                const totalGst = data.gst.totalGst || 0;
-                if (data.gst.type === "AP") {
-                  cgst = (totalGst / 2) * itemProportion;
-                  sgst = (totalGst / 2) * itemProportion;
-                } else {
-                  igst = totalGst * itemProportion;
-                }
-              }
-              
-              // Distribute only "Others" proportionally
-              if (data.charges) {
-                others = (Number(data.charges.Others) || 0) * itemProportion;
-              }
-              
-              // Use the STORED section-specific values (not proportional)
-              const sectionLoading = Number(item["Section Loading Charges"]) || 0;
-              const sectionFreightLess = Number(item["Section Freight<"]) || 0;
-              const sectionFreightGreater = Number(item["Section Freight>"]) || 0;
-              
-              // Distribute totals proportionally
-              if (data.finalTotals) {
-                total = (data.finalTotals.total || 0) * itemProportion;
-                gTotal = (data.finalTotals.gTotal || 0) * itemProportion;
-                net = (data.finalTotals.net || 0) * itemProportion;
-              }
-              
-              items.push({
-                firestoreId: `${d.id}-${index}`,
-                originalFirestoreId: d.id,
-                "PO": data.PO,
-                "Received On": data["Received On"],
-                "Bill Number": data["Bill Number"],
-                "Bill Date": data["Bill Date"],
-                "Name of the Supplier": data["Name of the Supplier"],
-                "Supplier Place": data["Supplier Place"],
-                "Unit": data.Unit,
-                "Work Type": data["Work Type"],
-                "Section": item.Section,
-                "Size": item.Size,
-                "Item Length": item["Item Length"],
-                "Width": item.Width,
-                "Number of items Supplied": item["Number of items Supplied"],
-                "Quantity in Metric Tons": item["Quantity in Metric Tons"],
-                "Item Per Rate": item["Item Per Rate"],
-                "Bill Basic Amount": item["Bill Basic Amount"],
-                // Use STORED section-specific charges from the item
-                "Loading Charges": sectionLoading,
-                "Freight<": sectionFreightLess,
-                "Freight>": sectionFreightGreater,
-                // Only "Others" is distributed proportionally
-                "Others": others,
-                "CGST": cgst,
-                "SGST": sgst,
-                "IGST": igst,
-                "Total": total,
-                "G. Total": gTotal,
-                "Net": net,
-                "Landed Cost": item["Quantity in Metric Tons"] 
-                  ? net / (item["Quantity in Metric Tons"] || 1)
-                  : 0,
-                "No": data.No,
-              });
-            });
-          } else {
-            // Old format - single item per entry
+            // Calculate proportional share for this item (for GST and Others only)
+            const itemProportion = entryTotalBasic > 0 ? itemBasic / entryTotalBasic : 0;
+            
+            // Calculate GST values proportionally
             let cgst = 0, sgst = 0, igst = 0;
+            let total = 0, gTotal = 0, net = 0;
+            let others = 0;
             
             if (data.gst) {
+              const totalGst = data.gst.totalGst || 0;
               if (data.gst.type === "AP") {
-                const totalGst = data.gst.totalGst || 0;
-                cgst = totalGst / 2;
-                sgst = totalGst / 2;
+                cgst = (totalGst / 2) * itemProportion;
+                sgst = (totalGst / 2) * itemProportion;
               } else {
-                igst = data.gst.totalGst || 0;
+                igst = totalGst * itemProportion;
               }
             }
             
+            // Distribute only "Others" proportionally
+            if (data.charges) {
+              others = (Number(data.charges.Others) || 0) * itemProportion;
+            }
+            
+            // Use the STORED section-specific values (not proportional)
+            const sectionLoading = Number(item["Section Loading Charges"]) || 0;
+            const sectionFreightLess = Number(item["Section Freight<"]) || 0;
+            const sectionFreightGreater = Number(item["Section Freight>"]) || 0;
+            
+            // Distribute totals proportionally
+            if (data.finalTotals) {
+              total = (data.finalTotals.total || 0) * itemProportion;
+              gTotal = (data.finalTotals.gTotal || 0) * itemProportion;
+              net = (data.finalTotals.net || 0) * itemProportion;
+            }
+            
             items.push({
-              firestoreId: d.id,
+              firestoreId: `${d.id}-${index}`,
               originalFirestoreId: d.id,
-              ...data,
+              itemIndex: index,
+              "PO": data.PO,
+              "Received On": data["Received On"],
+              "Bill Number": data["Bill Number"],
+              "Bill Date": data["Bill Date"],
+              "Name of the Supplier": data["Name of the Supplier"],
+              "Supplier Place": data["Supplier Place"],
+              "Unit": data.Unit,
+              "Work Type": data["Work Type"],
+              "Section": item.Section,
+              "Size": item.Size,
+              "Width": item.Width,
+              "Item Length": item["Item Length"],
+              "Number of items Supplied": item["Number of items Supplied"],
+              "Quantity in Metric Tons": item["Quantity in Metric Tons"],
+              "Item Per Rate": item["Item Per Rate"],
+              "Bill Basic Amount": item["Bill Basic Amount"],
+              // Use STORED section-specific charges from the item
+              "Loading Charges": sectionLoading,
+              "Freight<": sectionFreightLess,
+              "Freight>": sectionFreightGreater,
+              // Only "Others" is distributed proportionally
+              "Others": others,
               "CGST": cgst,
               "SGST": sgst,
               "IGST": igst,
-              "Landed Cost": data["Quantity in Metric Tons"]
-                ? (data.finalTotals?.net || data.Net || 0) / (data["Quantity in Metric Tons"] || 1)
+              "Total": total,
+              "G. Total": gTotal,
+              "Net": net,
+              "Landed Cost": item["Quantity in Metric Tons"] 
+                ? net / (item["Quantity in Metric Tons"] || 1)
                 : 0,
+              "No": data.No,
             });
+          });
+        } else {
+          // Old format - single item per entry
+          let cgst = 0, sgst = 0, igst = 0;
+          
+          if (data.gst) {
+            if (data.gst.type === "AP") {
+              const totalGst = data.gst.totalGst || 0;
+              cgst = totalGst / 2;
+              sgst = totalGst / 2;
+            } else {
+              igst = data.gst.totalGst || 0;
+            }
           }
-        });
-        
-        setData(items);
-      } catch (error) {
-        alert("Error loading data!");
-        console.error(error);
-      }
+          
+          items.push({
+            firestoreId: d.id,
+            originalFirestoreId: d.id,
+            ...data,
+            "CGST": cgst,
+            "SGST": sgst,
+            "IGST": igst,
+            "Landed Cost": data["Quantity in Metric Tons"]
+              ? (data.finalTotals?.net || data.Net || 0) / (data["Quantity in Metric Tons"] || 1)
+              : 0,
+          });
+        }
+      });
+      
+      setData(items);
+    } catch (error) {
+      alert("Error loading data!");
+      console.error(error);
     }
+  };
+
+  useEffect(() => {
     fetchData();
   }, []);
 
@@ -292,17 +294,15 @@ export default function ViewData() {
     if (typeof value === "string") return value;
     const n = Number(value);
     if (isNaN(n)) return value;
-    let s = n.toString();
-    if (s.includes("e")) {
-      s = n.toFixed(10).replace(/(?:\.0+|(\.\d+?)0+)$/, "$1");
-    }
-    return s;
+    // Always show 3 decimal places for MT
+    return n.toFixed(3);
   };
 
   const formatQtyTotal = (value) => {
     const n = Number(value || 0);
     if (isNaN(n)) return "";
-    return n.toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 3 });
+    // Show 3 decimal places for total MT
+    return n.toFixed(3);
   };
 
   const handleDelete = async (rowData) => {
@@ -310,23 +310,100 @@ export default function ViewData() {
     
     if (!documentId) return;
     
+    // Check if this is a multi-item entry
     const isMultiItem = rowData.originalFirestoreId && rowData.firestoreId !== documentId;
-    const confirmMessage = isMultiItem 
-      ? `This will delete the ENTIRE entry with all its items. Are you sure?`
-      : `Are you sure you want to delete this entry?`;
-    
-    if (!window.confirm(confirmMessage)) return;
     
     try {
-      await deleteDoc(doc(db, "entries", documentId));
-      const updated = data.filter(item => 
-        (item.originalFirestoreId || item.firestoreId) !== documentId
-      );
-      setData(updated);
-      alert("Entry deleted successfully!");
+      if (isMultiItem) {
+        // Get the current document
+        const docRef = doc(db, "entries", documentId);
+        const docSnap = await getDoc(docRef);
+        
+        if (!docSnap.exists()) {
+          alert("Entry not found!");
+          return;
+        }
+        
+        const entryData = docSnap.data();
+        
+        // Extract the item index from rowData
+        const itemIndex = rowData.itemIndex;
+        
+        // Check if this is the last item
+        if (entryData.items && entryData.items.length === 1) {
+          // If only one item remains, delete the entire document
+          const confirmMessage = "This is the last section in the bill. Deleting it will remove the entire entry. Continue?";
+          if (!window.confirm(confirmMessage)) return;
+          
+          await deleteDoc(docRef);
+          
+          alert("Entry deleted successfully!");
+          await fetchData(); // Re-fetch data
+        } else {
+          // Remove only the specific item from the items array
+          const confirmMessage = `Are you sure you want to delete this section?\n\nSection: ${rowData.Section}\nSize: ${rowData.Size}`;
+          if (!window.confirm(confirmMessage)) return;
+          
+          const updatedItems = entryData.items.filter((_, idx) => idx !== itemIndex);
+          
+          // Recalculate totals after removing the item
+          const newTotalBasic = updatedItems.reduce((sum, item) => {
+            return sum + (Number(item["Bill Basic Amount"]) || 0);
+          }, 0);
+          
+          // Recalculate total MT for charge distribution
+          const newTotalMT = updatedItems.reduce((sum, item) => {
+            return sum + (Number(item["Quantity in Metric Tons"]) || 0);
+          }, 0);
+          
+          // Recalculate final totals
+          const baseAmount = newTotalBasic + 
+            (Number(entryData.charges?.["Loading Charges"]) || 0) + 
+            (Number(entryData.charges?.["Freight<"]) || 0) + 
+            (Number(entryData.charges?.Others) || 0);
+          
+          let totalGst = 0;
+          if (entryData.gst) {
+            if (entryData.gst.type === "AP") {
+              totalGst = baseAmount * ((Number(entryData.gst.cgstP) || 0) + (Number(entryData.gst.sgstP) || 0)) / 100;
+            } else {
+              totalGst = baseAmount * (Number(entryData.gst.igstP) || 0) / 100;
+            }
+          }
+          
+          const total = baseAmount + totalGst;
+          const gTotal = total + (Number(entryData.charges?.["Freight>"]) || 0);
+          const net = gTotal - totalGst;
+          
+          // Update the document
+          await updateDoc(docRef, {
+            items: updatedItems,
+            "gst.totalGst": totalGst,
+            finalTotals: {
+              basicTotal: newTotalBasic,
+              gst: totalGst,
+              total: total,
+              gTotal: gTotal,
+              net: net
+            }
+          });
+          
+          alert("Section deleted successfully!");
+          await fetchData(); // Re-fetch data
+        }
+      } else {
+        // Old format - single item entry, delete entire document
+        const confirmMessage = "Are you sure you want to delete this entry?";
+        if (!window.confirm(confirmMessage)) return;
+        
+        await deleteDoc(doc(db, "entries", documentId));
+        
+        alert("Entry deleted successfully!");
+        await fetchData(); // Re-fetch data
+      }
     } catch (err) {
       console.error(err);
-      alert("Failed to delete entry.");
+      alert("Failed to delete: " + err.message);
     }
   };
 
@@ -352,7 +429,7 @@ export default function ViewData() {
   const noTotalFields = useMemo(() => new Set([
     "Unit", "Work Type", "PO", "Received On", "Bill Number", "Bill Date", 
     "Name of the Supplier", "Supplier Place", "Section", "Size", 
-    "Item Length", "Width", "Number of items Supplied", "Item Per Rate"
+    "Width", "Item Length", "Number of items Supplied", "Item Per Rate"
   ]), []);
 
   const totals = useMemo(() => {

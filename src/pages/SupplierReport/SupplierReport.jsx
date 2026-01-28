@@ -69,6 +69,9 @@ export default function SupplierReport() {
                          item["Supplier Place"] || 
                          "Unknown";
             
+            // Use Section Subtotal instead of Bill Basic Amount
+            const sectionSubtotal = Number(item["Section Subtotal"]) || 0;
+            
             flattenedData.push({
               Unit: entry.Unit || entry.unit || "Unknown",
               "Name of the Supplier": supplier,
@@ -77,7 +80,7 @@ export default function SupplierReport() {
               Size: item.Size || item.size || "Unknown",
               "Number of items Supplied": Number(item["Number of items Supplied"]) || 0,
               "Quantity in Metric Tons": Number(item["Quantity in Metric Tons"]) || 0,
-              Net: Number(entry.finalTotals?.net) || Number(entry["Net"]) || 0,
+              Amount: sectionSubtotal,
             });
           });
         });
@@ -202,7 +205,7 @@ export default function SupplierReport() {
       section = sectionMap[lower] || section;
 
       const qty = Number(item["Quantity in Metric Tons"]) || 0;
-      const amount = Number(item.Net) || 0;
+      const amount = Number(item.Amount) || 0;
 
       const row = [
         index + 1,
@@ -223,9 +226,8 @@ export default function SupplierReport() {
       return row;
     });
 
-    const totalItems = filteredData.reduce((sum, item) => sum + (Number(item["Number of items Supplied"]) || 0), 0);
     const totalQty = filteredData.reduce((sum, item) => sum + (Number(item["Quantity in Metric Tons"]) || 0), 0);
-    const totalAmount = filteredData.reduce((sum, item) => sum + (Number(item.Net) || 0), 0);
+    const totalAmount = filteredData.reduce((sum, item) => sum + (Number(item.Amount) || 0), 0);
 
     const totalRow = ["", ""];
     if (!hideSupplierCol) totalRow.push("");
@@ -234,7 +236,7 @@ export default function SupplierReport() {
     if (!hideSectionCol) totalRow.push("");
     totalRow.push(
       "",
-      totalItems.toLocaleString("en-IN"),
+      "",
       formatNumber(totalQty),
       formatAmount(totalAmount),
       formatAmount(calculateAvgRate(totalAmount, totalQty))
@@ -267,7 +269,7 @@ export default function SupplierReport() {
       section = sectionMap[lower] || section;
 
       const qty = Number(item["Quantity in Metric Tons"]) || 0;
-      const amount = Number(item.Net) || 0;
+      const amount = Number(item.Amount) || 0;
 
       const row = {
         "No.": index + 1,
@@ -287,9 +289,8 @@ export default function SupplierReport() {
       return row;
     });
 
-    const totalItems = filteredData.reduce((sum, item) => sum + (Number(item["Number of items Supplied"]) || 0), 0);
     const totalQty = filteredData.reduce((sum, item) => sum + (Number(item["Quantity in Metric Tons"]) || 0), 0);
-    const totalAmount = filteredData.reduce((sum, item) => sum + (Number(item.Net) || 0), 0);
+    const totalAmount = filteredData.reduce((sum, item) => sum + (Number(item.Amount) || 0), 0);
 
     const totalRow = {
       "No.": "",
@@ -302,7 +303,7 @@ export default function SupplierReport() {
     if (!hideSectionCol) totalRow["Section"] = "";
     
     totalRow["Size"] = "";
-    totalRow["Items"] = totalItems.toLocaleString("en-IN");
+    totalRow["Items"] = "";
     totalRow["Qty (MT)"] = formatNumber(totalQty);
     totalRow["Amount"] = formatAmount(totalAmount);
     totalRow["Avg. Rate"] = formatAmount(calculateAvgRate(totalAmount, totalQty));
@@ -341,9 +342,8 @@ export default function SupplierReport() {
     XLSX.writeFile(wb, filename);
   };
 
-  const totalItems = filteredData.reduce((sum, item) => sum + (Number(item["Number of items Supplied"]) || 0), 0);
   const totalQty = filteredData.reduce((sum, item) => sum + (Number(item["Quantity in Metric Tons"]) || 0), 0);
-  const totalAmount = filteredData.reduce((sum, item) => sum + (Number(item.Net) || 0), 0);
+  const totalAmount = filteredData.reduce((sum, item) => sum + (Number(item.Amount) || 0), 0);
 
   return (
     <div className="entry-layout">
@@ -429,7 +429,7 @@ export default function SupplierReport() {
                     section = sectionMap[lower] || section;
 
                     const qty = Number(item["Quantity in Metric Tons"]) || 0;
-                    const amount = Number(item.Net) || 0;
+                    const amount = Number(item.Amount) || 0;
 
                     return (
                       <tr key={index}>
@@ -452,7 +452,7 @@ export default function SupplierReport() {
                     {!hidePlaceCol && <td></td>}
                     {!hideSectionCol && <td></td>}
                     <td></td>
-                    <td className="text-right">{totalItems.toLocaleString("en-IN")}</td>
+                    <td></td>
                     <td className="text-right">{formatNumber(totalQty)}</td>
                     <td className="text-right">{formatAmount(totalAmount)}</td>
                     <td className="text-right">{formatAmount(calculateAvgRate(totalAmount, totalQty))}</td>
