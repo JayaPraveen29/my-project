@@ -16,10 +16,12 @@ export default function SupplierReport() {
   const [filteredData, setFilteredData] = useState([]);
   
   const [suppliers, setSuppliers] = useState([]);
+  const [billNumbers, setBillNumbers] = useState([]);
   const [sections, setSections] = useState([]);
   const [sizes, setSizes] = useState([]);
   
   const [selectedSupplier, setSelectedSupplier] = useState("All");
+  const [selectedBillNumber, setSelectedBillNumber] = useState("All");
   const [selectedSection, setSelectedSection] = useState("All");
   const [selectedSize, setSelectedSize] = useState("All");
 
@@ -69,6 +71,12 @@ export default function SupplierReport() {
                          item["Supplier Place"] || 
                          "Unknown";
             
+            const billNumber = entry["Bill Number"] || 
+                             entry["Bill No"] || 
+                             entry.billNumber || 
+                             item["Bill Number"] || 
+                             "Unknown";
+            
             // Use Section Subtotal instead of Bill Basic Amount
             const sectionSubtotal = Number(item["Section Subtotal"]) || 0;
             
@@ -76,6 +84,7 @@ export default function SupplierReport() {
               Unit: entry.Unit || entry.unit || "Unknown",
               "Name of the Supplier": supplier,
               "Supplier Place": place,
+              "Bill Number": billNumber,
               Section: item.Section || item.section || "Unknown",
               Size: item.Size || item.size || "Unknown",
               "Number of items Supplied": Number(item["Number of items Supplied"]) || 0,
@@ -90,6 +99,7 @@ export default function SupplierReport() {
         setData(flattenedData);
         
         const uniqueSuppliers = [...new Set(flattenedData.map(item => item["Name of the Supplier"]))].sort();
+        const uniqueBillNumbers = [...new Set(flattenedData.map(item => item["Bill Number"]))].sort();
         const uniqueSections = [...new Set(flattenedData.map(item => {
           let section = (item.Section || "Unknown").toString().trim();
           const lower = section.toLowerCase();
@@ -98,6 +108,7 @@ export default function SupplierReport() {
         const uniqueSizes = [...new Set(flattenedData.map(item => item.Size || "Unknown"))].sort();
         
         setSuppliers(uniqueSuppliers);
+        setBillNumbers(uniqueBillNumbers);
         setSections(uniqueSections);
         setSizes(uniqueSizes);
         setFilteredData(flattenedData);
@@ -114,6 +125,12 @@ export default function SupplierReport() {
     if (selectedSupplier !== "All") {
       filtered = filtered.filter(item => 
         item["Name of the Supplier"] === selectedSupplier
+      );
+    }
+
+    if (selectedBillNumber !== "All") {
+      filtered = filtered.filter(item => 
+        item["Bill Number"] === selectedBillNumber
       );
     }
 
@@ -139,7 +156,7 @@ export default function SupplierReport() {
     });
 
     setFilteredData(filtered);
-  }, [selectedSupplier, selectedSection, selectedSize, data]);
+  }, [selectedSupplier, selectedBillNumber, selectedSection, selectedSize, data]);
 
   const formatNumber = (value) =>
     !value && value !== 0
@@ -162,11 +179,13 @@ export default function SupplierReport() {
 
   const clearFilters = () => {
     setSelectedSupplier("All");
+    setSelectedBillNumber("All");
     setSelectedSection("All");
     setSelectedSize("All");
   };
 
   const hideSupplierCol = selectedSupplier !== "All";
+  const hideBillNumberCol = selectedBillNumber !== "All";
   const hideSectionCol = selectedSection !== "All";
   const hidePlaceCol = selectedSupplier !== "All" || selectedSection !== "All";
 
@@ -180,6 +199,9 @@ export default function SupplierReport() {
     
     if (selectedSupplier !== "All") {
       filterParts.push(`${selectedSupplier}`);
+    }
+    if (selectedBillNumber !== "All") {
+      filterParts.push(`Bill: ${selectedBillNumber}`);
     }
     if (selectedSection !== "All") {
       filterParts.push(`${selectedSection}`);
@@ -195,6 +217,7 @@ export default function SupplierReport() {
 
     const headers = ["No.", "Unit"];
     if (!hideSupplierCol) headers.push("Supplier");
+    if (!hideBillNumberCol) headers.push("Bill No.");
     if (!hidePlaceCol) headers.push("Place");
     if (!hideSectionCol) headers.push("Section");
     headers.push("Size", "Items", "Qty (MT)", "Amount", "Avg. Rate");
@@ -213,6 +236,7 @@ export default function SupplierReport() {
       ];
       
       if (!hideSupplierCol) row.push(item["Name of the Supplier"] || "Unknown");
+      if (!hideBillNumberCol) row.push(item["Bill Number"] || "Unknown");
       if (!hidePlaceCol) row.push(item["Supplier Place"] || "Unknown");
       if (!hideSectionCol) row.push(section);
       row.push(
@@ -231,6 +255,7 @@ export default function SupplierReport() {
 
     const totalRow = ["", ""];
     if (!hideSupplierCol) totalRow.push("");
+    if (!hideBillNumberCol) totalRow.push("");
     if (!hidePlaceCol) totalRow.push("TOTAL");
     else totalRow.push("TOTAL");
     if (!hideSectionCol) totalRow.push("");
@@ -277,6 +302,7 @@ export default function SupplierReport() {
       };
 
       if (!hideSupplierCol) row["Supplier"] = item["Name of the Supplier"] || "Unknown";
+      if (!hideBillNumberCol) row["Bill No."] = item["Bill Number"] || "Unknown";
       if (!hidePlaceCol) row["Place"] = item["Supplier Place"] || "Unknown";
       if (!hideSectionCol) row["Section"] = section;
       
@@ -298,6 +324,7 @@ export default function SupplierReport() {
     };
     
     if (!hideSupplierCol) totalRow["Supplier"] = "";
+    if (!hideBillNumberCol) totalRow["Bill No."] = "";
     if (!hidePlaceCol) totalRow["Place"] = "TOTAL";
     else totalRow["Unit"] = "TOTAL";
     if (!hideSectionCol) totalRow["Section"] = "";
@@ -318,6 +345,7 @@ export default function SupplierReport() {
     ];
     
     if (!hideSupplierCol) colWidths.push({ wch: 25 });
+    if (!hideBillNumberCol) colWidths.push({ wch: 15 });
     if (!hidePlaceCol) colWidths.push({ wch: 15 });
     if (!hideSectionCol) colWidths.push({ wch: 15 });
     colWidths.push(
@@ -335,6 +363,7 @@ export default function SupplierReport() {
 
     let filename = "Supplier_Report";
     if (selectedSupplier !== "All") filename += `_${selectedSupplier}`;
+    if (selectedBillNumber !== "All") filename += `_Bill${selectedBillNumber}`;
     if (selectedSection !== "All") filename += `_${selectedSection}`;
     if (selectedSize !== "All") filename += `_${selectedSize}`;
     filename += ".xlsx";
@@ -363,6 +392,19 @@ export default function SupplierReport() {
               <option value="All">All Suppliers</option>
               {suppliers.map((supplier, i) => (
                 <option key={i} value={supplier}>{supplier}</option>
+              ))}
+            </select>
+
+            <label htmlFor="billNumber">Bill No:</label>
+            <select 
+              id="billNumber" 
+              className="filter-select"
+              value={selectedBillNumber} 
+              onChange={(e) => setSelectedBillNumber(e.target.value)}
+            >
+              <option value="All">All Bills</option>
+              {billNumbers.map((billNo, i) => (
+                <option key={i} value={billNo}>{billNo}</option>
               ))}
             </select>
 
@@ -411,6 +453,7 @@ export default function SupplierReport() {
                 <th style={{ width: "5%" }}>No.</th>
                 <th style={{ width: "8%" }}>Unit</th>
                 {!hideSupplierCol && <th style={{ width: "6%" }}>Supplier</th>}
+                {!hideBillNumberCol && <th style={{ width: "8%" }}>Bill No.</th>}
                 {!hidePlaceCol && <th style={{ width: "8%" }}>Place</th>}
                 {!hideSectionCol && <th style={{ width: "8%" }}>Section</th>}
                 <th style={{ width: "8%" }}>Size</th>
@@ -436,6 +479,7 @@ export default function SupplierReport() {
                         <td className="text-center">{index + 1}</td>
                         <td className="text-left">{item.Unit || "Unknown"}</td>
                         {!hideSupplierCol && <td className="text-left">{item["Name of the Supplier"] || "Unknown"}</td>}
+                        {!hideBillNumberCol && <td className="text-left">{item["Bill Number"] || "Unknown"}</td>}
                         {!hidePlaceCol && <td className="text-left">{item["Supplier Place"] || "Unknown"}</td>}
                         {!hideSectionCol && <td className="text-left">{section}</td>}
                         <td className="text-left">{item.Size || "Unknown"}</td>
@@ -449,6 +493,7 @@ export default function SupplierReport() {
                   <tr className="total-row">
                     <td colSpan={2} className="text-left">TOTAL</td>
                     {!hideSupplierCol && <td></td>}
+                    {!hideBillNumberCol && <td></td>}
                     {!hidePlaceCol && <td></td>}
                     {!hideSectionCol && <td></td>}
                     <td></td>
@@ -460,7 +505,7 @@ export default function SupplierReport() {
                 </>
               ) : (
                 <tr>
-                  <td colSpan={10 - (hideSupplierCol ? 1 : 0) - (hidePlaceCol ? 1 : 0) - (hideSectionCol ? 1 : 0)} className="empty-state">
+                  <td colSpan={11 - (hideSupplierCol ? 1 : 0) - (hideBillNumberCol ? 1 : 0) - (hidePlaceCol ? 1 : 0) - (hideSectionCol ? 1 : 0)} className="empty-state">
                     No data found for the selected filters
                   </td>
                 </tr>

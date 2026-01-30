@@ -123,6 +123,9 @@ export default function ViewData() {
               net = (data.finalTotals.net || 0) * itemProportion;
             }
             
+            // Calculate total freight for this item
+            const itemTotalFreight = sectionLoading + sectionFreightLess + sectionFreightGreater;
+            
             items.push({
               firestoreId: `${d.id}-${index}`,
               originalFirestoreId: d.id,
@@ -155,8 +158,9 @@ export default function ViewData() {
               "Total": total,
               "G. Total": gTotal,
               "Net": net,
-              "Landed Cost": item["Quantity in Metric Tons"] 
-                ? net / (item["Quantity in Metric Tons"] || 1)
+              // FIXED: Landed Cost now matches Abstract Report calculation
+              "Landed Cost": item["Quantity in Metric Tons"]
+                ? (itemBasic + itemTotalFreight + others) / (item["Quantity in Metric Tons"] || 1)
                 : 0,
               "No": data.No,
             });
@@ -175,6 +179,12 @@ export default function ViewData() {
             }
           }
           
+          // Calculate total freight for old format
+          const totalFreight = (Number(data["Loading Charges"]) || 0) + 
+                              (Number(data["Freight<"]) || 0) + 
+                              (Number(data["Freight>"]) || 0) + 
+                              (Number(data.charges?.Others) || 0);
+          
           items.push({
             firestoreId: d.id,
             originalFirestoreId: d.id,
@@ -182,8 +192,9 @@ export default function ViewData() {
             "CGST": cgst,
             "SGST": sgst,
             "IGST": igst,
+            // FIXED: Landed Cost now matches Abstract Report calculation
             "Landed Cost": data["Quantity in Metric Tons"]
-              ? (data.finalTotals?.net || data.Net || 0) / (data["Quantity in Metric Tons"] || 1)
+              ? ((Number(data["Bill Basic Amount"]) || 0) + totalFreight) / (data["Quantity in Metric Tons"] || 1)
               : 0,
           });
         }
@@ -451,8 +462,12 @@ export default function ViewData() {
   }, [filteredData, fields, noTotalFields]);
 
   const totalMT = totals["Quantity in Metric Tons"] || 0;
-  const totalNet = totals["Net"] || 0;
-  const landedCostTotal = totalMT ? (totalNet / totalMT) : 0;
+  const totalBasic = totals["Bill Basic Amount"] || 0;
+  const totalFreight = (totals["Loading Charges"] || 0) + 
+                       (totals["Freight<"] || 0) + 
+                       (totals["Freight>"] || 0) + 
+                       (totals["Others"] || 0);
+  const landedCostTotal = totalMT ? (totalBasic + totalFreight) / totalMT : 0;
 
   const exportExcel = () => {
     if (!filteredData.length) {
