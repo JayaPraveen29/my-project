@@ -187,63 +187,14 @@ export default function EntryPage() {
     return allSizes.filter(size => relatedSizeIds.includes(size.id));
   };
   
+  // Show all widths in dropdown (relationships maintained during creation)
   const getAvailableWidths = (selectedSection, selectedSize) => {
-    if (!selectedSection || !selectedSize) return [];
-    const sectionObj = allSections.find(s => s.value === selectedSection);
-    const sizeObj = allSizes.find(s => s.value === selectedSize);
-    if (!sectionObj || !sizeObj) return [];
-    const relatedWidthIds = sizeWidthRelations.filter(rel => rel.sectionId === sectionObj.id && rel.sizeId === sizeObj.id).map(rel => rel.widthId);
-    return allWidths.filter(width => relatedWidthIds.includes(width.id));
+    return allWidths;
   };
   
+  // Show all lengths in dropdown (relationships maintained during creation)
   const getAvailableLengths = (selectedSection, selectedSize, selectedWidth) => {
-    if (!selectedSection || !selectedSize) {
-      console.log("🔍 getAvailableLengths: Missing section or size");
-      return [];
-    }
-    
-    console.log("🔍 getAvailableLengths called with:", { selectedSection, selectedSize, selectedWidth });
-    
-    const sectionObj = allSections.find(s => s.value === selectedSection);
-    const sizeObj = allSizes.find(s => s.value === selectedSize);
-    
-    console.log("🔍 Found objects:", { sectionObj, sizeObj });
-    
-    if (!sectionObj || !sizeObj) {
-      console.log("⚠️ Section or Size object not found!");
-      return [];
-    }
-    
-    console.log("🔍 All widthLengthRelations:", widthLengthRelations);
-    
-    if (!selectedWidth) {
-      console.log("🔍 No width selected, looking for relations with widthId === null");
-      const relatedLengthIds = widthLengthRelations.filter(rel => {
-        const match = rel.sectionId === sectionObj.id && rel.sizeId === sizeObj.id && rel.widthId === null;
-        console.log(`🔍 Checking relation:`, rel, `Match: ${match}`);
-        return match;
-      }).map(rel => rel.lengthId);
-      
-      console.log("🔍 Related length IDs (no width):", relatedLengthIds);
-      const availableLengths = allItemLengths.filter(length => relatedLengthIds.includes(length.id));
-      console.log("🔍 Available lengths (no width):", availableLengths);
-      return availableLengths;
-    }
-    
-    const widthObj = allWidths.find(w => w.value === selectedWidth);
-    if (!widthObj) {
-      console.log("⚠️ Width object not found!");
-      return [];
-    }
-    
-    const relatedLengthIds = widthLengthRelations.filter(rel => 
-      rel.sectionId === sectionObj.id && rel.sizeId === sizeObj.id && rel.widthId === widthObj.id
-    ).map(rel => rel.lengthId);
-    
-    console.log("🔍 Related length IDs (with width):", relatedLengthIds);
-    const availableLengths = allItemLengths.filter(length => relatedLengthIds.includes(length.id));
-    console.log("🔍 Available lengths (with width):", availableLengths);
-    return availableLengths;
+    return allItemLengths;
   };
 
   const getAvailablePlaces = (selectedSupplier) => {
