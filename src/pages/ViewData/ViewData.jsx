@@ -12,7 +12,7 @@ export default function ViewData() {
   const [data, setData] = useState([]);
   const [filteredData, setFilteredData] = useState([]);
   const [search, setSearch] = useState("");
-  const [financialYear, setFinancialYear] = useState("2026"); // NEW: Financial Year with default 2026
+  const [financialYear, setFinancialYear] = useState("2025-26"); // UPDATED: Financial Year with default 2025-26
   const [unitFilter, setUnitFilter] = useState("Group");
   const [workTypeFilter, setWorkTypeFilter] = useState("Group");
   const [fromDate, setFromDate] = useState("");
@@ -139,7 +139,7 @@ export default function ViewData() {
               "Supplier Place": data["Supplier Place"],
               "Unit": data.Unit,
               "Work Type": data["Work Type"],
-              "Financial Year": data.FinancialYear, // NEW: Include financial year
+              "Financial Year": data.FinancialYear,
               "Section": item.Section,
               "Size": item.Size,
               "Width": item.Width,
@@ -160,7 +160,6 @@ export default function ViewData() {
               "Total": total,
               "G. Total": gTotal,
               "Net": net,
-              // FIXED: Landed Cost now matches Abstract Report calculation
               "Landed Cost": item["Quantity in Metric Tons"]
                 ? (itemBasic + itemTotalFreight + others) / (item["Quantity in Metric Tons"] || 1)
                 : 0,
@@ -191,11 +190,10 @@ export default function ViewData() {
             firestoreId: d.id,
             originalFirestoreId: d.id,
             ...data,
-            "Financial Year": data.FinancialYear, // NEW: Include financial year
+            "Financial Year": data.FinancialYear,
             "CGST": cgst,
             "SGST": sgst,
             "IGST": igst,
-            // FIXED: Landed Cost now matches Abstract Report calculation
             "Landed Cost": data["Quantity in Metric Tons"]
               ? ((Number(data["Bill Basic Amount"]) || 0) + totalFreight) / (data["Quantity in Metric Tons"] || 1)
               : 0,
@@ -259,7 +257,7 @@ export default function ViewData() {
       );
     }
 
-    // NEW: Filter by financial year - STRICT filtering
+    // Filter by financial year - STRICT filtering
     // Only show entries that match the selected financial year
     if (financialYear) {
       result = result.filter(item => item["Financial Year"] === financialYear);
@@ -693,7 +691,7 @@ export default function ViewData() {
             </button>
           </div>
 
-          {/* NEW: Financial Year Dropdown */}
+          {/* UPDATED: Financial Year Dropdown with format YYYY-YY */}
           <div className="filter-group">
             <label className="filter-label">Financial Year:</label>
             <select 
@@ -701,8 +699,10 @@ export default function ViewData() {
               value={financialYear} 
               onChange={e => setFinancialYear(e.target.value)}
             >
-              <option value="2025">2025</option>
-              <option value="2026">2026</option>
+              <option value="2024-25">2024-25</option>
+              <option value="2025-26">2025-26</option>
+              <option value="2026-27">2026-27</option>
+              <option value="2027-28">2027-28</option>
             </select>
           </div>
 

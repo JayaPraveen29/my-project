@@ -29,7 +29,7 @@ export default function SideNavbar() {
 
       {/* Sidebar */}
       <aside className={`sidebar ${mobileMenuOpen ? 'mobile-open' : ''}`}>
-        <h2 className="sidebar-title">SIEC-CT 2026</h2>
+        <h2 className="sidebar-title">SIEC GROUP</h2>
 
         <ul className="sidebar-list">
           <li>

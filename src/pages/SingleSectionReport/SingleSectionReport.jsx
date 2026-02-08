@@ -9,7 +9,7 @@ import "./SingleSectionReport.css";
 export default function SingleSectionReport() {
   const [data, setData] = useState([]);
   const [groupedData, setGroupedData] = useState({});
-  const [financialYear, setFinancialYear] = useState("2026"); // NEW: Financial Year with default 2026
+  const [financialYear, setFinancialYear] = useState("2025-26"); // UPDATED: Financial Year with default 2025-26
   const [selectedUnit, setSelectedUnit] = useState("Group");
   const [selectedWorkType, setSelectedWorkType] = useState("Group");
   const [selectedSection, setSelectedSection] = useState("");
@@ -40,7 +40,7 @@ export default function SingleSectionReport() {
     const grouped = {};
 
     items.forEach(entry => {
-      // NEW: Filter by Financial Year - STRICT filtering
+      // Filter by Financial Year - STRICT filtering
       if (financialYear && entry.FinancialYear !== financialYear) return;
       
       // Filter by Unit
@@ -283,7 +283,7 @@ export default function SingleSectionReport() {
   const units = ["Group", ...Array.from(new Set(data.map(d => d.Unit)))];
 
   const clearFilters = () => {
-    setFinancialYear("2026"); // NEW: Reset to default 2026
+    setFinancialYear("2025-26"); // UPDATED: Reset to default 2025-26
     setSelectedUnit("Group");
     setSelectedWorkType("Group");
     setSelectedSection("");
@@ -295,7 +295,7 @@ export default function SingleSectionReport() {
       <h1 className="single-section-heading">Single Section Report</h1>
       <div className="filter-container">
         <div className="filter-row">
-          {/* NEW: Financial Year Dropdown */}
+          {/* UPDATED: Financial Year Dropdown with YYYY-YY format */}
           <label htmlFor="financial-year-select">Financial Year:</label>
           <select
             id="financial-year-select"
@@ -303,8 +303,10 @@ export default function SingleSectionReport() {
             value={financialYear}
             onChange={(e) => { setFinancialYear(e.target.value); setSelectedSection(""); setSelectedSize(""); }}
           >
-            <option value="2025">2025</option>
-            <option value="2026">2026</option>
+            <option value="2024-25">2024-25</option>
+            <option value="2025-26">2025-26</option>
+            <option value="2026-27">2026-27</option>
+            <option value="2027-28">2027-28</option>
           </select>
 
           {/* Unit Dropdown */}

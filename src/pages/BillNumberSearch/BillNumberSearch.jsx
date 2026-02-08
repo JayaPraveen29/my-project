@@ -6,6 +6,7 @@ import "./BillNumberSearch.css";
 
 export default function BillNumberSearch() {
   const [theme, setTheme] = useState("light");
+  const [financialYear, setFinancialYear] = useState("2025-26"); // UPDATED: Financial Year with default 2025-26
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedEntry, setSelectedEntry] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -25,7 +26,7 @@ export default function BillNumberSearch() {
     localStorage.setItem("appTheme", newTheme);
   };
 
-  // Fetch all bills on component mount
+  // Fetch all bills on component mount and when financial year changes
   useEffect(() => {
     const fetchAllBills = async () => {
       setLoading(true);
@@ -38,9 +39,15 @@ export default function BillNumberSearch() {
             supplier: doc.data()["Name of the Supplier"],
             date: doc.data()["Bill Date"],
             unit: doc.data().Unit,
+            financialYear: doc.data().FinancialYear, // Get financial year from data
             fullData: doc.data()
           }))
-          .filter(bill => bill.billNumber && bill.billNumber.trim())
+          // Filter by financial year - STRICT filtering
+          .filter(bill => {
+            if (!bill.billNumber || !bill.billNumber.trim()) return false;
+            if (financialYear && bill.financialYear !== financialYear) return false;
+            return true;
+          })
           .sort((a, b) => {
             if (a.billNumber < b.billNumber) return -1;
             if (a.billNumber > b.billNumber) return 1;
@@ -57,7 +64,7 @@ export default function BillNumberSearch() {
       }
     };
     fetchAllBills();
-  }, []);
+  }, [financialYear]); // Re-fetch when financial year changes
 
   // Filter bills based on search term
   useEffect(() => {
@@ -96,6 +103,34 @@ export default function BillNumberSearch() {
       <div className="bill-search-container">
         <h1 className="bill-search-heading">Search Entry by Bill Number</h1>
 
+        {/* UPDATED: Financial Year Filter with YYYY-YY format */}
+        <div className="filter-section" style={{ marginBottom: '20px' }}>
+          <label htmlFor="financial-year-filter" style={{ marginRight: '10px', fontWeight: '600' }}>
+            Financial Year:
+          </label>
+          <select
+            id="financial-year-filter"
+            value={financialYear}
+            onChange={(e) => {
+              setFinancialYear(e.target.value);
+              setSelectedEntry(null); // Clear selected entry when changing year
+              setSearchTerm(""); // Clear search term
+            }}
+            style={{
+              padding: '8px 12px',
+              fontSize: '14px',
+              border: '1px solid #ddd',
+              borderRadius: '4px',
+              cursor: 'pointer'
+            }}
+          >
+            <option value="2024-25">2024-25</option>
+            <option value="2025-26">2025-26</option>
+            <option value="2026-27">2026-27</option>
+            <option value="2027-28">2027-28</option>
+          </select>
+        </div>
+
         {!selectedEntry && (
           <div className="search-section">
             <div className="search-input-wrapper">
@@ -118,7 +153,7 @@ export default function BillNumberSearch() {
             ) : filteredBills.length > 0 ? (
               <>
                 <h3 className="bills-count">
-                  Available Bills ({filteredBills.length})
+                  Available Bills for {financialYear} ({filteredBills.length})
                 </h3>
                 <div className="bills-grid">
                   {filteredBills.map((bill) => (
@@ -144,7 +179,7 @@ export default function BillNumberSearch() {
             ) : (
               <div className="no-results">
                 <HiMagnifyingGlass size={60} style={{ opacity: 0.3 }} />
-                <p>No bills found {searchTerm ? `matching: ${searchTerm}` : 'in database'}</p>
+                <p>No bills found for {financialYear} {searchTerm ? `matching: ${searchTerm}` : ''}</p>
               </div>
             )}
           </div>
@@ -164,6 +199,11 @@ export default function BillNumberSearch() {
             <div className="detail-section">
               <h3>Basic Information</h3>
               <div className="detail-grid">
+                {/* Show Financial Year */}
+                <div className="detail-item">
+                  <div className="detail-label">Financial Year</div>
+                  <div className="detail-value">{selectedEntry.FinancialYear || "N/A"}</div>
+                </div>
                 <div className="detail-item">
                   <div className="detail-label">Unit</div>
                   <div className="detail-value">{selectedEntry.Unit || "N/A"}</div>

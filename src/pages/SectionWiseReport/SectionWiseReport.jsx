@@ -9,7 +9,7 @@ import "./SectionWiseReport.css";
 export default function SectionWiseReport() {
   const [data, setData] = useState([]);
   const [groupedData, setGroupedData] = useState({});
-  const [financialYear, setFinancialYear] = useState("2026"); // NEW: Financial Year with default 2026
+  const [financialYear, setFinancialYear] = useState("2025-26"); // UPDATED: Financial Year with default 2025-26
   const [selectedUnit, setSelectedUnit] = useState("Group");
   const [selectedWorkType, setSelectedWorkType] = useState("Group");
   const [workTypes, setWorkTypes] = useState([]);
@@ -37,7 +37,7 @@ export default function SectionWiseReport() {
     const grouped = {};
 
     items.forEach(entry => {
-      // NEW: Filter by Financial Year - STRICT filtering
+      // Filter by Financial Year - STRICT filtering
       if (financialYear && entry.FinancialYear !== financialYear) return;
       
       // Filter by Unit
@@ -324,7 +324,7 @@ export default function SectionWiseReport() {
   };
 
   const clearFilters = () => {
-    setFinancialYear("2026"); // NEW: Reset to default 2026
+    setFinancialYear("2025-26"); // UPDATED: Reset to default 2025-26
     setSelectedUnit("Group");
     setSelectedWorkType("Group");
   };
@@ -335,7 +335,7 @@ export default function SectionWiseReport() {
 
       <div className="filter-container">
         <div className="filter-row">
-          {/* NEW: Financial Year Dropdown */}
+          {/* UPDATED: Financial Year Dropdown with YYYY-YY format */}
           <label htmlFor="financial-year-select">Financial Year:</label>
           <select
             id="financial-year-select"
@@ -343,8 +343,10 @@ export default function SectionWiseReport() {
             value={financialYear}
             onChange={(e) => setFinancialYear(e.target.value)}
           >
-            <option value="2025">2025</option>
-            <option value="2026">2026</option>
+            <option value="2024-25">2024-25</option>
+            <option value="2025-26">2025-26</option>
+            <option value="2026-27">2026-27</option>
+            <option value="2027-28">2027-28</option>
           </select>
 
           <label htmlFor="unit-select">Select Unit:</label>

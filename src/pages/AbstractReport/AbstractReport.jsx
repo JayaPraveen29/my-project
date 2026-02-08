@@ -10,7 +10,7 @@ export default function AbstractReport() {
   const [data, setData] = useState([]);
   const [abstractData, setAbstractData] = useState([]);
   const [pivotData, setPivotData] = useState([]);
-  const [financialYear, setFinancialYear] = useState("2026"); // NEW: Financial Year with default 2026
+  const [financialYear, setFinancialYear] = useState("2025-26"); // UPDATED: Financial Year with default 2025-26
   const [selectedUnit, setSelectedUnit] = useState("Group");
   const [selectedWorkType, setSelectedWorkType] = useState("Group");
   const [units, setUnits] = useState([]);
@@ -95,7 +95,7 @@ export default function AbstractReport() {
   };
 
   const processAbstractData = (items, finYear, unit, workType, from, to) => {
-    // NEW: Filter by financial year - STRICT filtering
+    // Filter by financial year - STRICT filtering
     // Only show entries that match the selected financial year
     let filteredItems = items;
     if (finYear) {
@@ -643,7 +643,7 @@ export default function AbstractReport() {
   const clearFilters = () => {
     setFromDate("");
     setToDate("");
-    setFinancialYear("2026"); // NEW: Reset to default 2026
+    setFinancialYear("2025-26"); // UPDATED: Reset to default 2025-26
     setSelectedUnit("Group");
     setSelectedWorkType("Group");
   };
@@ -654,7 +654,7 @@ export default function AbstractReport() {
 
       <div className="filter-container">
         <div className="filter-row">
-          {/* NEW: Financial Year Dropdown */}
+          {/* UPDATED: Financial Year Dropdown with YYYY-YY format */}
           <label htmlFor="financialYear">Financial Year:</label>
           <select 
             id="financialYear" 
@@ -662,8 +662,10 @@ export default function AbstractReport() {
             onChange={(e) => setFinancialYear(e.target.value)}
             className="filter-select"
           >
-            <option value="2025">2025</option>
-            <option value="2026">2026</option>
+            <option value="2024-25">2024-25</option>
+            <option value="2025-26">2025-26</option>
+            <option value="2026-27">2026-27</option>
+            <option value="2027-28">2027-28</option>
           </select>
 
           <label htmlFor="unit">Select Unit:</label>

@@ -15,7 +15,7 @@ export default function SupplierReport() {
   const [data, setData] = useState([]);
   const [filteredData, setFilteredData] = useState([]);
   
-  const [financialYear, setFinancialYear] = useState("2026"); // NEW: Financial Year with default 2026
+  const [financialYear, setFinancialYear] = useState("2025-26"); // UPDATED: Financial Year with default 2025-26
   const [suppliers, setSuppliers] = useState([]);
   const [billNumbers, setBillNumbers] = useState([]);
   const [sections, setSections] = useState([]);
@@ -57,7 +57,7 @@ export default function SupplierReport() {
         
         const flattenedData = [];
         entries.forEach(entry => {
-          // NEW: Skip entries that don't match the selected financial year
+          // Skip entries that don't match the selected financial year
           if (financialYear && entry.FinancialYear !== financialYear) return;
           
           const itemsArray = entry.items && Array.isArray(entry.items) ? entry.items : [entry];
@@ -121,7 +121,7 @@ export default function SupplierReport() {
       }
     }
     fetchData();
-  }, [financialYear]); // NEW: Re-fetch when financial year changes
+  }, [financialYear]); // Re-fetch when financial year changes
 
   useEffect(() => {
     let filtered = [...data];
@@ -182,7 +182,7 @@ export default function SupplierReport() {
   };
 
   const clearFilters = () => {
-    setFinancialYear("2026"); // NEW: Reset to default 2026
+    setFinancialYear("2025-26"); // UPDATED: Reset to default 2025-26
     setSelectedSupplier("All");
     setSelectedBillNumber("All");
     setSelectedSection("All");
@@ -387,7 +387,7 @@ export default function SupplierReport() {
 
         <div className="filter-container">
           <div className="filter-row">
-            {/* NEW: Financial Year Dropdown */}
+            {/* UPDATED: Financial Year Dropdown with YYYY-YY format */}
             <label htmlFor="financialYear">Financial Year:</label>
             <select 
               id="financialYear" 
@@ -395,8 +395,10 @@ export default function SupplierReport() {
               value={financialYear} 
               onChange={(e) => setFinancialYear(e.target.value)}
             >
-              <option value="2025">2025</option>
-              <option value="2026">2026</option>
+              <option value="2024-25">2024-25</option>
+              <option value="2025-26">2025-26</option>
+              <option value="2026-27">2026-27</option>
+              <option value="2027-28">2027-28</option>
             </select>
 
             <label htmlFor="supplier">Supplier:</label>

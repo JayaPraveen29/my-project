@@ -7,7 +7,7 @@ import "./EntryPage.css";
 export default function EntryPage() {
   const [loading, setLoading] = useState(false);
   const [entryNo, setEntryNo] = useState(1);
-  const [financialYear, setFinancialYear] = useState("2026"); // NEW: Financial Year with default 2026
+  const [financialYear, setFinancialYear] = useState("2025-26"); // UPDATED: Financial Year with default 2025-26
   const [unit, setUnit] = useState("");
   const [workType, setWorkType] = useState("");
   const [headerData, setHeaderData] = useState({
@@ -46,7 +46,7 @@ export default function EntryPage() {
   const [customInputs, setCustomInputs] = useState({});
   const [manualEdits, setManualEdits] = useState({});
 
-  // NEW: Function to remove duplicates from arrays
+  // Function to remove duplicates from arrays
   const removeDuplicates = (arr) => {
     const seen = new Map();
     return arr.filter(item => {
@@ -127,14 +127,14 @@ export default function EntryPage() {
         id: doc.id, value: doc.data().value?.trim() || "", isManual: true
       })).filter(item => item.value).sort((a, b) => a.value.localeCompare(b.value));
 
-      // UPDATED: Remove duplicates from widths
+      // Remove duplicates from widths
       const widthsRaw = widthsSnap.docs.map(doc => ({
         id: doc.id, value: doc.data().value?.trim() || "", isManual: true
       })).filter(item => item.value).sort((a, b) => a.value.localeCompare(b.value));
       const widths = removeDuplicates(widthsRaw);
       console.log(`📊 Widths: ${widthsRaw.length} total, ${widths.length} unique`);
 
-      // UPDATED: Remove duplicates from item lengths
+      // Remove duplicates from item lengths
       const itemLengthsRaw = itemLengthsSnap.docs.map(doc => ({
         id: doc.id, value: doc.data().value?.trim() || "", isManual: true
       })).filter(item => item.value).sort((a, b) => a.value.localeCompare(b.value));
@@ -565,7 +565,7 @@ export default function EntryPage() {
   };
 
   const handleSubmit = async () => {
-    // UPDATED: Add validation for financial year
+    // Validation for financial year
     if (!financialYear) return alert("Please select Financial Year");
     if (!unit || !workType) return alert("Please select Unit and Work Type");
     
@@ -574,7 +574,7 @@ export default function EntryPage() {
       const docData = {
         ...headerData, 
         No: entryNo, 
-        FinancialYear: financialYear, // NEW: Save financial year
+        FinancialYear: financialYear, // Save financial year
         Unit: unit, 
         "Work Type": workType,
         items: items.map(i => ({
@@ -693,7 +693,7 @@ export default function EntryPage() {
     <div className="entry-container">
       <h1 className="entry-heading">Entry Page</h1>
       
-      {/* NEW: Financial Year dropdown at the top */}
+      {/* UPDATED: Financial Year dropdown with format YYYY-YY */}
       <div className="entry-top-inputs">
         <div className="unit-dropdown-wrapper">
           <label className="unit-dropdown-label">Financial Year</label>
@@ -702,8 +702,10 @@ export default function EntryPage() {
             value={financialYear} 
             onChange={e => setFinancialYear(e.target.value)}
           >
-            <option value="2025">2025</option>
-            <option value="2026">2026</option>
+            <option value="2024-25">2024-25</option>
+            <option value="2025-26">2025-26</option>
+            <option value="2026-27">2026-27</option>
+            <option value="2027-28">2027-28</option>
           </select>
         </div>
         <div className="unit-dropdown-wrapper">
