@@ -7,6 +7,7 @@ import "./EntryPage.css";
 export default function EntryPage() {
   const [loading, setLoading] = useState(false);
   const [entryNo, setEntryNo] = useState(1);
+  const [financialYear, setFinancialYear] = useState("2026"); // NEW: Financial Year with default 2026
   const [unit, setUnit] = useState("");
   const [workType, setWorkType] = useState("");
   const [headerData, setHeaderData] = useState({
@@ -44,6 +45,19 @@ export default function EntryPage() {
 
   const [customInputs, setCustomInputs] = useState({});
   const [manualEdits, setManualEdits] = useState({});
+
+  // NEW: Function to remove duplicates from arrays
+  const removeDuplicates = (arr) => {
+    const seen = new Map();
+    return arr.filter(item => {
+      const lowerValue = item.value.toLowerCase();
+      if (seen.has(lowerValue)) {
+        return false;
+      }
+      seen.set(lowerValue, true);
+      return true;
+    });
+  };
 
   const cleanupOrphanedRelations = async (sections, sizes, widths, lengths, suppliers, places, sectionSizeRels, sizeWidthRels, widthLengthRels, supplierPlaceRels) => {
     try {
@@ -113,13 +127,19 @@ export default function EntryPage() {
         id: doc.id, value: doc.data().value?.trim() || "", isManual: true
       })).filter(item => item.value).sort((a, b) => a.value.localeCompare(b.value));
 
-      const widths = widthsSnap.docs.map(doc => ({
+      // UPDATED: Remove duplicates from widths
+      const widthsRaw = widthsSnap.docs.map(doc => ({
         id: doc.id, value: doc.data().value?.trim() || "", isManual: true
       })).filter(item => item.value).sort((a, b) => a.value.localeCompare(b.value));
+      const widths = removeDuplicates(widthsRaw);
+      console.log(`📊 Widths: ${widthsRaw.length} total, ${widths.length} unique`);
 
-      const itemLengths = itemLengthsSnap.docs.map(doc => ({
+      // UPDATED: Remove duplicates from item lengths
+      const itemLengthsRaw = itemLengthsSnap.docs.map(doc => ({
         id: doc.id, value: doc.data().value?.trim() || "", isManual: true
       })).filter(item => item.value).sort((a, b) => a.value.localeCompare(b.value));
+      const itemLengths = removeDuplicates(itemLengthsRaw);
+      console.log(`📊 Item Lengths: ${itemLengthsRaw.length} total, ${itemLengths.length} unique`);
 
       const suppliers = suppliersSnap.docs.map(doc => ({
         id: doc.id, value: doc.data().value?.trim() || "", isManual: true
@@ -187,12 +207,10 @@ export default function EntryPage() {
     return allSizes.filter(size => relatedSizeIds.includes(size.id));
   };
   
-  // Show all widths in dropdown (relationships maintained during creation)
   const getAvailableWidths = (selectedSection, selectedSize) => {
     return allWidths;
   };
   
-  // Show all lengths in dropdown (relationships maintained during creation)
   const getAvailableLengths = (selectedSection, selectedSize, selectedWidth) => {
     return allItemLengths;
   };
@@ -547,11 +565,18 @@ export default function EntryPage() {
   };
 
   const handleSubmit = async () => {
+    // UPDATED: Add validation for financial year
+    if (!financialYear) return alert("Please select Financial Year");
     if (!unit || !workType) return alert("Please select Unit and Work Type");
+    
     setLoading(true);
     try {
       const docData = {
-        ...headerData, No: entryNo, Unit: unit, "Work Type": workType,
+        ...headerData, 
+        No: entryNo, 
+        FinancialYear: financialYear, // NEW: Save financial year
+        Unit: unit, 
+        "Work Type": workType,
         items: items.map(i => ({
           ...i,
           "Bill Basic Amount": parseNum(i["Bill Basic Amount"]),
@@ -667,7 +692,20 @@ export default function EntryPage() {
   return (
     <div className="entry-container">
       <h1 className="entry-heading">Entry Page</h1>
+      
+      {/* NEW: Financial Year dropdown at the top */}
       <div className="entry-top-inputs">
+        <div className="unit-dropdown-wrapper">
+          <label className="unit-dropdown-label">Financial Year</label>
+          <select 
+            className="unit-dropdown" 
+            value={financialYear} 
+            onChange={e => setFinancialYear(e.target.value)}
+          >
+            <option value="2025">2025</option>
+            <option value="2026">2026</option>
+          </select>
+        </div>
         <div className="unit-dropdown-wrapper">
           <label className="unit-dropdown-label">Unit</label>
           <select className="unit-dropdown" value={unit} onChange={e => setUnit(e.target.value)}>

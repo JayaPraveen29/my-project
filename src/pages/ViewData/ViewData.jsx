@@ -12,6 +12,7 @@ export default function ViewData() {
   const [data, setData] = useState([]);
   const [filteredData, setFilteredData] = useState([]);
   const [search, setSearch] = useState("");
+  const [financialYear, setFinancialYear] = useState("2026"); // NEW: Financial Year with default 2026
   const [unitFilter, setUnitFilter] = useState("Group");
   const [workTypeFilter, setWorkTypeFilter] = useState("Group");
   const [fromDate, setFromDate] = useState("");
@@ -138,6 +139,7 @@ export default function ViewData() {
               "Supplier Place": data["Supplier Place"],
               "Unit": data.Unit,
               "Work Type": data["Work Type"],
+              "Financial Year": data.FinancialYear, // NEW: Include financial year
               "Section": item.Section,
               "Size": item.Size,
               "Width": item.Width,
@@ -189,6 +191,7 @@ export default function ViewData() {
             firestoreId: d.id,
             originalFirestoreId: d.id,
             ...data,
+            "Financial Year": data.FinancialYear, // NEW: Include financial year
             "CGST": cgst,
             "SGST": sgst,
             "IGST": igst,
@@ -256,6 +259,12 @@ export default function ViewData() {
       );
     }
 
+    // NEW: Filter by financial year - STRICT filtering
+    // Only show entries that match the selected financial year
+    if (financialYear) {
+      result = result.filter(item => item["Financial Year"] === financialYear);
+    }
+
     if (unitFilter && unitFilter !== "Group") {
       result = result.filter(item => item["Unit"] === unitFilter);
     }
@@ -298,7 +307,7 @@ export default function ViewData() {
     });
 
     setFilteredData(result);
-  }, [data, search, unitFilter, workTypeFilter, fromDate, toDate]);
+  }, [data, search, financialYear, unitFilter, workTypeFilter, fromDate, toDate]);
 
   const formatQtyRowValue = (value) => {
     if (value === null || value === undefined) return "";
@@ -682,6 +691,19 @@ export default function ViewData() {
             <button onClick={() => { }} className="btn-search">
               Search
             </button>
+          </div>
+
+          {/* NEW: Financial Year Dropdown */}
+          <div className="filter-group">
+            <label className="filter-label">Financial Year:</label>
+            <select 
+              className="unit-select" 
+              value={financialYear} 
+              onChange={e => setFinancialYear(e.target.value)}
+            >
+              <option value="2025">2025</option>
+              <option value="2026">2026</option>
+            </select>
           </div>
 
           <div className="date-Group">

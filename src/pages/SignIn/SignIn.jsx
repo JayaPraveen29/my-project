@@ -66,7 +66,7 @@ export default function SignIn() {
 
         {/* Right Form */}
         <div className="form-card">
-          <h3 className="title-small">SIEC-CT 2026</h3>
+          <h3 className="title-small">SIEC GROUP</h3>
           <h2 className="title-main">Sign in</h2>
 
           <form onSubmit={handleSubmit} className="form">

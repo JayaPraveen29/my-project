@@ -9,6 +9,7 @@ import "./SingleSectionReport.css";
 export default function SingleSectionReport() {
   const [data, setData] = useState([]);
   const [groupedData, setGroupedData] = useState({});
+  const [financialYear, setFinancialYear] = useState("2026"); // NEW: Financial Year with default 2026
   const [selectedUnit, setSelectedUnit] = useState("Group");
   const [selectedWorkType, setSelectedWorkType] = useState("Group");
   const [selectedSection, setSelectedSection] = useState("");
@@ -39,6 +40,9 @@ export default function SingleSectionReport() {
     const grouped = {};
 
     items.forEach(entry => {
+      // NEW: Filter by Financial Year - STRICT filtering
+      if (financialYear && entry.FinancialYear !== financialYear) return;
+      
       // Filter by Unit
       if (selectedUnit !== "Group" && entry.Unit !== selectedUnit) return;
       
@@ -87,7 +91,7 @@ export default function SingleSectionReport() {
 
   useEffect(() => {
     processData(data);
-  }, [selectedUnit, selectedWorkType, data]);
+  }, [financialYear, selectedUnit, selectedWorkType, data]);
 
   const formatNumber = v =>
     (!v && v !== 0) ? "0" : Number(v).toLocaleString("en-IN", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
@@ -279,6 +283,7 @@ export default function SingleSectionReport() {
   const units = ["Group", ...Array.from(new Set(data.map(d => d.Unit)))];
 
   const clearFilters = () => {
+    setFinancialYear("2026"); // NEW: Reset to default 2026
     setSelectedUnit("Group");
     setSelectedWorkType("Group");
     setSelectedSection("");
@@ -290,6 +295,18 @@ export default function SingleSectionReport() {
       <h1 className="single-section-heading">Single Section Report</h1>
       <div className="filter-container">
         <div className="filter-row">
+          {/* NEW: Financial Year Dropdown */}
+          <label htmlFor="financial-year-select">Financial Year:</label>
+          <select
+            id="financial-year-select"
+            className="filter-select"
+            value={financialYear}
+            onChange={(e) => { setFinancialYear(e.target.value); setSelectedSection(""); setSelectedSize(""); }}
+          >
+            <option value="2025">2025</option>
+            <option value="2026">2026</option>
+          </select>
+
           {/* Unit Dropdown */}
           <label htmlFor="unit-select">Select Unit:</label>
           <select

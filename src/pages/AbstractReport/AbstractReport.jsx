@@ -10,6 +10,7 @@ export default function AbstractReport() {
   const [data, setData] = useState([]);
   const [abstractData, setAbstractData] = useState([]);
   const [pivotData, setPivotData] = useState([]);
+  const [financialYear, setFinancialYear] = useState("2026"); // NEW: Financial Year with default 2026
   const [selectedUnit, setSelectedUnit] = useState("Group");
   const [selectedWorkType, setSelectedWorkType] = useState("Group");
   const [units, setUnits] = useState([]);
@@ -27,7 +28,7 @@ export default function AbstractReport() {
         setUnits(uniqueUnits);
         const uniqueWorkTypes = [...new Set(items.map(item => item["Work Type"] || "Unknown"))];
         setWorkTypes(uniqueWorkTypes);
-        processAbstractData(items, selectedUnit, selectedWorkType, fromDate, toDate);
+        processAbstractData(items, financialYear, selectedUnit, selectedWorkType, fromDate, toDate);
       } catch (error) {
         console.error("Error fetching data:", error);
       }
@@ -36,8 +37,8 @@ export default function AbstractReport() {
   }, []);
 
   useEffect(() => {
-    processAbstractData(data, selectedUnit, selectedWorkType, fromDate, toDate);
-  }, [selectedUnit, selectedWorkType, data, fromDate, toDate]);
+    processAbstractData(data, financialYear, selectedUnit, selectedWorkType, fromDate, toDate);
+  }, [financialYear, selectedUnit, selectedWorkType, data, fromDate, toDate]);
 
   const filterByDateRange = (items, from, to) => {
     if (!from && !to) return items;
@@ -93,8 +94,15 @@ export default function AbstractReport() {
     return filtered;
   };
 
-  const processAbstractData = (items, unit, workType, from, to) => {
-    let filteredItems = filterByDateRange(items, from, to);
+  const processAbstractData = (items, finYear, unit, workType, from, to) => {
+    // NEW: Filter by financial year - STRICT filtering
+    // Only show entries that match the selected financial year
+    let filteredItems = items;
+    if (finYear) {
+      filteredItems = filteredItems.filter(item => item.FinancialYear === finYear);
+    }
+    
+    filteredItems = filterByDateRange(filteredItems, from, to);
     
     if (workType !== "Group") {
       filteredItems = filteredItems.filter(item => (item["Work Type"] || "Unknown") === workType);
@@ -635,6 +643,7 @@ export default function AbstractReport() {
   const clearFilters = () => {
     setFromDate("");
     setToDate("");
+    setFinancialYear("2026"); // NEW: Reset to default 2026
     setSelectedUnit("Group");
     setSelectedWorkType("Group");
   };
@@ -645,6 +654,18 @@ export default function AbstractReport() {
 
       <div className="filter-container">
         <div className="filter-row">
+          {/* NEW: Financial Year Dropdown */}
+          <label htmlFor="financialYear">Financial Year:</label>
+          <select 
+            id="financialYear" 
+            value={financialYear} 
+            onChange={(e) => setFinancialYear(e.target.value)}
+            className="filter-select"
+          >
+            <option value="2025">2025</option>
+            <option value="2026">2026</option>
+          </select>
+
           <label htmlFor="unit">Select Unit:</label>
           <select 
             id="unit" 

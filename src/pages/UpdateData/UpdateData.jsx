@@ -11,6 +11,7 @@ export default function UpdateData() {
   const [loading, setLoading] = useState(false);
   const [dataLoading, setDataLoading] = useState(true);
   const [entryNo, setEntryNo] = useState(1);
+  const [financialYear, setFinancialYear] = useState("2026"); // NEW: Financial Year with default 2026
 
   const [unit, setUnit] = useState("");
   const [workType, setWorkType] = useState("");
@@ -69,6 +70,19 @@ export default function UpdateData() {
 
   const [customInputs, setCustomInputs] = useState({});
   const [manualEdits, setManualEdits] = useState({});
+
+  // NEW: Function to remove duplicates from arrays
+  const removeDuplicates = (arr) => {
+    const seen = new Map();
+    return arr.filter(item => {
+      const lowerValue = item.value.toLowerCase();
+      if (seen.has(lowerValue)) {
+        return false;
+      }
+      seen.set(lowerValue, true);
+      return true;
+    });
+  };
 
   // Clean up orphaned relationships
   const cleanupOrphanedRelations = async (sections, sizes, widths, lengths, suppliers, places, sectionSizeRels, sizeWidthRels, widthLengthRels, supplierPlaceRels) => {
@@ -155,17 +169,23 @@ export default function UpdateData() {
         isManual: true
       })).filter(item => item.value).sort((a, b) => a.value.localeCompare(b.value));
 
-      const widths = widthsSnap.docs.map(doc => ({
+      // UPDATED: Remove duplicates from widths
+      const widthsRaw = widthsSnap.docs.map(doc => ({
         id: doc.id,
         value: doc.data().value?.trim() || "",
         isManual: true
       })).filter(item => item.value).sort((a, b) => a.value.localeCompare(b.value));
+      const widths = removeDuplicates(widthsRaw);
+      console.log(`📊 Widths: ${widthsRaw.length} total, ${widths.length} unique`);
 
-      const itemLengths = itemLengthsSnap.docs.map(doc => ({
+      // UPDATED: Remove duplicates from item lengths
+      const itemLengthsRaw = itemLengthsSnap.docs.map(doc => ({
         id: doc.id,
         value: doc.data().value?.trim() || "",
         isManual: true
       })).filter(item => item.value).sort((a, b) => a.value.localeCompare(b.value));
+      const itemLengths = removeDuplicates(itemLengthsRaw);
+      console.log(`📊 Item Lengths: ${itemLengthsRaw.length} total, ${itemLengths.length} unique`);
 
       const suppliers = suppliersSnap.docs.map(doc => ({
         id: doc.id,
@@ -242,6 +262,7 @@ export default function UpdateData() {
       
       // Set basic fields
       setEntryNo(data.No || 1);
+      setFinancialYear(data.FinancialYear || "2026"); // NEW: Load financial year from data
       setUnit(data.Unit || "");
       setWorkType(data["Work Type"] || "");
       
@@ -324,69 +345,14 @@ export default function UpdateData() {
     return allSizes.filter(size => relatedSizeIds.includes(size.id));
   };
   
+  // Show all widths in dropdown (relationships maintained during creation)
   const getAvailableWidths = (selectedSection, selectedSize) => {
-    if (!selectedSection || !selectedSize) return [];
-    
-    const sectionObj = allSections.find(s => s.value === selectedSection);
-    const sizeObj = allSizes.find(s => s.value === selectedSize);
-    
-    if (!sectionObj || !sizeObj) return [];
-    
-    const relatedWidthIds = sizeWidthRelations
-      .filter(rel => rel.sectionId === sectionObj.id && rel.sizeId === sizeObj.id)
-      .map(rel => rel.widthId);
-    
-    return allWidths.filter(width => relatedWidthIds.includes(width.id));
+    return allWidths;
   };
   
+  // Show all lengths in dropdown (relationships maintained during creation)
   const getAvailableLengths = (selectedSection, selectedSize, selectedWidth) => {
-    if (!selectedSection || !selectedSize) {
-      console.log("🔍 getAvailableLengths: Missing section or size");
-      return [];
-    }
-    
-    console.log("🔍 getAvailableLengths called with:", { selectedSection, selectedSize, selectedWidth });
-    
-    const sectionObj = allSections.find(s => s.value === selectedSection);
-    const sizeObj = allSizes.find(s => s.value === selectedSize);
-    
-    console.log("🔍 Found objects:", { sectionObj, sizeObj });
-    
-    if (!sectionObj || !sizeObj) {
-      console.log("⚠️ Section or Size object not found!");
-      return [];
-    }
-    
-    console.log("🔍 All widthLengthRelations:", widthLengthRelations);
-    
-    if (!selectedWidth) {
-      console.log("🔍 No width selected, looking for relations with widthId === null");
-      const relatedLengthIds = widthLengthRelations.filter(rel => {
-        const match = rel.sectionId === sectionObj.id && rel.sizeId === sizeObj.id && rel.widthId === null;
-        console.log(`🔍 Checking relation:`, rel, `Match: ${match}`);
-        return match;
-      }).map(rel => rel.lengthId);
-      
-      console.log("🔍 Related length IDs (no width):", relatedLengthIds);
-      const availableLengths = allItemLengths.filter(length => relatedLengthIds.includes(length.id));
-      console.log("🔍 Available lengths (no width):", availableLengths);
-      return availableLengths;
-    }
-    
-    const widthObj = allWidths.find(w => w.value === selectedWidth);
-    if (!widthObj) {
-      console.log("⚠️ Width object not found!");
-      return [];
-    }
-    
-    const relatedLengthIds = widthLengthRelations.filter(rel => 
-      rel.sectionId === sectionObj.id && rel.sizeId === sizeObj.id && rel.widthId === widthObj.id
-    ).map(rel => rel.lengthId);
-    
-    console.log("🔍 Related length IDs (with width):", relatedLengthIds);
-    const availableLengths = allItemLengths.filter(length => relatedLengthIds.includes(length.id));
-    console.log("🔍 Available lengths (with width):", availableLengths);
-    return availableLengths;
+    return allItemLengths;
   };
   
   const getAvailablePlaces = (selectedSupplier) => {
@@ -746,12 +712,16 @@ export default function UpdateData() {
   };
 
   const handleUpdate = async () => {
+    // UPDATED: Add validation for financial year
+    if (!financialYear) return alert("Please select Financial Year");
     if (!unit || !workType) return alert("Please select Unit and Work Type");
+    
     setLoading(true);
     try {
       const docData = {
         ...headerData,
         No: entryNo,
+        FinancialYear: financialYear, // NEW: Save financial year
         Unit: unit,
         "Work Type": workType,
         items: items.map(i => ({
@@ -888,7 +858,20 @@ export default function UpdateData() {
   return (
     <div className="entry-container">
       <h1 className="entry-heading">Update Entry #{entryNo}</h1>
+      
+      {/* NEW: Financial Year dropdown at the top */}
       <div className="entry-top-inputs">
+        <div className="unit-dropdown-wrapper">
+          <label className="unit-dropdown-label">Financial Year</label>
+          <select 
+            className="unit-dropdown" 
+            value={financialYear} 
+            onChange={e => setFinancialYear(e.target.value)}
+          >
+            <option value="2025">2025</option>
+            <option value="2026">2026</option>
+          </select>
+        </div>
         <div className="unit-dropdown-wrapper">
           <label className="unit-dropdown-label">Unit</label>
           <select className="unit-dropdown" value={unit} onChange={e => setUnit(e.target.value)}>
