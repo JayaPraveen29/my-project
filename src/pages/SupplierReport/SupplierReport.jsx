@@ -15,12 +15,17 @@ export default function SupplierReport() {
   const [data, setData] = useState([]);
   const [filteredData, setFilteredData] = useState([]);
   
-  const [financialYear, setFinancialYear] = useState("2025-26"); // UPDATED: Financial Year with default 2025-26
+  const [financialYear, setFinancialYear] = useState("All");
+  const [units, setUnits] = useState([]);
+  const [workTypes, setWorkTypes] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [billNumbers, setBillNumbers] = useState([]);
   const [sections, setSections] = useState([]);
   const [sizes, setSizes] = useState([]);
   
+  const [selectedFinancialYear, setSelectedFinancialYear] = useState("All");
+  const [selectedUnit, setSelectedUnit] = useState("All");
+  const [selectedWorkType, setSelectedWorkType] = useState("All");
   const [selectedSupplier, setSelectedSupplier] = useState("All");
   const [selectedBillNumber, setSelectedBillNumber] = useState("All");
   const [selectedSection, setSelectedSection] = useState("All");
@@ -57,9 +62,6 @@ export default function SupplierReport() {
         
         const flattenedData = [];
         entries.forEach(entry => {
-          // Skip entries that don't match the selected financial year
-          if (financialYear && entry.FinancialYear !== financialYear) return;
-          
           const itemsArray = entry.items && Array.isArray(entry.items) ? entry.items : [entry];
           
           itemsArray.forEach(item => {
@@ -81,11 +83,20 @@ export default function SupplierReport() {
                              item["Bill Number"] || 
                              "Unknown";
             
+            const financialYear = entry.FinancialYear || 
+                                entry["Financial Year"] || 
+                                "Unknown";
+            
+            const unit = entry.Unit || entry.unit || "Unknown";
+            const workType = entry["Work Type"] || entry.workType || "Unknown";
+            
             // Use Section Subtotal instead of Bill Basic Amount
             const sectionSubtotal = Number(item["Section Subtotal"]) || 0;
             
             flattenedData.push({
-              Unit: entry.Unit || entry.unit || "Unknown",
+              "Financial Year": financialYear,
+              Unit: unit,
+              "Work Type": workType,
               "Name of the Supplier": supplier,
               "Supplier Place": place,
               "Bill Number": billNumber,
@@ -102,6 +113,9 @@ export default function SupplierReport() {
         
         setData(flattenedData);
         
+        const uniqueFinancialYears = [...new Set(flattenedData.map(item => item["Financial Year"]))].sort();
+        const uniqueUnits = [...new Set(flattenedData.map(item => item.Unit))].sort();
+        const uniqueWorkTypes = [...new Set(flattenedData.map(item => item["Work Type"]))].sort();
         const uniqueSuppliers = [...new Set(flattenedData.map(item => item["Name of the Supplier"]))].sort();
         const uniqueBillNumbers = [...new Set(flattenedData.map(item => item["Bill Number"]))].sort();
         const uniqueSections = [...new Set(flattenedData.map(item => {
@@ -111,6 +125,8 @@ export default function SupplierReport() {
         }))].sort();
         const uniqueSizes = [...new Set(flattenedData.map(item => item.Size || "Unknown"))].sort();
         
+        setUnits(uniqueUnits);
+        setWorkTypes(uniqueWorkTypes);
         setSuppliers(uniqueSuppliers);
         setBillNumbers(uniqueBillNumbers);
         setSections(uniqueSections);
@@ -121,10 +137,28 @@ export default function SupplierReport() {
       }
     }
     fetchData();
-  }, [financialYear]); // Re-fetch when financial year changes
+  }, []);
 
   useEffect(() => {
     let filtered = [...data];
+
+    if (selectedFinancialYear !== "All") {
+      filtered = filtered.filter(item => 
+        item["Financial Year"] === selectedFinancialYear
+      );
+    }
+
+    if (selectedUnit !== "All") {
+      filtered = filtered.filter(item => 
+        item.Unit === selectedUnit
+      );
+    }
+
+    if (selectedWorkType !== "All") {
+      filtered = filtered.filter(item => 
+        item["Work Type"] === selectedWorkType
+      );
+    }
 
     if (selectedSupplier !== "All") {
       filtered = filtered.filter(item => 
@@ -160,7 +194,7 @@ export default function SupplierReport() {
     });
 
     setFilteredData(filtered);
-  }, [selectedSupplier, selectedBillNumber, selectedSection, selectedSize, data]);
+  }, [selectedFinancialYear, selectedUnit, selectedWorkType, selectedSupplier, selectedBillNumber, selectedSection, selectedSize, data]);
 
   const formatNumber = (value) =>
     !value && value !== 0
@@ -182,26 +216,41 @@ export default function SupplierReport() {
   };
 
   const clearFilters = () => {
-    setFinancialYear("2025-26"); // UPDATED: Reset to default 2025-26
+    setSelectedFinancialYear("All");
+    setSelectedUnit("All");
+    setSelectedWorkType("All");
     setSelectedSupplier("All");
     setSelectedBillNumber("All");
     setSelectedSection("All");
     setSelectedSize("All");
   };
 
+  const hideFinancialYearCol = selectedFinancialYear !== "All";
+  const hideUnitCol = selectedUnit !== "All";
+  const hideWorkTypeCol = selectedWorkType !== "All";
   const hideSupplierCol = selectedSupplier !== "All";
   const hideBillNumberCol = selectedBillNumber !== "All";
   const hideSectionCol = selectedSection !== "All";
+  const hideSizeCol = selectedSize !== "All";
   const hidePlaceCol = selectedSupplier !== "All" || selectedSection !== "All";
 
   const exportPDF = () => {
-    const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
+    const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
     doc.setFontSize(16);
     doc.text("Supplier Report", 14, 20);
 
     doc.setFontSize(10);
     let filterParts = [];
     
+    if (selectedFinancialYear !== "All") {
+      filterParts.push(`FY: ${selectedFinancialYear}`);
+    }
+    if (selectedUnit !== "All") {
+      filterParts.push(`Unit: ${selectedUnit}`);
+    }
+    if (selectedWorkType !== "All") {
+      filterParts.push(`Work Type: ${selectedWorkType}`);
+    }
     if (selectedSupplier !== "All") {
       filterParts.push(`${selectedSupplier}`);
     }
@@ -220,12 +269,16 @@ export default function SupplierReport() {
       doc.text(filterText, 14, 35);
     }
 
-    const headers = ["No.", "Unit"];
+    const headers = ["No."];
+    if (!hideFinancialYearCol) headers.push("FY");
+    if (!hideUnitCol) headers.push("Unit");
+    if (!hideWorkTypeCol) headers.push("Work Type");
     if (!hideSupplierCol) headers.push("Supplier");
     if (!hideBillNumberCol) headers.push("Bill No.");
     if (!hidePlaceCol) headers.push("Place");
     if (!hideSectionCol) headers.push("Section");
-    headers.push("Size", "Items", "Qty (MT)", "Amount", "Avg. Rate");
+    if (!hideSizeCol) headers.push("Size");
+    headers.push("Items", "Qty (MT)", "Amount", "Avg. Rate");
 
     const tableData = filteredData.map((item, index) => {
       let section = (item.Section || "Unknown").toString().trim();
@@ -235,17 +288,17 @@ export default function SupplierReport() {
       const qty = Number(item["Quantity in Metric Tons"]) || 0;
       const amount = Number(item.Amount) || 0;
 
-      const row = [
-        index + 1,
-        item.Unit || "Unknown"
-      ];
+      const row = [index + 1];
       
+      if (!hideFinancialYearCol) row.push(item["Financial Year"] || "Unknown");
+      if (!hideUnitCol) row.push(item.Unit || "Unknown");
+      if (!hideWorkTypeCol) row.push(item["Work Type"] || "Unknown");
       if (!hideSupplierCol) row.push(item["Name of the Supplier"] || "Unknown");
       if (!hideBillNumberCol) row.push(item["Bill Number"] || "Unknown");
       if (!hidePlaceCol) row.push(item["Supplier Place"] || "Unknown");
       if (!hideSectionCol) row.push(section);
+      if (!hideSizeCol) row.push(item.Size || "Unknown");
       row.push(
-        item.Size || "Unknown",
         (item["Number of items Supplied"] || 0).toLocaleString("en-IN"),
         formatNumber(qty),
         formatAmount(amount),
@@ -258,14 +311,17 @@ export default function SupplierReport() {
     const totalQty = filteredData.reduce((sum, item) => sum + (Number(item["Quantity in Metric Tons"]) || 0), 0);
     const totalAmount = filteredData.reduce((sum, item) => sum + (Number(item.Amount) || 0), 0);
 
-    const totalRow = ["", ""];
+    const totalRow = [""];
+    if (!hideFinancialYearCol) totalRow.push("");
+    if (!hideUnitCol) totalRow.push("");
+    if (!hideWorkTypeCol) totalRow.push("");
     if (!hideSupplierCol) totalRow.push("");
     if (!hideBillNumberCol) totalRow.push("");
     if (!hidePlaceCol) totalRow.push("TOTAL");
     else totalRow.push("TOTAL");
     if (!hideSectionCol) totalRow.push("");
+    if (!hideSizeCol) totalRow.push("");
     totalRow.push(
-      "",
       "",
       formatNumber(totalQty),
       formatAmount(totalAmount),
@@ -278,14 +334,14 @@ export default function SupplierReport() {
       head: [headers],
       body: tableData,
       startY: filterParts.length > 0 ? 50 : 35,
-      styles: { fontSize: 8, cellPadding: 3 },
+      styles: { fontSize: 7, cellPadding: 2 },
       headStyles: {
         fillColor: [230, 240, 255],
         textColor: [40, 40, 40],
         fontStyle: "bold"
       },
       theme: "grid",
-      margin: { left: 20, right: 20 },
+      margin: { left: 14, right: 14 },
       tableWidth: "auto",
     });
     
@@ -302,16 +358,18 @@ export default function SupplierReport() {
       const amount = Number(item.Amount) || 0;
 
       const row = {
-        "No.": index + 1,
-        "Unit": item.Unit || "Unknown"
+        "No.": index + 1
       };
 
+      if (!hideFinancialYearCol) row["FY"] = item["Financial Year"] || "Unknown";
+      if (!hideUnitCol) row["Unit"] = item.Unit || "Unknown";
+      if (!hideWorkTypeCol) row["Work Type"] = item["Work Type"] || "Unknown";
       if (!hideSupplierCol) row["Supplier"] = item["Name of the Supplier"] || "Unknown";
       if (!hideBillNumberCol) row["Bill No."] = item["Bill Number"] || "Unknown";
       if (!hidePlaceCol) row["Place"] = item["Supplier Place"] || "Unknown";
       if (!hideSectionCol) row["Section"] = section;
+      if (!hideSizeCol) row["Size"] = item.Size || "Unknown";
       
-      row["Size"] = item.Size || "Unknown";
       row["Items"] = (item["Number of items Supplied"] || 0).toLocaleString("en-IN");
       row["Qty (MT)"] = formatNumber(qty);
       row["Amount"] = formatAmount(amount);
@@ -324,17 +382,19 @@ export default function SupplierReport() {
     const totalAmount = filteredData.reduce((sum, item) => sum + (Number(item.Amount) || 0), 0);
 
     const totalRow = {
-      "No.": "",
-      "Unit": ""
+      "No.": ""
     };
     
+    if (!hideFinancialYearCol) totalRow["FY"] = "";
+    if (!hideUnitCol) totalRow["Unit"] = "";
+    if (!hideWorkTypeCol) totalRow["Work Type"] = "";
     if (!hideSupplierCol) totalRow["Supplier"] = "";
     if (!hideBillNumberCol) totalRow["Bill No."] = "";
     if (!hidePlaceCol) totalRow["Place"] = "TOTAL";
-    else totalRow["Unit"] = "TOTAL";
+    else totalRow["No."] = "TOTAL";
     if (!hideSectionCol) totalRow["Section"] = "";
+    if (!hideSizeCol) totalRow["Size"] = "";
     
-    totalRow["Size"] = "";
     totalRow["Items"] = "";
     totalRow["Qty (MT)"] = formatNumber(totalQty);
     totalRow["Amount"] = formatAmount(totalAmount);
@@ -344,17 +404,17 @@ export default function SupplierReport() {
 
     const ws = XLSX.utils.json_to_sheet(excelData);
 
-    const colWidths = [
-      { wch: 5 },
-      { wch: 10 }
-    ];
+    const colWidths = [{ wch: 5 }];
     
+    if (!hideFinancialYearCol) colWidths.push({ wch: 10 });
+    if (!hideUnitCol) colWidths.push({ wch: 10 });
+    if (!hideWorkTypeCol) colWidths.push({ wch: 12 });
     if (!hideSupplierCol) colWidths.push({ wch: 25 });
     if (!hideBillNumberCol) colWidths.push({ wch: 15 });
     if (!hidePlaceCol) colWidths.push({ wch: 15 });
     if (!hideSectionCol) colWidths.push({ wch: 15 });
+    if (!hideSizeCol) colWidths.push({ wch: 12 });
     colWidths.push(
-      { wch: 12 },
       { wch: 12 },
       { wch: 15 },
       { wch: 15 },
@@ -367,6 +427,9 @@ export default function SupplierReport() {
     XLSX.utils.book_append_sheet(wb, ws, "Supplier Report");
 
     let filename = "Supplier_Report";
+    if (selectedFinancialYear !== "All") filename += `_FY${selectedFinancialYear}`;
+    if (selectedUnit !== "All") filename += `_${selectedUnit}`;
+    if (selectedWorkType !== "All") filename += `_${selectedWorkType}`;
     if (selectedSupplier !== "All") filename += `_${selectedSupplier}`;
     if (selectedBillNumber !== "All") filename += `_Bill${selectedBillNumber}`;
     if (selectedSection !== "All") filename += `_${selectedSection}`;
@@ -379,6 +442,9 @@ export default function SupplierReport() {
   const totalQty = filteredData.reduce((sum, item) => sum + (Number(item["Quantity in Metric Tons"]) || 0), 0);
   const totalAmount = filteredData.reduce((sum, item) => sum + (Number(item.Amount) || 0), 0);
 
+  // Get unique financial years from data for the dropdown
+  const financialYears = [...new Set(data.map(item => item["Financial Year"]))].sort();
+
   return (
     <div className="entry-layout">
       
@@ -387,18 +453,43 @@ export default function SupplierReport() {
 
         <div className="filter-container">
           <div className="filter-row">
-            {/* UPDATED: Financial Year Dropdown with YYYY-YY format */}
             <label htmlFor="financialYear">Financial Year:</label>
             <select 
               id="financialYear" 
               className="filter-select"
-              value={financialYear} 
-              onChange={(e) => setFinancialYear(e.target.value)}
+              value={selectedFinancialYear} 
+              onChange={(e) => setSelectedFinancialYear(e.target.value)}
             >
-              <option value="2024-25">2024-25</option>
-              <option value="2025-26">2025-26</option>
-              <option value="2026-27">2026-27</option>
-              <option value="2027-28">2027-28</option>
+              <option value="All">All Years</option>
+              {financialYears.map((fy, i) => (
+                <option key={i} value={fy}>{fy}</option>
+              ))}
+            </select>
+
+            <label htmlFor="unit">Unit:</label>
+            <select 
+              id="unit" 
+              className="filter-select"
+              value={selectedUnit} 
+              onChange={(e) => setSelectedUnit(e.target.value)}
+            >
+              <option value="All">All Units</option>
+              {units.map((unit, i) => (
+                <option key={i} value={unit}>{unit}</option>
+              ))}
+            </select>
+
+            <label htmlFor="workType">Work Type:</label>
+            <select 
+              id="workType" 
+              className="filter-select"
+              value={selectedWorkType} 
+              onChange={(e) => setSelectedWorkType(e.target.value)}
+            >
+              <option value="All">All Work Types</option>
+              {workTypes.map((wt, i) => (
+                <option key={i} value={wt}>{wt}</option>
+              ))}
             </select>
 
             <label htmlFor="supplier">Supplier:</label>
@@ -469,15 +560,17 @@ export default function SupplierReport() {
           <table className="supplier-table">
             <thead>
               <tr>
-                <th style={{ width: "5%" }}>No.</th>
-                <th style={{ width: "8%" }}>Unit</th>
-                {!hideSupplierCol && <th style={{ width: "6%" }}>Supplier</th>}
+                <th style={{ width: "3%" }}>No.</th>
+                {!hideFinancialYearCol && <th style={{ width: "6%" }}>FY</th>}
+                {!hideUnitCol && <th style={{ width: "5%" }}>Unit</th>}
+                {!hideWorkTypeCol && <th style={{ width: "6%" }}>Work Type</th>}
+                {!hideSupplierCol && <th style={{ width: "10%" }}>Supplier</th>}
                 {!hideBillNumberCol && <th style={{ width: "8%" }}>Bill No.</th>}
                 {!hidePlaceCol && <th style={{ width: "8%" }}>Place</th>}
                 {!hideSectionCol && <th style={{ width: "8%" }}>Section</th>}
-                <th style={{ width: "8%" }}>Size</th>
-                <th style={{ width: "8%" }}>Items</th>
-                <th style={{ width: "10%" }}>Qty (MT)</th>
+                {!hideSizeCol && <th style={{ width: "8%" }}>Size</th>}
+                <th style={{ width: "6%" }}>Items</th>
+                <th style={{ width: "8%" }}>Qty (MT)</th>
                 <th style={{ width: "10%" }}>Amount</th>
                 <th style={{ width: "8%" }}>Avg. Rate</th>
               </tr>
@@ -496,12 +589,14 @@ export default function SupplierReport() {
                     return (
                       <tr key={index}>
                         <td className="text-center">{index + 1}</td>
-                        <td className="text-left">{item.Unit || "Unknown"}</td>
+                        {!hideFinancialYearCol && <td className="text-left">{item["Financial Year"] || "Unknown"}</td>}
+                        {!hideUnitCol && <td className="text-left">{item.Unit || "Unknown"}</td>}
+                        {!hideWorkTypeCol && <td className="text-left">{item["Work Type"] || "Unknown"}</td>}
                         {!hideSupplierCol && <td className="text-left">{item["Name of the Supplier"] || "Unknown"}</td>}
                         {!hideBillNumberCol && <td className="text-left">{item["Bill Number"] || "Unknown"}</td>}
                         {!hidePlaceCol && <td className="text-left">{item["Supplier Place"] || "Unknown"}</td>}
                         {!hideSectionCol && <td className="text-left">{section}</td>}
-                        <td className="text-left">{item.Size || "Unknown"}</td>
+                        {!hideSizeCol && <td className="text-left">{item.Size || "Unknown"}</td>}
                         <td className="text-right">{(item["Number of items Supplied"] || 0).toLocaleString("en-IN")}</td>
                         <td className="text-right">{formatNumber(qty)}</td>
                         <td className="text-right">{formatAmount(amount)}</td>
@@ -510,12 +605,15 @@ export default function SupplierReport() {
                     );
                   })}
                   <tr className="total-row">
-                    <td colSpan={2} className="text-left">TOTAL</td>
+                    <td colSpan={1} className="text-left">TOTAL</td>
+                    {!hideFinancialYearCol && <td></td>}
+                    {!hideUnitCol && <td></td>}
+                    {!hideWorkTypeCol && <td></td>}
                     {!hideSupplierCol && <td></td>}
                     {!hideBillNumberCol && <td></td>}
                     {!hidePlaceCol && <td></td>}
                     {!hideSectionCol && <td></td>}
-                    <td></td>
+                    {!hideSizeCol && <td></td>}
                     <td></td>
                     <td className="text-right">{formatNumber(totalQty)}</td>
                     <td className="text-right">{formatAmount(totalAmount)}</td>
@@ -524,7 +622,7 @@ export default function SupplierReport() {
                 </>
               ) : (
                 <tr>
-                  <td colSpan={11 - (hideSupplierCol ? 1 : 0) - (hideBillNumberCol ? 1 : 0) - (hidePlaceCol ? 1 : 0) - (hideSectionCol ? 1 : 0)} className="empty-state">
+                  <td colSpan={13 - (hideFinancialYearCol ? 1 : 0) - (hideUnitCol ? 1 : 0) - (hideWorkTypeCol ? 1 : 0) - (hideSupplierCol ? 1 : 0) - (hideBillNumberCol ? 1 : 0) - (hidePlaceCol ? 1 : 0) - (hideSectionCol ? 1 : 0) - (hideSizeCol ? 1 : 0)} className="empty-state">
                     No data found for the selected filters
                   </td>
                 </tr>
