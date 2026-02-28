@@ -520,3 +520,103 @@
       text-align: left;
     }
   }
+
+  /* ── Supplier Combobox Styles ── add these to your EntryPage.css ── */
+
+.supplier-combobox-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.supplier-search-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.supplier-search-input {
+  flex: 1;
+  padding: 8px 10px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s;
+  width: 100%;
+}
+
+.supplier-search-input:focus {
+  border-color: #4a90e2;
+  box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.15);
+}
+
+.supplier-clear-btn {
+  background: #e74c3c;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 13px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.supplier-clear-btn:hover {
+  background: #c0392b;
+}
+
+.supplier-suggestions-list {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 1000;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+}
+
+.supplier-suggestion-item {
+  padding: 9px 12px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #333;
+  transition: background 0.15s;
+}
+
+.supplier-suggestion-item:hover {
+  background: #f0f4ff;
+}
+
+.supplier-suggestion-item.active {
+  background: #4a90e2;
+  color: #fff;
+  font-weight: 500;
+}
+
+.supplier-suggestion-no-match {
+  padding: 10px 12px;
+  color: #999;
+  font-size: 13px;
+  font-style: italic;
+}
+
+.supplier-dropdown-row {
+  margin-top: 8px;
+}
+
+.supplier-dropdown-row .dropdown-select {
+  width: 100%;
+}
+.supplier-suggestion-item.highlighted {
+  background-color: #e0f0ff;
+  color: #0066cc;
+}

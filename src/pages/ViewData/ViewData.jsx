@@ -12,7 +12,7 @@ export default function ViewData() {
   const [data, setData] = useState([]);
   const [filteredData, setFilteredData] = useState([]);
   const [search, setSearch] = useState("");
-  const [financialYear, setFinancialYear] = useState("2025-26"); // UPDATED: Financial Year with default 2025-26
+  const [financialYear, setFinancialYear] = useState("2025-26");
   const [unitFilter, setUnitFilter] = useState("Group");
   const [workTypeFilter, setWorkTypeFilter] = useState("Group");
   const [fromDate, setFromDate] = useState("");
@@ -21,52 +21,45 @@ export default function ViewData() {
   const baseFields = useMemo(() => [
     "PO", "Received On", "Bill Number", "Bill Date", "Name of the Supplier",
     "Supplier Place", "Section", "Size", "Width", "Item Length", "Number of items Supplied",
-    "Quantity in Metric Tons", "Item Per Rate", "Bill Basic Amount", 
-    "Loading Charges", "Freight<", "Others", "CGST", "SGST", "IGST", 
+    "Quantity in Metric Tons", "Item Per Rate", "Bill Basic Amount",
+    "Loading Charges", "Freight<", "Others", "CGST", "SGST", "IGST",
     "Total", "Freight>", "G. Total", "Net", "Landed Cost",
   ], []);
 
   const fields = useMemo(() => {
     const dynamicFields = [];
-    
-    if (unitFilter === "Group") {
-      dynamicFields.push("Unit");
-    }
-    
-    if (workTypeFilter === "Group") {
-      dynamicFields.push("Work Type");
-    }
-    
+    if (unitFilter === "Group") dynamicFields.push("Unit");
+    if (workTypeFilter === "Group") dynamicFields.push("Work Type");
     return [...dynamicFields, ...baseFields];
   }, [unitFilter, workTypeFilter, baseFields]);
 
   const fieldLabels = {
-    "Unit": "Unit", 
-    "Work Type": "Work Type", 
-    "PO": "PO", 
-    "Received On": "Recd. On", 
+    "Unit": "Unit",
+    "Work Type": "Work Type",
+    "PO": "PO",
+    "Received On": "Recd. On",
     "Bill Number": "Bill No",
-    "Bill Date": "Bill Date", 
+    "Bill Date": "Bill Date",
     "Name of the Supplier": "Supplier",
-    "Supplier Place": "Place", 
-    "Section": "Section", 
+    "Supplier Place": "Place",
+    "Section": "Section",
     "Size": "Size",
     "Width": "Width",
-    "Item Length": "Length", 
+    "Item Length": "Length",
     "Number of items Supplied": "Items",
-    "Quantity in Metric Tons": "MT", 
+    "Quantity in Metric Tons": "MT",
     "Item Per Rate": "Rate",
     "Bill Basic Amount": "Amount",
-    "Loading Charges": "Loading", 
+    "Loading Charges": "Loading",
     "Freight<": "Freight\n<\n(GST)",
-    "Others": "Others", 
-    "CGST": "CGST", 
-    "SGST": "SGST", 
+    "Others": "Others",
+    "CGST": "CGST",
+    "SGST": "SGST",
     "IGST": "IGST",
-    "Total": "Total", 
+    "Total": "Total",
     "Freight>": "Freight\n>\n(GST)",
-    "G. Total": "G. Total", 
-    "Net": "Net", 
+    "G. Total": "G. Total",
+    "Net": "Net",
     "Landed Cost": "Landed Cost"
   };
 
@@ -74,29 +67,23 @@ export default function ViewData() {
     try {
       const querySnapshot = await getDocs(collection(db, "entries"));
       const items = [];
-      
+
       querySnapshot.docs.forEach((d) => {
         const data = d.data();
-        
-        // Check if this is the new multi-item format
+
         if (data.items && Array.isArray(data.items)) {
-          // Calculate total basic amount for proportional distribution (only for GST and others)
           const entryTotalBasic = data.items.reduce((sum, item) => {
             return sum + (Number(item["Bill Basic Amount"]) || 0);
           }, 0);
-          
-          // Create a separate row for each item in the items array
+
           data.items.forEach((item, index) => {
             const itemBasic = Number(item["Bill Basic Amount"]) || 0;
-            
-            // Calculate proportional share for this item (for GST and Others only)
             const itemProportion = entryTotalBasic > 0 ? itemBasic / entryTotalBasic : 0;
-            
-            // Calculate GST values proportionally
+
             let cgst = 0, sgst = 0, igst = 0;
             let total = 0, gTotal = 0, net = 0;
             let others = 0;
-            
+
             if (data.gst) {
               const totalGst = data.gst.totalGst || 0;
               if (data.gst.type === "AP") {
@@ -106,27 +93,23 @@ export default function ViewData() {
                 igst = totalGst * itemProportion;
               }
             }
-            
-            // Distribute only "Others" proportionally
+
             if (data.charges) {
               others = (Number(data.charges.Others) || 0) * itemProportion;
             }
-            
-            // Use the STORED section-specific values (not proportional)
+
             const sectionLoading = Number(item["Section Loading Charges"]) || 0;
             const sectionFreightLess = Number(item["Section Freight<"]) || 0;
             const sectionFreightGreater = Number(item["Section Freight>"]) || 0;
-            
-            // Distribute totals proportionally
+
             if (data.finalTotals) {
               total = (data.finalTotals.total || 0) * itemProportion;
               gTotal = (data.finalTotals.gTotal || 0) * itemProportion;
               net = (data.finalTotals.net || 0) * itemProportion;
             }
-            
-            // Calculate total freight for this item
+
             const itemTotalFreight = sectionLoading + sectionFreightLess + sectionFreightGreater;
-            
+
             items.push({
               firestoreId: `${d.id}-${index}`,
               originalFirestoreId: d.id,
@@ -148,11 +131,9 @@ export default function ViewData() {
               "Quantity in Metric Tons": item["Quantity in Metric Tons"],
               "Item Per Rate": item["Item Per Rate"],
               "Bill Basic Amount": item["Bill Basic Amount"],
-              // Use STORED section-specific charges from the item
               "Loading Charges": sectionLoading,
               "Freight<": sectionFreightLess,
               "Freight>": sectionFreightGreater,
-              // Only "Others" is distributed proportionally
               "Others": others,
               "CGST": cgst,
               "SGST": sgst,
@@ -167,9 +148,8 @@ export default function ViewData() {
             });
           });
         } else {
-          // Old format - single item per entry
           let cgst = 0, sgst = 0, igst = 0;
-          
+
           if (data.gst) {
             if (data.gst.type === "AP") {
               const totalGst = data.gst.totalGst || 0;
@@ -179,13 +159,12 @@ export default function ViewData() {
               igst = data.gst.totalGst || 0;
             }
           }
-          
-          // Calculate total freight for old format
-          const totalFreight = (Number(data["Loading Charges"]) || 0) + 
-                              (Number(data["Freight<"]) || 0) + 
-                              (Number(data["Freight>"]) || 0) + 
-                              (Number(data.charges?.Others) || 0);
-          
+
+          const totalFreight = (Number(data["Loading Charges"]) || 0) +
+            (Number(data["Freight<"]) || 0) +
+            (Number(data["Freight>"]) || 0) +
+            (Number(data.charges?.Others) || 0);
+
           items.push({
             firestoreId: d.id,
             originalFirestoreId: d.id,
@@ -200,7 +179,7 @@ export default function ViewData() {
           });
         }
       });
-      
+
       setData(items);
     } catch (error) {
       alert("Error loading data!");
@@ -214,25 +193,19 @@ export default function ViewData() {
 
   const unitOptions = useMemo(() => {
     const setUnits = new Set();
-    data.forEach(d => {
-      if (d["Unit"]) setUnits.add(d["Unit"]);
-    });
+    data.forEach(d => { if (d["Unit"]) setUnits.add(d["Unit"]); });
     return ["Group", ...Array.from(setUnits)];
   }, [data]);
 
   const workTypeOptions = useMemo(() => {
     const setWorkTypes = new Set();
-    data.forEach(d => {
-      if (d["Work Type"]) setWorkTypes.add(d["Work Type"]);
-    });
+    data.forEach(d => { if (d["Work Type"]) setWorkTypes.add(d["Work Type"]); });
     return ["Group", ...Array.from(setWorkTypes)];
   }, [data]);
 
   const parseDateSafe = (v) => {
     if (!v) return null;
-    try {
-      if (typeof v.toDate === "function") return v.toDate();
-    } catch (e) {}
+    try { if (typeof v.toDate === "function") return v.toDate(); } catch (e) {}
     const dt = new Date(v);
     if (!isNaN(dt)) return dt;
     const parts = v.toString().split(/[\\/\-\s.]/).map(p => p.trim());
@@ -257,8 +230,6 @@ export default function ViewData() {
       );
     }
 
-    // Filter by financial year - STRICT filtering
-    // Only show entries that match the selected financial year
     if (financialYear) {
       result = result.filter(item => item["Financial Year"] === financialYear);
     }
@@ -275,20 +246,13 @@ export default function ViewData() {
       result = result.filter(item => {
         const itemDate = parseDateSafe(item["Received On"]);
         if (!itemDate) return false;
-
         const from = fromDate ? new Date(fromDate) : null;
         const to = toDate ? new Date(toDate) : null;
-
         if (from) from.setHours(0, 0, 0, 0);
         if (to) to.setHours(23, 59, 59, 999);
-
-        if (from && to) {
-          return itemDate >= from && itemDate <= to;
-        } else if (from) {
-          return itemDate >= from;
-        } else if (to) {
-          return itemDate <= to;
-        }
+        if (from && to) return itemDate >= from && itemDate <= to;
+        else if (from) return itemDate >= from;
+        else if (to) return itemDate <= to;
         return true;
       });
     }
@@ -299,87 +263,65 @@ export default function ViewData() {
       if (da && db) return da - db;
       if (da && !db) return -1;
       if (!da && db) return 1;
-      const sa = (a["Received On"] || "").toString();
-      const sb = (b["Received On"] || "").toString();
-      return sa.localeCompare(sb);
+      return (a["Received On"] || "").toString().localeCompare((b["Received On"] || "").toString());
     });
 
     setFilteredData(result);
   }, [data, search, financialYear, unitFilter, workTypeFilter, fromDate, toDate]);
 
+  // Format MT value: always 3 decimal places
   const formatQtyRowValue = (value) => {
     if (value === null || value === undefined) return "";
-    if (typeof value === "string") return value;
     const n = Number(value);
     if (isNaN(n)) return value;
-    // Always show 3 decimal places for MT
     return n.toFixed(3);
   };
 
   const formatQtyTotal = (value) => {
     const n = Number(value || 0);
     if (isNaN(n)) return "";
-    // Show 3 decimal places for total MT
     return n.toFixed(3);
+  };
+
+  // Format Rate: comma separated, no decimals, right aligned
+  const formatRate = (value) => {
+    if (value === null || value === undefined || value === "") return "";
+    const num = Number(value);
+    if (isNaN(num)) return value;
+    return Math.round(num).toLocaleString("en-IN");
   };
 
   const handleDelete = async (rowData) => {
     const documentId = rowData.originalFirestoreId || rowData.firestoreId;
-    
     if (!documentId) return;
-    
-    // Check if this is a multi-item entry
+
     const isMultiItem = rowData.originalFirestoreId && rowData.firestoreId !== documentId;
-    
+
     try {
       if (isMultiItem) {
-        // Get the current document
         const docRef = doc(db, "entries", documentId);
         const docSnap = await getDoc(docRef);
-        
-        if (!docSnap.exists()) {
-          alert("Entry not found!");
-          return;
-        }
-        
+        if (!docSnap.exists()) { alert("Entry not found!"); return; }
+
         const entryData = docSnap.data();
-        
-        // Extract the item index from rowData
         const itemIndex = rowData.itemIndex;
-        
-        // Check if this is the last item
+
         if (entryData.items && entryData.items.length === 1) {
-          // If only one item remains, delete the entire document
-          const confirmMessage = "This is the last section in the bill. Deleting it will remove the entire entry. Continue?";
-          if (!window.confirm(confirmMessage)) return;
-          
+          if (!window.confirm("This is the last section in the bill. Deleting it will remove the entire entry. Continue?")) return;
           await deleteDoc(docRef);
-          
           alert("Entry deleted successfully!");
-          await fetchData(); // Re-fetch data
+          await fetchData();
         } else {
-          // Remove only the specific item from the items array
-          const confirmMessage = `Are you sure you want to delete this section?\n\nSection: ${rowData.Section}\nSize: ${rowData.Size}`;
-          if (!window.confirm(confirmMessage)) return;
-          
+          if (!window.confirm(`Are you sure you want to delete this section?\n\nSection: ${rowData.Section}\nSize: ${rowData.Size}`)) return;
+
           const updatedItems = entryData.items.filter((_, idx) => idx !== itemIndex);
-          
-          // Recalculate totals after removing the item
-          const newTotalBasic = updatedItems.reduce((sum, item) => {
-            return sum + (Number(item["Bill Basic Amount"]) || 0);
-          }, 0);
-          
-          // Recalculate total MT for charge distribution
-          const newTotalMT = updatedItems.reduce((sum, item) => {
-            return sum + (Number(item["Quantity in Metric Tons"]) || 0);
-          }, 0);
-          
-          // Recalculate final totals
-          const baseAmount = newTotalBasic + 
-            (Number(entryData.charges?.["Loading Charges"]) || 0) + 
-            (Number(entryData.charges?.["Freight<"]) || 0) + 
+          const newTotalBasic = updatedItems.reduce((sum, item) => sum + (Number(item["Bill Basic Amount"]) || 0), 0);
+
+          const baseAmount = newTotalBasic +
+            (Number(entryData.charges?.["Loading Charges"]) || 0) +
+            (Number(entryData.charges?.["Freight<"]) || 0) +
             (Number(entryData.charges?.Others) || 0);
-          
+
           let totalGst = 0;
           if (entryData.gst) {
             if (entryData.gst.type === "AP") {
@@ -388,36 +330,25 @@ export default function ViewData() {
               totalGst = baseAmount * (Number(entryData.gst.igstP) || 0) / 100;
             }
           }
-          
+
           const total = baseAmount + totalGst;
           const gTotal = total + (Number(entryData.charges?.["Freight>"]) || 0);
           const net = gTotal - totalGst;
-          
-          // Update the document
+
           await updateDoc(docRef, {
             items: updatedItems,
             "gst.totalGst": totalGst,
-            finalTotals: {
-              basicTotal: newTotalBasic,
-              gst: totalGst,
-              total: total,
-              gTotal: gTotal,
-              net: net
-            }
+            finalTotals: { basicTotal: newTotalBasic, gst: totalGst, total, gTotal, net }
           });
-          
+
           alert("Section deleted successfully!");
-          await fetchData(); // Re-fetch data
+          await fetchData();
         }
       } else {
-        // Old format - single item entry, delete entire document
-        const confirmMessage = "Are you sure you want to delete this entry?";
-        if (!window.confirm(confirmMessage)) return;
-        
+        if (!window.confirm("Are you sure you want to delete this entry?")) return;
         await deleteDoc(doc(db, "entries", documentId));
-        
         alert("Entry deleted successfully!");
-        await fetchData(); // Re-fetch data
+        await fetchData();
       }
     } catch (err) {
       console.error(err);
@@ -427,163 +358,98 @@ export default function ViewData() {
 
   const handleEdit = (rowData) => {
     const documentId = rowData.originalFirestoreId || rowData.firestoreId;
-    
-    if (!documentId) {
-      alert("Error: No document ID found for this entry");
-      console.error("Missing document ID in rowData:", rowData);
-      return;
-    }
-    
-    console.log("Navigating to edit page with Document ID:", documentId);
-    try {
-      navigate(`/update-data/${documentId}`);
-    } catch (error) {
-      console.error("Navigation error:", error);
-      alert("Failed to navigate to edit page");
-    }
+    if (!documentId) { alert("Error: No document ID found for this entry"); return; }
+    navigate(`/update-data/${documentId}`);
   };
 
-  // Fields that should NOT be totaled
   const noTotalFields = useMemo(() => new Set([
-    "Unit", "Work Type", "PO", "Received On", "Bill Number", "Bill Date", 
-    "Name of the Supplier", "Supplier Place", "Section", "Size", 
+    "Unit", "Work Type", "PO", "Received On", "Bill Number", "Bill Date",
+    "Name of the Supplier", "Supplier Place", "Section", "Size",
     "Width", "Item Length", "Number of items Supplied", "Item Per Rate"
   ]), []);
 
   const totals = useMemo(() => {
     const t = {};
     fields.forEach(f => (t[f] = 0));
-  
     filteredData.forEach(row => {
       fields.forEach(f => {
         if (!noTotalFields.has(f)) {
           const num = Number(row[f]);
-          if (!isNaN(num)) {
-            t[f] += num;
-          }
+          if (!isNaN(num)) t[f] += num;
         }
       });
     });
-  
     return t;
   }, [filteredData, fields, noTotalFields]);
 
   const totalMT = totals["Quantity in Metric Tons"] || 0;
   const totalBasic = totals["Bill Basic Amount"] || 0;
-  const totalFreight = (totals["Loading Charges"] || 0) + 
-                       (totals["Freight<"] || 0) + 
-                       (totals["Freight>"] || 0) + 
-                       (totals["Others"] || 0);
+  const totalFreight = (totals["Loading Charges"] || 0) +
+    (totals["Freight<"] || 0) +
+    (totals["Freight>"] || 0) +
+    (totals["Others"] || 0);
   const landedCostTotal = totalMT ? (totalBasic + totalFreight) / totalMT : 0;
 
   const exportExcel = () => {
-    if (!filteredData.length) {
-      alert("No data to export");
-      return;
-    }
+    if (!filteredData.length) { alert("No data to export"); return; }
 
     let heading = "";
-    
-    if (unitFilter === "Group" && workTypeFilter === "Group") {
-      heading = "Group Data";
-    } else if (unitFilter === "Group" && workTypeFilter !== "Group") {
-      heading = `Group - MATERIAL PURCHASE - ${workTypeFilter}`;
-    } else if (unitFilter !== "Group" && workTypeFilter === "Group") {
-      heading = `${unitFilter} Data`;
-    } else {
-      heading = `${unitFilter} - MATERIAL PURCHASE - ${workTypeFilter}`;
-    }
+    if (unitFilter === "Group" && workTypeFilter === "Group") heading = "Group Data";
+    else if (unitFilter === "Group" && workTypeFilter !== "Group") heading = `Group - MATERIAL PURCHASE - ${workTypeFilter}`;
+    else if (unitFilter !== "Group" && workTypeFilter === "Group") heading = `${unitFilter} Data`;
+    else heading = `${unitFilter} - MATERIAL PURCHASE - ${workTypeFilter}`;
 
     const wsData = [];
-    
     wsData.push([heading]);
     wsData.push([]);
-
     const headers = ["S.No", ...fields.map(f => fieldLabels[f] || f)];
     wsData.push(headers);
 
     filteredData.forEach((row, idx) => {
-      const rowData = [
+      wsData.push([
         idx + 1,
         ...fields.map(f => {
-          if (noTotalFields.has(f)) {
-            return row[f] ?? "";
-          }
-          
-          if (f === "Quantity in Metric Tons") {
-            return formatQtyRowValue(row[f]);
-          }
-          
+          if (f === "Item Per Rate") return formatRate(row[f]);
+          if (noTotalFields.has(f)) return row[f] ?? "";
+          if (f === "Quantity in Metric Tons") return formatQtyRowValue(row[f]);
           if (row[f] === undefined || row[f] === null) return "";
           const num = Number(row[f]);
-          if (!isNaN(num)) {
-            return Math.round(num).toLocaleString("en-IN");
-          }
+          if (!isNaN(num)) return Math.round(num).toLocaleString("en-IN");
           return row[f].toString();
         })
-      ];
-      wsData.push(rowData);
+      ]);
     });
 
-    const totalRow = [
+    wsData.push([
       "TOTAL",
-      ...fields.map((f) => {
+      ...fields.map(f => {
         if (noTotalFields.has(f)) return "";
-
-        if (f === "Quantity in Metric Tons") {
-          return formatQtyTotal(totalMT);
-        }
-
-        if (f === "Landed Cost") {
-          return Math.round(Number(landedCostTotal || 0)).toLocaleString("en-IN");
-        }
-
+        if (f === "Quantity in Metric Tons") return formatQtyTotal(totalMT);
+        if (f === "Landed Cost") return Math.round(Number(landedCostTotal || 0)).toLocaleString("en-IN");
         const num = Number(totals[f] || 0);
         if (!num) return "";
         return Math.round(num).toLocaleString("en-IN");
       })
-    ];
-    wsData.push(totalRow);
+    ]);
 
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet(wsData);
-
-    const colWidths = headers.map(() => ({ wch: 12 }));
-    ws['!cols'] = colWidths;
-
+    ws['!cols'] = headers.map(() => ({ wch: 12 }));
     ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: headers.length - 1 } }];
-
     XLSX.utils.book_append_sheet(wb, ws, "View Data");
-
-    const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
-    const filename = `viewdata_export_${timestamp}.xlsx`;
-
-    XLSX.writeFile(wb, filename);
+    XLSX.writeFile(wb, `viewdata_export_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.xlsx`);
   };
 
   const exportPDF = () => {
-    if (!filteredData.length) {
-      alert("No data to export");
-      return;
-    }
+    if (!filteredData.length) { alert("No data to export"); return; }
 
-    const pdf = new jsPDF({
-      orientation: "landscape",
-      unit: "pt",
-      format: "a3", 
-    });
+    const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "a3" });
 
     let heading = "";
-    
-    if (unitFilter === "Group" && workTypeFilter === "Group") {
-      heading = "Group Data";
-    } else if (unitFilter === "Group" && workTypeFilter !== "Group") {
-      heading = `Group - MATERIAL PURCHASE - ${workTypeFilter}`;
-    } else if (unitFilter !== "Group" && workTypeFilter === "Group") {
-      heading = `${unitFilter} Data`;
-    } else {
-      heading = `${unitFilter} - MATERIAL PURCHASE - ${workTypeFilter}`;
-    }
+    if (unitFilter === "Group" && workTypeFilter === "Group") heading = "Group Data";
+    else if (unitFilter === "Group" && workTypeFilter !== "Group") heading = `Group - MATERIAL PURCHASE - ${workTypeFilter}`;
+    else if (unitFilter !== "Group" && workTypeFilter === "Group") heading = `${unitFilter} Data`;
+    else heading = `${unitFilter} - MATERIAL PURCHASE - ${workTypeFilter}`;
 
     pdf.setFontSize(16);
     pdf.setFont(undefined, 'bold');
@@ -592,74 +458,41 @@ export default function ViewData() {
 
     const tableColumns = ["S.No", ...fields.map(f => fieldLabels[f] || f)];
 
-    const tableRows = filteredData.map((row, idx) => {
-      return [
-        idx + 1,
-        ...fields.map((f) => {
-          let value = row[f] ?? "";
+    const tableRows = filteredData.map((row, idx) => [
+      idx + 1,
+      ...fields.map(f => {
+        if (f === "Item Per Rate") return formatRate(row[f]);
+        let value = row[f] ?? "";
+        if (noTotalFields.has(f)) return String(value);
+        if (f === "Quantity in Metric Tons") return formatQtyRowValue(value);
+        if (!isNaN(value) && value !== "") return Math.round(Number(value)).toLocaleString("en-IN");
+        return String(value);
+      })
+    ]);
 
-          if (noTotalFields.has(f)) {
-            return String(value);
-          }
-
-          if (f === "Quantity in Metric Tons") {
-            return formatQtyRowValue(value);
-          }
-
-          if (!isNaN(value) && value !== "") {
-            return Math.round(Number(value)).toLocaleString("en-IN");
-          }
-
-          return String(value);
-        })
-      ];
-    });
-
-    const totalRow = [
+    tableRows.push([
       "TOTAL",
-      ...fields.map((f) => {
+      ...fields.map(f => {
         if (noTotalFields.has(f)) return "";
-
-        if (f === "Quantity in Metric Tons") {
-          return formatQtyTotal(totalMT);
-        }
-
-        if (f === "Landed Cost") {
-          return Math.round(Number(landedCostTotal || 0)).toLocaleString("en-IN");
-        }
-
+        if (f === "Quantity in Metric Tons") return formatQtyTotal(totalMT);
+        if (f === "Landed Cost") return Math.round(Number(landedCostTotal || 0)).toLocaleString("en-IN");
         const num = Number(totals[f] || 0);
         if (!num) return "";
         return Math.round(num).toLocaleString("en-IN");
       })
-    ];
-
-    tableRows.push(totalRow);
+    ]);
 
     autoTable(pdf, {
       startY: 60,
       head: [tableColumns],
       body: tableRows,
-      styles: {
-        fontSize: 8,
-        cellPadding: 4,
-        overflow: "linebreak",
-      },
-      headStyles: {
-        fillColor: [230, 230, 230],
-        textColor: 20,
-        fontStyle: "bold",
-      },
-      bodyStyles: {
-        fontStyle: "normal",
-      },
+      styles: { fontSize: 8, cellPadding: 4, overflow: "linebreak" },
+      headStyles: { fillColor: [230, 230, 230], textColor: 20, fontStyle: "bold" },
       didParseCell: function (data) {
-        if (data.row.index === tableRows.length - 1) {
-          data.cell.styles.fontStyle = "bold";
-        }
+        if (data.row.index === tableRows.length - 1) data.cell.styles.fontStyle = "bold";
       },
       margin: { top: 60, bottom: 40 },
-      tableWidth: "auto", 
+      tableWidth: "auto",
       pageBreak: "auto",
       theme: "grid",
     });
@@ -667,10 +500,7 @@ export default function ViewData() {
     pdf.save("ViewData.pdf");
   };
 
-  const clearDateFilters = () => {
-    setFromDate("");
-    setToDate("");
-  };
+  const clearDateFilters = () => { setFromDate(""); setToDate(""); };
 
   return (
     <div className="entry-container">
@@ -686,19 +516,12 @@ export default function ViewData() {
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
-            <button onClick={() => { }} className="btn-search">
-              Search
-            </button>
+            <button onClick={() => {}} className="btn-search">Search</button>
           </div>
 
-          {/* UPDATED: Financial Year Dropdown with format YYYY-YY */}
           <div className="filter-group">
             <label className="filter-label">Financial Year:</label>
-            <select 
-              className="unit-select" 
-              value={financialYear} 
-              onChange={e => setFinancialYear(e.target.value)}
-            >
+            <select className="unit-select" value={financialYear} onChange={e => setFinancialYear(e.target.value)}>
               <option value="2024-25">2024-25</option>
               <option value="2025-26">2025-26</option>
               <option value="2026-27">2026-27</option>
@@ -708,35 +531,23 @@ export default function ViewData() {
 
           <div className="date-Group">
             <label className="filter-label">From:</label>
-            <input
-              type="date"
-              className="date-input"
-              value={fromDate}
-              onChange={e => setFromDate(e.target.value)}
-            />
+            <input type="date" className="date-input" value={fromDate} onChange={e => setFromDate(e.target.value)} />
             <label className="filter-label">To:</label>
-            <input
-              type="date"
-              className="date-input"
-              value={toDate}
-              onChange={e => setToDate(e.target.value)}
-            />
+            <input type="date" className="date-input" value={toDate} onChange={e => setToDate(e.target.value)} />
             {(fromDate || toDate) && (
-              <button onClick={clearDateFilters} className="btn-clear">
-                Clear
-              </button>
+              <button onClick={clearDateFilters} className="btn-clear">Clear</button>
             )}
           </div>
 
           <div className="actions-Group">
             <label className="filter-label">Unit:</label>
             <select className="unit-select" value={unitFilter} onChange={e => setUnitFilter(e.target.value)}>
-              {unitOptions.map((u) => <option key={u} value={u}>{u}</option>)}
+              {unitOptions.map(u => <option key={u} value={u}>{u}</option>)}
             </select>
 
             <label className="filter-label">Work Type:</label>
             <select className="unit-select" value={workTypeFilter} onChange={e => setWorkTypeFilter(e.target.value)}>
-              {workTypeOptions.map((wt) => <option key={wt} value={wt}>{wt}</option>)}
+              {workTypeOptions.map(wt => <option key={wt} value={wt}>{wt}</option>)}
             </select>
 
             <button onClick={exportExcel} className="btn-export" style={{ marginRight: "10px" }}>Export Excel</button>
@@ -750,22 +561,17 @@ export default function ViewData() {
           <thead>
             <tr>
               <th>S.No</th>
-              {fields.map((f) => {
-                const multiLineFields = ["Freight>", "Freight<"];
-                const needsMultiLine = multiLineFields.includes(f);
-                
-                return (
-                  <th 
-                    key={f} 
-                    style={{
-                      ...(f === "PO" ? { minWidth: "50px", maxWidth: "70px" } : {}),
-                      ...(needsMultiLine ? { whiteSpace: "pre-line" } : {})
-                    }}
-                  >
-                    {fieldLabels[f]}
-                  </th>
-                );
-              })}
+              {fields.map(f => (
+                <th
+                  key={f}
+                  style={{
+                    ...(f === "PO" ? { minWidth: "50px", maxWidth: "70px" } : {}),
+                    ...(["Freight>", "Freight<"].includes(f) ? { whiteSpace: "pre-line" } : {})
+                  }}
+                >
+                  {fieldLabels[f]}
+                </th>
+              ))}
               <th>Actions</th>
             </tr>
           </thead>
@@ -775,26 +581,39 @@ export default function ViewData() {
               <tr key={row.firestoreId || idx}>
                 <td>{idx + 1}</td>
 
-                {fields.map((f) => (
-                  <td key={f} style={f === "PO" ? { whiteSpace: "nowrap", minWidth: "50px", maxWidth: "70px" } : { whiteSpace: "nowrap" }}>
-                    {noTotalFields.has(f)
-                      ? (row[f] ?? "")
-                      : f === "Quantity in Metric Tons"
-                        ? formatQtyRowValue(row[f])
-                        : (!isNaN(Number(row[f])) && row[f] !== "" && row[f] !== null && row[f] !== undefined
-                            ? Math.round(Number(row[f])).toLocaleString("en-IN")
-                            : (row[f] ?? ""))
-                    }
-                  </td>
-                ))}
+                {fields.map(f => {
+                  const isNumeric = !noTotalFields.has(f);
+                  let displayValue;
+                  let cellIsNumeric = isNumeric;
+
+                  if (f === "Item Per Rate") {
+                    // Rate: comma formatted, right aligned
+                    displayValue = formatRate(row[f]);
+                    cellIsNumeric = true;
+                  } else if (!isNumeric) {
+                    displayValue = row[f] ?? "";
+                  } else if (f === "Quantity in Metric Tons") {
+                    // MT: always 3 decimal places
+                    displayValue = formatQtyRowValue(row[f]);
+                  } else if (!isNaN(Number(row[f])) && row[f] !== "" && row[f] !== null && row[f] !== undefined) {
+                    displayValue = Math.round(Number(row[f])).toLocaleString("en-IN");
+                  } else {
+                    displayValue = row[f] ?? "";
+                  }
+
+                  return (
+                    <td
+                      key={f}
+                      className={cellIsNumeric ? "numeric-cell" : ""}
+                      style={f === "PO" ? { whiteSpace: "nowrap", minWidth: "50px", maxWidth: "70px" } : { whiteSpace: "nowrap" }}
+                    >
+                      {displayValue}
+                    </td>
+                  );
+                })}
 
                 <td>
-                  <button 
-                    className="edit-btn" 
-                    onClick={() => handleEdit(row)}
-                  >
-                    ✏️
-                  </button>
+                  <button className="edit-btn" onClick={() => handleEdit(row)}>✏️</button>
                   <button className="delete-btn" onClick={() => handleDelete(row)}>🗑️</button>
                 </td>
               </tr>
@@ -802,20 +621,19 @@ export default function ViewData() {
 
             <tr className="total-row">
               <td style={{ fontWeight: "bold" }}>TOTAL</td>
-              {fields.map((f) => {
+              {fields.map(f => {
                 if (noTotalFields.has(f)) return <td key={f}></td>;
 
                 if (f === "Quantity in Metric Tons") {
-                  return <td key={f} style={{ fontWeight: "bold" }}>{formatQtyTotal(totalMT)}</td>;
+                  return <td key={f} className="numeric-cell" style={{ fontWeight: "bold" }}>{formatQtyTotal(totalMT)}</td>;
                 }
-
                 if (f === "Landed Cost") {
-                  return <td key={f} style={{ fontWeight: "bold" }}>{Math.round(Number(landedCostTotal || 0)).toLocaleString("en-IN")}</td>;
+                  return <td key={f} className="numeric-cell" style={{ fontWeight: "bold" }}>{Math.round(Number(landedCostTotal || 0)).toLocaleString("en-IN")}</td>;
                 }
 
                 const num = Number(totals[f] || 0);
-                if (!num) return <td key={f}></td>;
-                return <td key={f} style={{ fontWeight: "bold" }}>{Math.round(num).toLocaleString("en-IN")}</td>;
+                if (!num) return <td key={f} className="numeric-cell"></td>;
+                return <td key={f} className="numeric-cell" style={{ fontWeight: "bold" }}>{Math.round(num).toLocaleString("en-IN")}</td>;
               })}
               <td></td>
             </tr>

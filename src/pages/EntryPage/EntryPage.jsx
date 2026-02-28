@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { HiPlus, HiTrash } from "react-icons/hi2";
 import { db } from "../../firebase";
 import { collection, addDoc, getDocs, query, orderBy, limit, deleteDoc, doc } from "firebase/firestore";
@@ -7,13 +7,20 @@ import "./EntryPage.css";
 export default function EntryPage() {
   const [loading, setLoading] = useState(false);
   const [entryNo, setEntryNo] = useState(1);
-  const [financialYear, setFinancialYear] = useState("2025-26"); // UPDATED: Financial Year with default 2025-26
+  const [financialYear, setFinancialYear] = useState("2025-26");
   const [unit, setUnit] = useState("");
   const [workType, setWorkType] = useState("");
   const [headerData, setHeaderData] = useState({
     PO: "", "Received On": "", "Bill Number": "", "Bill Date": "",
     "Name of the Supplier": "", "Supplier Place": "",
   });
+
+  // Supplier combobox state
+  const [supplierInputText, setSupplierInputText] = useState("");
+  const [supplierSuggestions, setSupplierSuggestions] = useState([]);
+  const [showSupplierSuggestions, setShowSupplierSuggestions] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1); // ← NEW
+  const supplierWrapperRef = useRef(null);
 
   const [items, setItems] = useState([{
     id: Date.now(), Section: "", Size: "", Width: "", "Item Length": "",
@@ -46,14 +53,23 @@ export default function EntryPage() {
   const [customInputs, setCustomInputs] = useState({});
   const [manualEdits, setManualEdits] = useState({});
 
-  // Function to remove duplicates from arrays
+  // Close supplier suggestions on outside click
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (supplierWrapperRef.current && !supplierWrapperRef.current.contains(e.target)) {
+        setShowSupplierSuggestions(false);
+        setHighlightedIndex(-1);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   const removeDuplicates = (arr) => {
     const seen = new Map();
     return arr.filter(item => {
       const lowerValue = item.value.toLowerCase();
-      if (seen.has(lowerValue)) {
-        return false;
-      }
+      if (seen.has(lowerValue)) return false;
       seen.set(lowerValue, true);
       return true;
     });
@@ -61,7 +77,6 @@ export default function EntryPage() {
 
   const cleanupOrphanedRelations = async (sections, sizes, widths, lengths, suppliers, places, sectionSizeRels, sizeWidthRels, widthLengthRels, supplierPlaceRels) => {
     try {
-      console.log("🧹 Checking for orphaned relationships...");
       const sectionIds = new Set(sections.map(s => s.id));
       const sizeIds = new Set(sizes.map(s => s.id));
       const widthIds = new Set(widths.map(w => w.id));
@@ -72,36 +87,24 @@ export default function EntryPage() {
 
       for (const rel of sectionSizeRels) {
         if (!sectionIds.has(rel.sectionId) || !sizeIds.has(rel.sizeId)) {
-          console.warn(`🗑️ Deleting orphaned sectionSizeRelation`);
-          await deleteDoc(doc(db, "sectionSizeRelations", rel.id));
-          orphanedCount++;
+          await deleteDoc(doc(db, "sectionSizeRelations", rel.id)); orphanedCount++;
         }
       }
-
       for (const rel of sizeWidthRels) {
         if (!sectionIds.has(rel.sectionId) || !sizeIds.has(rel.sizeId) || !widthIds.has(rel.widthId)) {
-          console.warn(`🗑️ Deleting orphaned sizeWidthRelation`);
-          await deleteDoc(doc(db, "sizeWidthRelations", rel.id));
-          orphanedCount++;
+          await deleteDoc(doc(db, "sizeWidthRelations", rel.id)); orphanedCount++;
         }
       }
-
       for (const rel of widthLengthRels) {
         if (!sectionIds.has(rel.sectionId) || !sizeIds.has(rel.sizeId) || (rel.widthId !== null && !widthIds.has(rel.widthId)) || !lengthIds.has(rel.lengthId)) {
-          console.warn(`🗑️ Deleting orphaned widthLengthRelation`);
-          await deleteDoc(doc(db, "widthLengthRelations", rel.id));
-          orphanedCount++;
+          await deleteDoc(doc(db, "widthLengthRelations", rel.id)); orphanedCount++;
         }
       }
-
       for (const rel of supplierPlaceRels) {
         if (!supplierIds.has(rel.supplierId) || !placeIds.has(rel.placeId)) {
-          console.warn(`🗑️ Deleting orphaned supplierPlaceRelation`);
-          await deleteDoc(doc(db, "supplierPlaceRelations", rel.id));
-          orphanedCount++;
+          await deleteDoc(doc(db, "supplierPlaceRelations", rel.id)); orphanedCount++;
         }
       }
-
       console.log(orphanedCount > 0 ? `✅ Cleaned up ${orphanedCount} orphaned relationship(s)` : "✅ No orphaned relationships found");
     } catch (error) {
       console.error("❌ Error cleaning up orphaned relationships:", error);
@@ -110,61 +113,26 @@ export default function EntryPage() {
 
   const fetchMasterData = async () => {
     try {
-      console.log("🔄 Starting to fetch dropdown options from Firebase...");
-      
       const sectionsSnap = await getDocs(collection(db, "sections"));
       const sizesSnap = await getDocs(collection(db, "sizes"));
       const widthsSnap = await getDocs(collection(db, "widths"));
       const itemLengthsSnap = await getDocs(collection(db, "itemLengths"));
       const suppliersSnap = await getDocs(collection(db, "suppliers"));
       const placesSnap = await getDocs(collection(db, "places"));
-      
-      const sections = sectionsSnap.docs.map(doc => ({
-        id: doc.id, value: doc.data().value?.trim() || "", isManual: true
-      })).filter(item => item.value).sort((a, b) => a.value.localeCompare(b.value));
 
-      const sizes = sizesSnap.docs.map(doc => ({
-        id: doc.id, value: doc.data().value?.trim() || "", isManual: true
-      })).filter(item => item.value).sort((a, b) => a.value.localeCompare(b.value));
+      const sections = sectionsSnap.docs.map(d => ({ id: d.id, value: d.data().value?.trim() || "", isManual: true })).filter(i => i.value).sort((a, b) => a.value.localeCompare(b.value));
+      const sizes = sizesSnap.docs.map(d => ({ id: d.id, value: d.data().value?.trim() || "", isManual: true })).filter(i => i.value).sort((a, b) => a.value.localeCompare(b.value));
+      const widths = removeDuplicates(widthsSnap.docs.map(d => ({ id: d.id, value: d.data().value?.trim() || "", isManual: true })).filter(i => i.value).sort((a, b) => a.value.localeCompare(b.value)));
+      const itemLengths = removeDuplicates(itemLengthsSnap.docs.map(d => ({ id: d.id, value: d.data().value?.trim() || "", isManual: true })).filter(i => i.value).sort((a, b) => a.value.localeCompare(b.value)));
+      const suppliers = suppliersSnap.docs.map(d => ({ id: d.id, value: d.data().value?.trim() || "", isManual: true })).filter(i => i.value).sort((a, b) => a.value.localeCompare(b.value));
+      const places = placesSnap.docs.map(d => ({ id: d.id, value: d.data().value?.trim() || "", isManual: true })).filter(i => i.value).sort((a, b) => a.value.localeCompare(b.value));
 
-      // Remove duplicates from widths
-      const widthsRaw = widthsSnap.docs.map(doc => ({
-        id: doc.id, value: doc.data().value?.trim() || "", isManual: true
-      })).filter(item => item.value).sort((a, b) => a.value.localeCompare(b.value));
-      const widths = removeDuplicates(widthsRaw);
-      console.log(`📊 Widths: ${widthsRaw.length} total, ${widths.length} unique`);
-
-      // Remove duplicates from item lengths
-      const itemLengthsRaw = itemLengthsSnap.docs.map(doc => ({
-        id: doc.id, value: doc.data().value?.trim() || "", isManual: true
-      })).filter(item => item.value).sort((a, b) => a.value.localeCompare(b.value));
-      const itemLengths = removeDuplicates(itemLengthsRaw);
-      console.log(`📊 Item Lengths: ${itemLengthsRaw.length} total, ${itemLengths.length} unique`);
-
-      const suppliers = suppliersSnap.docs.map(doc => ({
-        id: doc.id, value: doc.data().value?.trim() || "", isManual: true
-      })).filter(item => item.value).sort((a, b) => a.value.localeCompare(b.value));
-
-      const places = placesSnap.docs.map(doc => ({
-        id: doc.id, value: doc.data().value?.trim() || "", isManual: true
-      })).filter(item => item.value).sort((a, b) => a.value.localeCompare(b.value));
-
-      const sectionSizeSnap = await getDocs(collection(db, "sectionSizeRelations"));
-      const sizeWidthSnap = await getDocs(collection(db, "sizeWidthRelations"));
-      const widthLengthSnap = await getDocs(collection(db, "widthLengthRelations"));
-      const supplierPlaceSnap = await getDocs(collection(db, "supplierPlaceRelations"));
-
-      const sectionSizeRels = sectionSizeSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      const sizeWidthRels = sizeWidthSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      const widthLengthRels = widthLengthSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      const supplierPlaceRels = supplierPlaceSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const sectionSizeRels = (await getDocs(collection(db, "sectionSizeRelations"))).docs.map(d => ({ id: d.id, ...d.data() }));
+      const sizeWidthRels = (await getDocs(collection(db, "sizeWidthRelations"))).docs.map(d => ({ id: d.id, ...d.data() }));
+      const widthLengthRels = (await getDocs(collection(db, "widthLengthRelations"))).docs.map(d => ({ id: d.id, ...d.data() }));
+      const supplierPlaceRels = (await getDocs(collection(db, "supplierPlaceRelations"))).docs.map(d => ({ id: d.id, ...d.data() }));
 
       await cleanupOrphanedRelations(sections, sizes, widths, itemLengths, suppliers, places, sectionSizeRels, sizeWidthRels, widthLengthRels, supplierPlaceRels);
-
-      const cleanedSectionSizeSnap = await getDocs(collection(db, "sectionSizeRelations"));
-      const cleanedSizeWidthSnap = await getDocs(collection(db, "sizeWidthRelations"));
-      const cleanedWidthLengthSnap = await getDocs(collection(db, "widthLengthRelations"));
-      const cleanedSupplierPlaceSnap = await getDocs(collection(db, "supplierPlaceRelations"));
 
       setAllSections(sections);
       setAllSizes(sizes);
@@ -172,15 +140,14 @@ export default function EntryPage() {
       setAllItemLengths(itemLengths);
       setAllSuppliers(suppliers);
       setAllPlaces(places);
+      setSectionSizeRelations((await getDocs(collection(db, "sectionSizeRelations"))).docs.map(d => ({ id: d.id, ...d.data() })));
+      setSizeWidthRelations((await getDocs(collection(db, "sizeWidthRelations"))).docs.map(d => ({ id: d.id, ...d.data() })));
+      setWidthLengthRelations((await getDocs(collection(db, "widthLengthRelations"))).docs.map(d => ({ id: d.id, ...d.data() })));
+      setSupplierPlaceRelations((await getDocs(collection(db, "supplierPlaceRelations"))).docs.map(d => ({ id: d.id, ...d.data() })));
 
-      setSectionSizeRelations(cleanedSectionSizeSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      setSizeWidthRelations(cleanedSizeWidthSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      setWidthLengthRelations(cleanedWidthLengthSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      setSupplierPlaceRelations(cleanedSupplierPlaceSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      
-      console.log("✅ Dropdown options and relationships fetched successfully!");
+      console.log("✅ Data fetched successfully!");
     } catch (error) {
-      console.error("❌ Error fetching dropdown options:", error);
+      console.error("❌ Error fetching data:", error);
       alert("Error fetching data from Firebase");
     }
   };
@@ -192,12 +159,80 @@ export default function EntryPage() {
         const q = query(collection(db, "entries"), orderBy("No", "desc"), limit(1));
         const snap = await getDocs(q);
         if (!snap.empty) setEntryNo(snap.docs[0].data().No + 1);
-      } catch (e) {
-        console.error("Error fetching entry number:", e);
-      }
+      } catch (e) { console.error("Error fetching entry number:", e); }
     };
     fetchLastNo();
   }, []);
+
+  // ── Supplier combobox logic ────────────────────────────────────────────────
+
+  // Core: set supplier + auto-fill place if only 1 linked
+  const applySupplierSelection = (value) => {
+    if (!value) {
+      setHeaderData(prev => ({ ...prev, "Name of the Supplier": "", "Supplier Place": "" }));
+      return;
+    }
+    const supplierObj = allSuppliers.find(s => s.value === value);
+    if (supplierObj) {
+      const relatedPlaceIds = supplierPlaceRelations.filter(r => r.supplierId === supplierObj.id).map(r => r.placeId);
+      const relatedPlaces = allPlaces.filter(p => relatedPlaceIds.includes(p.id));
+      setHeaderData(prev => ({
+        ...prev,
+        "Name of the Supplier": value,
+        "Supplier Place": relatedPlaces.length === 1 ? relatedPlaces[0].value : ""
+      }));
+    } else {
+      setHeaderData(prev => ({ ...prev, "Name of the Supplier": value, "Supplier Place": "" }));
+    }
+  };
+
+  const handleSupplierInputChange = (text) => {
+    setSupplierInputText(text);
+    setHighlightedIndex(-1); // ← RESET on every keystroke
+    if (!text.trim()) {
+      setSupplierSuggestions([]);
+      setShowSupplierSuggestions(false);
+      applySupplierSelection("");
+      return;
+    }
+    const filtered = allSuppliers.filter(s => s.value.toLowerCase().includes(text.toLowerCase()));
+    setSupplierSuggestions(filtered);
+    setShowSupplierSuggestions(true);
+    // If exact match, apply immediately
+    const exact = allSuppliers.find(s => s.value.toLowerCase() === text.toLowerCase());
+    if (exact) applySupplierSelection(exact.value);
+    else setHeaderData(prev => ({ ...prev, "Name of the Supplier": "", "Supplier Place": "" }));
+  };
+
+  const handleSupplierSuggestionClick = (value) => {
+    setSupplierInputText(value);
+    setShowSupplierSuggestions(false);
+    setSupplierSuggestions([]);
+    setHighlightedIndex(-1);
+    applySupplierSelection(value);
+  };
+
+  const handleSupplierDropdownChange = (value) => {
+    setSupplierInputText(value);
+    setShowSupplierSuggestions(false);
+    setHighlightedIndex(-1);
+    applySupplierSelection(value);
+  };
+
+  const clearSupplier = () => {
+    setSupplierInputText("");
+    setSupplierSuggestions([]);
+    setShowSupplierSuggestions(false);
+    setHighlightedIndex(-1);
+    applySupplierSelection("");
+  };
+
+  // Sync text box if headerData changes externally
+  useEffect(() => {
+    setSupplierInputText(headerData["Name of the Supplier"] || "");
+  }, [headerData["Name of the Supplier"]]);
+
+  // ─────────────────────────────────────────────────────────────────────────
 
   const getAvailableSizes = (selectedSection) => {
     if (!selectedSection) return [];
@@ -205,14 +240,6 @@ export default function EntryPage() {
     if (!sectionObj) return [];
     const relatedSizeIds = sectionSizeRelations.filter(rel => rel.sectionId === sectionObj.id).map(rel => rel.sizeId);
     return allSizes.filter(size => relatedSizeIds.includes(size.id));
-  };
-  
-  const getAvailableWidths = (selectedSection, selectedSize) => {
-    return allWidths;
-  };
-  
-  const getAvailableLengths = (selectedSection, selectedSize, selectedWidth) => {
-    return allItemLengths;
   };
 
   const getAvailablePlaces = (selectedSupplier) => {
@@ -224,13 +251,10 @@ export default function EntryPage() {
   };
 
   const handleAddCustomValue = async (itemId, type, value) => {
-    if (!value.trim()) {
-      alert("Please enter a value!");
-      return;
-    }
+    if (!value.trim()) { alert("Please enter a value!"); return; }
     const trimmedValue = value.trim();
     setCustomInputs(prev => ({ ...prev, [`${itemId}-${type}`]: { show: prev[`${itemId}-${type}`]?.show || false, value: "" } }));
-    
+
     let collectionName = "", currentOptions = [], setOptions = null;
     if (type === "section") { collectionName = "sections"; currentOptions = allSections; setOptions = setAllSections; }
     else if (type === "size") { collectionName = "sizes"; currentOptions = allSizes; setOptions = setAllSizes; }
@@ -244,120 +268,108 @@ export default function EntryPage() {
       if (currentSupplier) {
         const supplierObj = allSuppliers.find(s => s.value === currentSupplier);
         if (supplierObj) {
-          const existingRelation = supplierPlaceRelations.find(rel => 
+          const existingRelation = supplierPlaceRelations.find(rel =>
             rel.supplierId === supplierObj.id && allPlaces.find(p => p.id === rel.placeId && p.value.toLowerCase() === trimmedValue.toLowerCase())
           );
           if (existingRelation) {
             const existingPlace = allPlaces.find(p => p.id === existingRelation.placeId);
-            alert(`"${trimmedValue}" already exists for this supplier. Using the existing entry.`);
+            alert(`"${trimmedValue}" already exists for this supplier.`);
             setHeaderData(prev => ({ ...prev, "Supplier Place": existingPlace.value }));
             return;
           }
           const existingPlace = allPlaces.find(opt => opt.value.toLowerCase() === trimmedValue.toLowerCase());
           if (existingPlace) {
             await addDoc(collection(db, "supplierPlaceRelations"), { supplierId: supplierObj.id, placeId: existingPlace.id });
-            const supplierPlaceSnap = await getDocs(collection(db, "supplierPlaceRelations"));
-            setSupplierPlaceRelations(supplierPlaceSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+            setSupplierPlaceRelations((await getDocs(collection(db, "supplierPlaceRelations"))).docs.map(d => ({ id: d.id, ...d.data() })));
             setHeaderData(prev => ({ ...prev, "Supplier Place": existingPlace.value }));
-            alert(`Place "${trimmedValue}" linked to this supplier successfully!`);
+            alert(`Place "${trimmedValue}" linked to this supplier!`);
             return;
           }
         }
       }
-    } 
-    else if (type === "size" && itemId !== "header") {
+    } else if (type === "size" && itemId !== "header") {
       const item = items.find(i => i.id === itemId);
       if (item && item.Section) {
         const sectionObj = allSections.find(s => s.value === item.Section);
         if (sectionObj) {
-          const existingRelation = sectionSizeRelations.find(rel => 
+          const existingRelation = sectionSizeRelations.find(rel =>
             rel.sectionId === sectionObj.id && allSizes.find(s => s.id === rel.sizeId && s.value.toLowerCase() === trimmedValue.toLowerCase())
           );
           if (existingRelation) {
             const existingSize = allSizes.find(s => s.id === existingRelation.sizeId);
-            alert(`"${trimmedValue}" already exists for this section. Using the existing entry.`);
+            alert(`"${trimmedValue}" already exists for this section.`);
             setItems(items.map(i => i.id === itemId ? { ...i, Size: existingSize.value } : i));
             return;
           }
           const existingSize = allSizes.find(opt => opt.value.toLowerCase() === trimmedValue.toLowerCase());
           if (existingSize) {
             await addDoc(collection(db, "sectionSizeRelations"), { sectionId: sectionObj.id, sizeId: existingSize.id });
-            const sectionSizeSnap = await getDocs(collection(db, "sectionSizeRelations"));
-            setSectionSizeRelations(sectionSizeSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+            setSectionSizeRelations((await getDocs(collection(db, "sectionSizeRelations"))).docs.map(d => ({ id: d.id, ...d.data() })));
             setItems(items.map(i => i.id === itemId ? { ...i, Size: existingSize.value } : i));
-            alert(`Size "${trimmedValue}" linked to this section successfully!`);
+            alert(`Size "${trimmedValue}" linked!`);
             return;
           }
         }
       }
-    }
-    else if (type === "width" && itemId !== "header") {
+    } else if (type === "width" && itemId !== "header") {
       const item = items.find(i => i.id === itemId);
       if (item && item.Section && item.Size) {
         const sectionObj = allSections.find(s => s.value === item.Section);
         const sizeObj = allSizes.find(s => s.value === item.Size);
         if (sectionObj && sizeObj) {
-          const existingRelation = sizeWidthRelations.find(rel => 
+          const existingRelation = sizeWidthRelations.find(rel =>
             rel.sectionId === sectionObj.id && rel.sizeId === sizeObj.id && allWidths.find(w => w.id === rel.widthId && w.value.toLowerCase() === trimmedValue.toLowerCase())
           );
           if (existingRelation) {
             const existingWidth = allWidths.find(w => w.id === existingRelation.widthId);
-            alert(`"${trimmedValue}" already exists for this section and size. Using the existing entry.`);
+            alert(`"${trimmedValue}" already exists for this section and size.`);
             setItems(items.map(i => i.id === itemId ? { ...i, Width: existingWidth.value } : i));
             return;
           }
           const existingWidth = allWidths.find(opt => opt.value.toLowerCase() === trimmedValue.toLowerCase());
           if (existingWidth) {
             await addDoc(collection(db, "sizeWidthRelations"), { sectionId: sectionObj.id, sizeId: sizeObj.id, widthId: existingWidth.id });
-            const sizeWidthSnap = await getDocs(collection(db, "sizeWidthRelations"));
-            setSizeWidthRelations(sizeWidthSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+            setSizeWidthRelations((await getDocs(collection(db, "sizeWidthRelations"))).docs.map(d => ({ id: d.id, ...d.data() })));
             setItems(items.map(i => i.id === itemId ? { ...i, Width: existingWidth.value } : i));
-            alert(`Width "${trimmedValue}" linked to this section and size successfully!`);
+            alert(`Width "${trimmedValue}" linked!`);
             return;
           }
         }
       }
-    }
-    else if (type === "itemLength" && itemId !== "header") {
+    } else if (type === "itemLength" && itemId !== "header") {
       const item = items.find(i => i.id === itemId);
       if (item && item.Section && item.Size) {
         const sectionObj = allSections.find(s => s.value === item.Section);
         const sizeObj = allSizes.find(s => s.value === item.Size);
         const widthObj = item.Width ? allWidths.find(w => w.value === item.Width) : null;
         if (sectionObj && sizeObj) {
-          const existingRelation = widthLengthRelations.find(rel => 
-            rel.sectionId === sectionObj.id && rel.sizeId === sizeObj.id && (widthObj ? rel.widthId === widthObj.id : rel.widthId === null) &&
+          const existingRelation = widthLengthRelations.find(rel =>
+            rel.sectionId === sectionObj.id && rel.sizeId === sizeObj.id &&
+            (widthObj ? rel.widthId === widthObj.id : rel.widthId === null) &&
             allItemLengths.find(l => l.id === rel.lengthId && l.value.toLowerCase() === trimmedValue.toLowerCase())
           );
           if (existingRelation) {
             const existingLength = allItemLengths.find(l => l.id === existingRelation.lengthId);
-            alert(`"${trimmedValue}" already exists for this combination. Using the existing entry.`);
+            alert(`"${trimmedValue}" already exists for this combination.`);
             setItems(items.map(i => i.id === itemId ? { ...i, "Item Length": existingLength.value } : i));
             return;
           }
           const existingLength = allItemLengths.find(opt => opt.value.toLowerCase() === trimmedValue.toLowerCase());
           if (existingLength) {
-            await addDoc(collection(db, "widthLengthRelations"), {
-              sectionId: sectionObj.id, sizeId: sizeObj.id, widthId: widthObj ? widthObj.id : null, lengthId: existingLength.id
-            });
-            const widthLengthSnap = await getDocs(collection(db, "widthLengthRelations"));
-            setWidthLengthRelations(widthLengthSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+            await addDoc(collection(db, "widthLengthRelations"), { sectionId: sectionObj.id, sizeId: sizeObj.id, widthId: widthObj ? widthObj.id : null, lengthId: existingLength.id });
+            setWidthLengthRelations((await getDocs(collection(db, "widthLengthRelations"))).docs.map(d => ({ id: d.id, ...d.data() })));
             setItems(items.map(i => i.id === itemId ? { ...i, "Item Length": existingLength.value } : i));
-            alert(`Length "${trimmedValue}" linked successfully!`);
+            alert(`Length "${trimmedValue}" linked!`);
             return;
           }
         }
       }
-    }
-    else if (type === "supplier" || type === "section") {
+    } else if (type === "supplier" || type === "section") {
       const existingItem = currentOptions.find(opt => opt.value.toLowerCase() === trimmedValue.toLowerCase());
       if (existingItem) {
-        alert(`"${trimmedValue}" already exists. Using the existing entry.`);
-        if (type === "supplier") {
-          setHeaderData(prev => ({ ...prev, "Name of the Supplier": existingItem.value }));
-        } else if (type === "section") {
-          setItems(items.map(item => item.id === itemId ? { ...item, Section: existingItem.value } : item));
-        }
+        alert(`"${trimmedValue}" already exists.`);
+        if (type === "supplier") { setSupplierInputText(existingItem.value); applySupplierSelection(existingItem.value); }
+        else if (type === "section") setItems(items.map(item => item.id === itemId ? { ...item, Section: existingItem.value } : item));
         return;
       }
     }
@@ -369,52 +381,42 @@ export default function EntryPage() {
       setOptions(updatedOptions);
 
       if (type === "place" && itemId === "header") {
-        const currentSupplier = headerData["Name of the Supplier"];
-        if (currentSupplier) {
-          const supplierObj = allSuppliers.find(s => s.value === currentSupplier);
-          if (supplierObj) {
-            await addDoc(collection(db, "supplierPlaceRelations"), { supplierId: supplierObj.id, placeId: docRef.id });
-            const supplierPlaceSnap = await getDocs(collection(db, "supplierPlaceRelations"));
-            setSupplierPlaceRelations(supplierPlaceSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-          }
+        const supplierObj = allSuppliers.find(s => s.value === headerData["Name of the Supplier"]);
+        if (supplierObj) {
+          await addDoc(collection(db, "supplierPlaceRelations"), { supplierId: supplierObj.id, placeId: docRef.id });
+          setSupplierPlaceRelations((await getDocs(collection(db, "supplierPlaceRelations"))).docs.map(d => ({ id: d.id, ...d.data() })));
         }
       } else if (type === "size" && itemId !== "header") {
         const item = items.find(i => i.id === itemId);
-        if (item && item.Section) {
+        if (item?.Section) {
           const sectionObj = allSections.find(s => s.value === item.Section);
           if (sectionObj) {
             await addDoc(collection(db, "sectionSizeRelations"), { sectionId: sectionObj.id, sizeId: docRef.id });
-            const sectionSizeSnap = await getDocs(collection(db, "sectionSizeRelations"));
-            setSectionSizeRelations(sectionSizeSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+            setSectionSizeRelations((await getDocs(collection(db, "sectionSizeRelations"))).docs.map(d => ({ id: d.id, ...d.data() })));
           }
         }
       } else if (type === "width" && itemId !== "header") {
         const item = items.find(i => i.id === itemId);
-        if (item && item.Section && item.Size) {
+        if (item?.Section && item?.Size) {
           const sectionObj = allSections.find(s => s.value === item.Section);
           const sizeObj = allSizes.find(s => s.value === item.Size);
           if (sectionObj && sizeObj) {
             await addDoc(collection(db, "sizeWidthRelations"), { sectionId: sectionObj.id, sizeId: sizeObj.id, widthId: docRef.id });
-            const sizeWidthSnap = await getDocs(collection(db, "sizeWidthRelations"));
-            setSizeWidthRelations(sizeWidthSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+            setSizeWidthRelations((await getDocs(collection(db, "sizeWidthRelations"))).docs.map(d => ({ id: d.id, ...d.data() })));
           }
         }
       } else if (type === "itemLength" && itemId !== "header") {
         const item = items.find(i => i.id === itemId);
-        if (item && item.Section && item.Size) {
+        if (item?.Section && item?.Size) {
           const sectionObj = allSections.find(s => s.value === item.Section);
           const sizeObj = allSizes.find(s => s.value === item.Size);
           const widthObj = item.Width ? allWidths.find(w => w.value === item.Width) : null;
           if (sectionObj && sizeObj) {
-            await addDoc(collection(db, "widthLengthRelations"), {
-              sectionId: sectionObj.id, sizeId: sizeObj.id, widthId: widthObj ? widthObj.id : null, lengthId: docRef.id
-            });
-            const widthLengthSnap = await getDocs(collection(db, "widthLengthRelations"));
-            setWidthLengthRelations(widthLengthSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+            await addDoc(collection(db, "widthLengthRelations"), { sectionId: sectionObj.id, sizeId: sizeObj.id, widthId: widthObj ? widthObj.id : null, lengthId: docRef.id });
+            setWidthLengthRelations((await getDocs(collection(db, "widthLengthRelations"))).docs.map(d => ({ id: d.id, ...d.data() })));
           }
         }
       }
-
       alert(`${type.charAt(0).toUpperCase() + type.slice(1)} "${trimmedValue}" added successfully!`);
     } catch (error) {
       console.error(`Error adding ${type}:`, error);
@@ -423,12 +425,8 @@ export default function EntryPage() {
   };
 
   const handleDeleteValue = async (type, optionToDelete) => {
-    if (!optionToDelete.isManual) {
-      alert("Only manually created values can be deleted!");
-      return;
-    }
-    const confirmDelete = window.confirm(`Are you sure you want to delete "${optionToDelete.value}"?`);
-    if (!confirmDelete) return;
+    if (!optionToDelete.isManual) { alert("Only manually created values can be deleted!"); return; }
+    if (!window.confirm(`Are you sure you want to delete "${optionToDelete.value}"?`)) return;
 
     let collectionName = "", fieldName = "";
     if (type === "section") { collectionName = "sections"; fieldName = "Section"; }
@@ -439,27 +437,20 @@ export default function EntryPage() {
     else if (type === "place") { collectionName = "places"; fieldName = "Supplier Place"; }
 
     try {
-      console.log(`🗑️ Deleting ${type}: ${optionToDelete.value} (ID: ${optionToDelete.id})`);
       await deleteDoc(doc(db, collectionName, optionToDelete.id));
-      console.log(`✅ Successfully deleted from Firestore`);
-
       if (type === "supplier" || type === "place") {
         if (headerData[fieldName] === optionToDelete.value) {
           setHeaderData(prev => ({ ...prev, [fieldName]: "" }));
+          if (type === "supplier") setSupplierInputText("");
         }
       } else {
         setItems(prevItems => prevItems.map(item => {
-          if (item[fieldName] === optionToDelete.value) {
-            return { ...item, [fieldName]: "" };
-          }
+          if (item[fieldName] === optionToDelete.value) return { ...item, [fieldName]: "" };
           return item;
         }));
       }
-
-      console.log(`🔄 Re-fetching all master data...`);
       await fetchMasterData();
-      console.log(`✅ Data re-fetched successfully`);
-      alert(`${type.charAt(0).toUpperCase() + type.slice(1)} "${optionToDelete.value}" deleted successfully!`);
+      alert(`${type.charAt(0).toUpperCase() + type.slice(1)} "${optionToDelete.value}" deleted!`);
     } catch (error) {
       console.error(`❌ Error deleting ${type}:`, error);
       alert(`Error deleting ${type}. Please try again.`);
@@ -489,25 +480,19 @@ export default function EntryPage() {
     const item = items.find(i => i.id === itemId);
     if (!item) return { loading: 0, freightLess: 0, freightGreater: 0 };
     const itemMT = parseNum(item["Quantity in Metric Tons"]);
-    const totalLoading = parseNum(charges["Loading Charges"]);
-    const totalFreightLess = parseNum(charges["Freight<"]);
-    const totalFreightGreater = parseNum(charges["Freight>"]);
     return {
-      loading: (totalLoading / totalMT) * itemMT,
-      freightLess: (totalFreightLess / totalMT) * itemMT,
-      freightGreater: (totalFreightGreater / totalMT) * itemMT
+      loading: (parseNum(charges["Loading Charges"]) / totalMT) * itemMT,
+      freightLess: (parseNum(charges["Freight<"]) / totalMT) * itemMT,
+      freightGreater: (parseNum(charges["Freight>"]) / totalMT) * itemMT
     };
   };
 
   const calcBill = () => {
     const basicTotal = items.reduce((sum, item) => sum + parseNum(item["Bill Basic Amount"]), 0);
     const baseAmount = basicTotal + parseNum(charges["Loading Charges"]) + parseNum(charges["Freight<"]) + parseNum(charges.Others);
-    let gst = 0;
-    if (gstType === "AP") {
-      gst = baseAmount * (parseNum(cgstPercentage) + parseNum(sgstPercentage)) / 100;
-    } else {
-      gst = baseAmount * (parseNum(igstPercentage) / 100);
-    }
+    const gst = gstType === "AP"
+      ? baseAmount * (parseNum(cgstPercentage) + parseNum(sgstPercentage)) / 100
+      : baseAmount * (parseNum(igstPercentage) / 100);
     const total = baseAmount + gst;
     const gTotal = total + parseNum(charges["Freight>"]);
     const net = gTotal - gst;
@@ -552,31 +537,22 @@ export default function EntryPage() {
       return item;
     }));
   };
-  
+
   const handleHeaderChange = (key, value) => {
     if (["Received On", "Bill Date"].includes(key)) {
       setHeaderData(prev => ({ ...prev, [key]: formatDateForDisplay(value) }));
-    } else {
-      setHeaderData(prev => ({ ...prev, [key]: value }));
+      return;
     }
-    if (key === "Name of the Supplier") {
-      setHeaderData(prev => ({ ...prev, "Supplier Place": "" }));
-    }
+    setHeaderData(prev => ({ ...prev, [key]: value }));
   };
 
   const handleSubmit = async () => {
-    // Validation for financial year
     if (!financialYear) return alert("Please select Financial Year");
     if (!unit || !workType) return alert("Please select Unit and Work Type");
-    
     setLoading(true);
     try {
       const docData = {
-        ...headerData, 
-        No: entryNo, 
-        FinancialYear: financialYear, // Save financial year
-        Unit: unit, 
-        "Work Type": workType,
+        ...headerData, No: entryNo, FinancialYear: financialYear, Unit: unit, "Work Type": workType,
         items: items.map(i => ({
           ...i,
           "Bill Basic Amount": parseNum(i["Bill Basic Amount"]),
@@ -593,7 +569,7 @@ export default function EntryPage() {
       await addDoc(collection(db, "entries"), docData);
       alert("Bill Saved Successfully!");
       window.location.reload();
-    } catch (e) { console.error(e); alert("Save Error"); } 
+    } catch (e) { console.error(e); alert("Save Error"); }
     finally { setLoading(false); }
   };
 
@@ -630,7 +606,10 @@ export default function EntryPage() {
           {customState.show && (
             <div className="custom-input-section">
               <div className="custom-input-row">
-                <input type="text" className="custom-input-field" value={customState.value}
+                <input
+                  type="text"
+                  className="custom-input-field"
+                  value={customState.value}
                   onChange={e => setCustomInputValue(itemId, type, e.target.value)}
                   placeholder={`Enter new ${label.toLowerCase()}`}
                   onKeyPress={e => { if (e.key === 'Enter') handleAddCustomValue(itemId, type, customState.value); }}
@@ -692,16 +671,11 @@ export default function EntryPage() {
   return (
     <div className="entry-container">
       <h1 className="entry-heading">Entry Page</h1>
-      
-      {/* UPDATED: Financial Year dropdown with format YYYY-YY */}
+
       <div className="entry-top-inputs">
         <div className="unit-dropdown-wrapper">
           <label className="unit-dropdown-label">Financial Year</label>
-          <select 
-            className="unit-dropdown" 
-            value={financialYear} 
-            onChange={e => setFinancialYear(e.target.value)}
-          >
+          <select className="unit-dropdown" value={financialYear} onChange={e => setFinancialYear(e.target.value)}>
             <option value="2024-25">2024-25</option>
             <option value="2025-26">2025-26</option>
             <option value="2026-27">2026-27</option>
@@ -728,32 +702,150 @@ export default function EntryPage() {
 
       <div className="form-wrapper">
         <div className="entry-grid">
+
           <div className="entry-input">
             <label>PO</label>
             <input type="text" value={headerData.PO} onChange={e => handleHeaderChange("PO", e.target.value)} />
           </div>
+
           <div className="entry-input">
             <label>Received On</label>
-            <input type="date" value={formatDateForInput(headerData["Received On"])} onChange={e => handleHeaderChange("Received On", e.target.value)} />
+            <input
+              type="date"
+              value={formatDateForInput(headerData["Received On"])}
+              min="1000-01-01"
+              max="9999-12-31"
+              onChange={e => handleHeaderChange("Received On", e.target.value)}
+            />
           </div>
+
           <div className="entry-input">
             <label>Bill Number</label>
             <input type="text" value={headerData["Bill Number"]} onChange={e => handleHeaderChange("Bill Number", e.target.value)} />
           </div>
+
           <div className="entry-input">
             <label>Bill Date</label>
-            <input type="date" value={formatDateForInput(headerData["Bill Date"])} onChange={e => handleHeaderChange("Bill Date", e.target.value)} />
+            <input
+              type="date"
+              value={formatDateForInput(headerData["Bill Date"])}
+              min="1000-01-01"
+              max="9999-12-31"
+              onChange={e => handleHeaderChange("Bill Date", e.target.value)}
+            />
           </div>
-          {renderDropdownWithCustom("Name of the Supplier", headerData["Name of the Supplier"], e => handleHeaderChange("Name of the Supplier", e.target.value), allSuppliers, "header", "supplier")}
-          {renderDropdownWithCustom("Supplier Place", headerData["Supplier Place"], e => handleHeaderChange("Supplier Place", e.target.value), getAvailablePlaces(headerData["Name of the Supplier"]), "header", "place")}
+
+          {/* ── Supplier Combobox ── */}
+          <div className="entry-input">
+            <label>Name of the Supplier ({allSuppliers.length} options)</label>
+            <div className="dropdown-container" ref={supplierWrapperRef}>
+
+              {/* 1) Text search with live autocomplete + keyboard nav */}
+              <div className="supplier-combobox-wrapper">
+                <div className="supplier-search-row">
+                  <input
+                    type="text"
+                    className="supplier-search-input"
+                    value={supplierInputText}
+                    onChange={e => handleSupplierInputChange(e.target.value)}
+                    onFocus={() => {
+                      if (supplierInputText.trim()) {
+                        const filtered = allSuppliers.filter(s =>
+                          s.value.toLowerCase().includes(supplierInputText.toLowerCase())
+                        );
+                        setSupplierSuggestions(filtered);
+                        setShowSupplierSuggestions(true);
+                      }
+                    }}
+                    onKeyDown={e => {
+                      if (!showSupplierSuggestions || supplierSuggestions.length === 0) return;
+
+                      if (e.key === "ArrowDown") {
+                        e.preventDefault();
+                        setHighlightedIndex(i => Math.min(i + 1, supplierSuggestions.length - 1));
+                      } else if (e.key === "ArrowUp") {
+                        e.preventDefault();
+                        setHighlightedIndex(i => Math.max(i - 1, 0));
+                      } else if (e.key === "Tab" || e.key === "Enter") {
+                        // Pick highlighted item, or first suggestion if none highlighted
+                        const idx = highlightedIndex >= 0 ? highlightedIndex : 0;
+                        const selected = supplierSuggestions[idx];
+                        if (selected) {
+                          e.preventDefault();
+                          handleSupplierSuggestionClick(selected.value);
+                          setHighlightedIndex(-1);
+                        }
+                      } else if (e.key === "Escape") {
+                        setShowSupplierSuggestions(false);
+                        setHighlightedIndex(-1);
+                      }
+                    }}
+                    placeholder="Type to search supplier..."
+                    autoComplete="off"
+                  />
+                  {supplierInputText && (
+                    <button className="supplier-clear-btn" type="button" onClick={clearSupplier} title="Clear">✕</button>
+                  )}
+                </div>
+
+                {/* Autocomplete suggestion list */}
+                {showSupplierSuggestions && (
+                  <ul className="supplier-suggestions-list">
+                    {supplierSuggestions.length > 0 ? (
+                      supplierSuggestions.map((s, idx) => (
+                        <li
+                          key={s.id}
+                          className={`supplier-suggestion-item${
+                            headerData["Name of the Supplier"] === s.value ? " active" : ""
+                          }${
+                            idx === highlightedIndex ? " highlighted" : ""
+                          }`}
+                          onMouseDown={() => handleSupplierSuggestionClick(s.value)}
+                          onMouseEnter={() => setHighlightedIndex(idx)}
+                        >
+                          {s.value}
+                        </li>
+                      ))
+                    ) : (
+                      <li className="supplier-suggestion-no-match">No suppliers found</li>
+                    )}
+                  </ul>
+                )}
+              </div>
+
+              {/* 2) Regular dropdown */}
+              <div className="supplier-dropdown-row">
+                <select
+                  className="dropdown-select"
+                  value={headerData["Name of the Supplier"]}
+                  onChange={e => handleSupplierDropdownChange(e.target.value)}
+                >
+                  <option value="">— Or select from list —</option>
+                  {allSuppliers.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.value}</option>
+                  ))}
+                </select>
+              </div>
+
+            </div>
+          </div>
+
+          {/* Supplier Place */}
+          {renderDropdownWithCustom(
+            "Supplier Place",
+            headerData["Supplier Place"],
+            e => handleHeaderChange("Supplier Place", e.target.value),
+            getAvailablePlaces(headerData["Name of the Supplier"]),
+            "header",
+            "place"
+          )}
+
         </div>
 
         <hr />
         <h3>Sections / Items</h3>
         {items.map((item, index) => {
           const availSizes = getAvailableSizes(item.Section);
-          const availWidths = getAvailableWidths(item.Section, item.Size);
-          const availLengths = getAvailableLengths(item.Section, item.Size, item.Width);
           return (
             <div key={item.id} className="section-card">
               {items.length > 1 && (
@@ -765,8 +857,8 @@ export default function EntryPage() {
               <div className="section-grid">
                 {renderDropdownWithCustom("Section", item.Section, e => handleItemChange(item.id, "Section", e.target.value), allSections, item.id, "section")}
                 {renderDropdownWithCustom("Size", item.Size, e => handleItemChange(item.id, "Size", e.target.value), availSizes, item.id, "size")}
-                {renderDropdownWithCustom("Width", item.Width, e => handleItemChange(item.id, "Width", e.target.value), availWidths, item.id, "width")}
-                {renderDropdownWithCustom("Item Length", item["Item Length"], e => handleItemChange(item.id, "Item Length", e.target.value), availLengths, item.id, "itemLength")}
+                {renderDropdownWithCustom("Width", item.Width, e => handleItemChange(item.id, "Width", e.target.value), allWidths, item.id, "width")}
+                {renderDropdownWithCustom("Item Length", item["Item Length"], e => handleItemChange(item.id, "Item Length", e.target.value), allItemLengths, item.id, "itemLength")}
                 <div className="entry-input">
                   <label>Number of Items Supplied</label>
                   <input type="number" value={item["Number of items Supplied"]} onChange={e => handleItemChange(item.id, "Number of items Supplied", e.target.value)} />
@@ -804,7 +896,7 @@ export default function EntryPage() {
           );
         })}
 
-        <button className="add-section-btn" onClick={() => setItems([...items, { 
+        <button className="add-section-btn" onClick={() => setItems([...items, {
           id: Date.now(), Section: "", Size: "", Width: "", "Item Length": "", "Number of items Supplied": "",
           "Quantity in Metric Tons": "", "Item Per Rate": "", "Bill Basic Amount": 0,
           "Section Loading Charges": 0, "Section Freight<": 0, "Section Freight>": 0, "Section Subtotal": 0
@@ -817,7 +909,7 @@ export default function EntryPage() {
           {Object.keys(charges).map(key => (
             <div className="entry-input" key={key}>
               <label>{key}</label>
-              <input type="number" step="0.01" value={charges[key]} onChange={e => setCharges({...charges, [key]: e.target.value})} />
+              <input type="number" step="0.01" value={charges[key]} onChange={e => setCharges({ ...charges, [key]: e.target.value })} />
             </div>
           ))}
         </div>
@@ -827,17 +919,17 @@ export default function EntryPage() {
             <div className="gst-section">
               <h4>GST Details</h4>
               <div className="gst-radio-group">
-                <label><input type="radio" checked={gstType === "AP"} onChange={()=>setGstType("AP")} /> AP</label>
-                <label><input type="radio" checked={gstType === "OTHER"} onChange={()=>setGstType("OTHER")} /> Other</label>
+                <label><input type="radio" checked={gstType === "AP"} onChange={() => setGstType("AP")} /> AP</label>
+                <label><input type="radio" checked={gstType === "OTHER"} onChange={() => setGstType("OTHER")} /> Other</label>
               </div>
               <div className="gst-inputs">
                 {gstType === "AP" ? (
                   <>
-                    <input type="number" step="0.01" className="gst-input" value={cgstPercentage} onChange={e=>setCgstPercentage(e.target.value)} /> % CGST 
-                    <input type="number" step="0.01" className="gst-input" value={sgstPercentage} onChange={e=>setSgstPercentage(e.target.value)} /> % SGST
+                    <input type="number" step="0.01" className="gst-input" value={cgstPercentage} onChange={e => setCgstPercentage(e.target.value)} /> % CGST
+                    <input type="number" step="0.01" className="gst-input" value={sgstPercentage} onChange={e => setSgstPercentage(e.target.value)} /> % SGST
                   </>
                 ) : (
-                  <><input type="number" step="0.01" className="gst-input" value={igstPercentage} onChange={e=>setIgstPercentage(e.target.value)} /> % IGST</>
+                  <><input type="number" step="0.01" className="gst-input" value={igstPercentage} onChange={e => setIgstPercentage(e.target.value)} /> % IGST</>
                 )}
               </div>
             </div>

@@ -6,7 +6,9 @@ import "./BillNumberSearch.css";
 
 export default function BillNumberSearch() {
   const [theme, setTheme] = useState("light");
-  const [financialYear, setFinancialYear] = useState("2025-26"); // UPDATED: Financial Year with default 2025-26
+  const [financialYear, setFinancialYear] = useState("2025-26");
+  const [selectedUnit, setSelectedUnit] = useState("");
+  const [selectedWorkType, setSelectedWorkType] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedEntry, setSelectedEntry] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -26,7 +28,7 @@ export default function BillNumberSearch() {
     localStorage.setItem("appTheme", newTheme);
   };
 
-  // Fetch all bills on component mount and when financial year changes
+  // Fetch all bills when financial year changes
   useEffect(() => {
     const fetchAllBills = async () => {
       setLoading(true);
@@ -39,10 +41,10 @@ export default function BillNumberSearch() {
             supplier: doc.data()["Name of the Supplier"],
             date: doc.data()["Bill Date"],
             unit: doc.data().Unit,
-            financialYear: doc.data().FinancialYear, // Get financial year from data
+            workType: doc.data()["Work Type"],
+            financialYear: doc.data().FinancialYear,
             fullData: doc.data()
           }))
-          // Filter by financial year - STRICT filtering
           .filter(bill => {
             if (!bill.billNumber || !bill.billNumber.trim()) return false;
             if (financialYear && bill.financialYear !== financialYear) return false;
@@ -53,9 +55,11 @@ export default function BillNumberSearch() {
             if (a.billNumber > b.billNumber) return 1;
             return 0;
           });
-        
+
         setAllBills(bills);
         setFilteredBills(bills);
+        setSelectedUnit("");
+        setSelectedWorkType("");
       } catch (error) {
         console.error("Error fetching bills:", error);
         alert("Error loading bills from database. Please try again.");
@@ -64,21 +68,41 @@ export default function BillNumberSearch() {
       }
     };
     fetchAllBills();
-  }, [financialYear]); // Re-fetch when financial year changes
+  }, [financialYear]);
 
-  // Filter bills based on search term
+  // Get unique units from fetched bills
+  const uniqueUnits = [...new Set(allBills.map(b => b.unit).filter(Boolean))].sort();
+
+  // Get unique work types based on selected unit (or all if no unit selected)
+  const uniqueWorkTypes = [...new Set(
+    allBills
+      .filter(b => !selectedUnit || b.unit === selectedUnit)
+      .map(b => b.workType)
+      .filter(Boolean)
+  )].sort();
+
+  // Filter bills based on unit, work type, and search term
   useEffect(() => {
-    if (!searchTerm.trim()) {
-      setFilteredBills(allBills);
-    } else {
-      const filtered = allBills.filter(bill => 
+    let filtered = allBills;
+
+    if (selectedUnit) {
+      filtered = filtered.filter(bill => bill.unit === selectedUnit);
+    }
+
+    if (selectedWorkType) {
+      filtered = filtered.filter(bill => bill.workType === selectedWorkType);
+    }
+
+    if (searchTerm.trim()) {
+      filtered = filtered.filter(bill =>
         (bill.billNumber && bill.billNumber.toLowerCase().includes(searchTerm.toLowerCase())) ||
         (bill.supplier && bill.supplier.toLowerCase().includes(searchTerm.toLowerCase())) ||
         (bill.unit && bill.unit.toLowerCase().includes(searchTerm.toLowerCase()))
       );
-      setFilteredBills(filtered);
     }
-  }, [searchTerm, allBills]);
+
+    setFilteredBills(filtered);
+  }, [searchTerm, allBills, selectedUnit, selectedWorkType]);
 
   const formatNum = (n) => {
     const num = typeof n === 'number' ? n : parseFloat(n) || 0;
@@ -97,38 +121,89 @@ export default function BillNumberSearch() {
     setSelectedEntry(null);
   };
 
+  const selectStyle = {
+    padding: '8px 12px',
+    fontSize: '14px',
+    border: '1px solid #ddd',
+    borderRadius: '4px',
+    cursor: 'pointer'
+  };
+
   return (
     <div className="entry-layout">
-
       <div className="bill-search-container">
         <h1 className="bill-search-heading">Search Entry by Bill Number</h1>
 
-        {/* UPDATED: Financial Year Filter with YYYY-YY format */}
-        <div className="filter-section" style={{ marginBottom: '20px' }}>
-          <label htmlFor="financial-year-filter" style={{ marginRight: '10px', fontWeight: '600' }}>
-            Financial Year:
-          </label>
-          <select
-            id="financial-year-filter"
-            value={financialYear}
-            onChange={(e) => {
-              setFinancialYear(e.target.value);
-              setSelectedEntry(null); // Clear selected entry when changing year
-              setSearchTerm(""); // Clear search term
-            }}
-            style={{
-              padding: '8px 12px',
-              fontSize: '14px',
-              border: '1px solid #ddd',
-              borderRadius: '4px',
-              cursor: 'pointer'
-            }}
-          >
-            <option value="2024-25">2024-25</option>
-            <option value="2025-26">2025-26</option>
-            <option value="2026-27">2026-27</option>
-            <option value="2027-28">2027-28</option>
-          </select>
+        {/* Filters Row */}
+        <div className="filter-section" style={{ marginBottom: '20px', display: 'flex', gap: '20px', flexWrap: 'wrap', alignItems: 'center' }}>
+
+          {/* Financial Year */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <label htmlFor="financial-year-filter" style={{ fontWeight: '600' }}>
+              Financial Year:
+            </label>
+            <select
+              id="financial-year-filter"
+              value={financialYear}
+              onChange={(e) => {
+                setFinancialYear(e.target.value);
+                setSelectedEntry(null);
+                setSearchTerm("");
+              }}
+              style={selectStyle}
+            >
+              <option value="2024-25">2024-25</option>
+              <option value="2025-26">2025-26</option>
+              <option value="2026-27">2026-27</option>
+              <option value="2027-28">2027-28</option>
+            </select>
+          </div>
+
+          {/* Unit Filter */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <label htmlFor="unit-filter" style={{ fontWeight: '600' }}>
+              Unit:
+            </label>
+            <select
+              id="unit-filter"
+              value={selectedUnit}
+              onChange={(e) => {
+                setSelectedUnit(e.target.value);
+                setSelectedWorkType("");
+                setSelectedEntry(null);
+                setSearchTerm("");
+              }}
+              style={selectStyle}
+            >
+              <option value="">All Units</option>
+              {uniqueUnits.map(unit => (
+                <option key={unit} value={unit}>{unit}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Work Type Filter */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <label htmlFor="worktype-filter" style={{ fontWeight: '600' }}>
+              Work Type:
+            </label>
+            <select
+              id="worktype-filter"
+              value={selectedWorkType}
+              onChange={(e) => {
+                setSelectedWorkType(e.target.value);
+                setSelectedEntry(null);
+                setSearchTerm("");
+              }}
+              style={selectStyle}
+            >
+              <option value="">All Work Types</option>
+              {uniqueWorkTypes.map(wt => (
+                <option key={wt} value={wt}>{wt}</option>
+              ))}
+            </select>
+          </div>
+
         </div>
 
         {!selectedEntry && (
@@ -153,7 +228,7 @@ export default function BillNumberSearch() {
             ) : filteredBills.length > 0 ? (
               <>
                 <h3 className="bills-count">
-                  Available Bills for {financialYear} ({filteredBills.length})
+                  Available Bills for {financialYear}{selectedUnit ? ` • ${selectedUnit}` : ''}{selectedWorkType ? ` • ${selectedWorkType}` : ''} ({filteredBills.length})
                 </h3>
                 <div className="bills-grid">
                   {filteredBills.map((bill) => (
@@ -172,6 +247,9 @@ export default function BillNumberSearch() {
                       <div className="bill-info">
                         <strong>Unit:</strong> {bill.unit || "N/A"}
                       </div>
+                      <div className="bill-info">
+                        <strong>Work Type:</strong> {bill.workType || "N/A"}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -179,7 +257,7 @@ export default function BillNumberSearch() {
             ) : (
               <div className="no-results">
                 <HiMagnifyingGlass size={60} style={{ opacity: 0.3 }} />
-                <p>No bills found for {financialYear} {searchTerm ? `matching: ${searchTerm}` : ''}</p>
+                <p>No bills found for {financialYear}{selectedUnit ? ` • ${selectedUnit}` : ''}{selectedWorkType ? ` • ${selectedWorkType}` : ''}{searchTerm ? ` matching: ${searchTerm}` : ''}</p>
               </div>
             )}
           </div>
@@ -199,7 +277,6 @@ export default function BillNumberSearch() {
             <div className="detail-section">
               <h3>Basic Information</h3>
               <div className="detail-grid">
-                {/* Show Financial Year */}
                 <div className="detail-item">
                   <div className="detail-label">Financial Year</div>
                   <div className="detail-value">{selectedEntry.FinancialYear || "N/A"}</div>

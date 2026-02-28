@@ -139,6 +139,21 @@ export default function SupplierReport() {
     fetchData();
   }, []);
 
+  // Dynamically update bill numbers based on selected supplier
+  useEffect(() => {
+    const sourceData = selectedSupplier !== "All"
+      ? data.filter(item => item["Name of the Supplier"] === selectedSupplier)
+      : data;
+
+    const uniqueBillNumbers = [...new Set(sourceData.map(item => item["Bill Number"]))].sort();
+    setBillNumbers(uniqueBillNumbers);
+
+    // Reset bill number selection if it no longer belongs to the selected supplier
+    if (selectedSupplier !== "All" && selectedBillNumber !== "All" && !uniqueBillNumbers.includes(selectedBillNumber)) {
+      setSelectedBillNumber("All");
+    }
+  }, [selectedSupplier, data]);
+
   useEffect(() => {
     let filtered = [...data];
 

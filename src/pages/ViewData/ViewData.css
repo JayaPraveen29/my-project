@@ -242,3 +242,7 @@
 .table-wrapper::-webkit-scrollbar-thumb:hover {
   background: var(--accent-hover, #2980b9);
 }
+
+.numeric-cell {
+  text-align: right;
+}
