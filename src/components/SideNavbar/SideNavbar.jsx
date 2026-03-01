@@ -37,7 +37,7 @@ export default function SideNavbar() {
               <HiChartBar /> Add Entry
             </Link>
           </li>
-          
+
           <li>
             <Link to="/view-data" className="menu-btn" onClick={closeMobileMenu}>
               <HiChartBar /> View Data
@@ -64,7 +64,18 @@ export default function SideNavbar() {
               </ul>
             )}
           </li>
+
+          </ul>
+
+        <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+          <li>
+            <Link to="/manage-masters" className="menu-btn" onClick={closeMobileMenu}>
+              <HiChartBar /> Data Manager
+            </Link>
+          </li>
         </ul>
+
+  
 
         <div className="sidebar-bottom">
           <Link to="/signin" className="logout-btn" onClick={closeMobileMenu}>LOGOUT</Link>

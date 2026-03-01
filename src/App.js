@@ -11,6 +11,7 @@ import SupplierReport from './pages/SupplierReport/SupplierReport';
 import BillNumberSearch from './pages/BillNumberSearch/BillNumberSearch';
 import Layout from './components/Layout/Layout';
 import UpdateData from './pages/UpdateData/UpdateData';
+import MasterDataManager from './pages/MasterDataManager/MasterDataManager';
 
 
 function App() {
@@ -32,6 +33,7 @@ function App() {
           <Route path="/single-section-report" element={<SingleSectionReport />} />
           <Route path="/supplier-report" element={<SupplierReport />} />
           <Route path="/bill-search" element={<BillNumberSearch />} />
+          <Route path="/manage-masters" element={<MasterDataManager />} />
         </Route>
       </Routes>
     </Router>
