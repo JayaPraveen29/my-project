@@ -19,7 +19,7 @@ export default function EntryPage() {
   const [supplierInputText, setSupplierInputText] = useState("");
   const [supplierSuggestions, setSupplierSuggestions] = useState([]);
   const [showSupplierSuggestions, setShowSupplierSuggestions] = useState(false);
-  const [highlightedIndex, setHighlightedIndex] = useState(-1); // ← NEW
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const supplierWrapperRef = useRef(null);
 
   const [items, setItems] = useState([{
@@ -166,7 +166,6 @@ export default function EntryPage() {
 
   // ── Supplier combobox logic ────────────────────────────────────────────────
 
-  // Core: set supplier + auto-fill place if only 1 linked
   const applySupplierSelection = (value) => {
     if (!value) {
       setHeaderData(prev => ({ ...prev, "Name of the Supplier": "", "Supplier Place": "" }));
@@ -188,7 +187,7 @@ export default function EntryPage() {
 
   const handleSupplierInputChange = (text) => {
     setSupplierInputText(text);
-    setHighlightedIndex(-1); // ← RESET on every keystroke
+    setHighlightedIndex(-1);
     if (!text.trim()) {
       setSupplierSuggestions([]);
       setShowSupplierSuggestions(false);
@@ -198,7 +197,6 @@ export default function EntryPage() {
     const filtered = allSuppliers.filter(s => s.value.toLowerCase().includes(text.toLowerCase()));
     setSupplierSuggestions(filtered);
     setShowSupplierSuggestions(true);
-    // If exact match, apply immediately
     const exact = allSuppliers.find(s => s.value.toLowerCase() === text.toLowerCase());
     if (exact) applySupplierSelection(exact.value);
     else setHeaderData(prev => ({ ...prev, "Name of the Supplier": "", "Supplier Place": "" }));
@@ -287,6 +285,26 @@ export default function EntryPage() {
           }
         }
       }
+    } else if (type === "supplier" && itemId === "header") {
+      // Handle adding a new supplier from the renderDropdownWithCustom panel
+      const existingSupplier = allSuppliers.find(opt => opt.value.toLowerCase() === trimmedValue.toLowerCase());
+      if (existingSupplier) {
+        alert(`"${trimmedValue}" already exists.`);
+        applySupplierSelection(existingSupplier.value);
+        return;
+      }
+      try {
+        const docRef = await addDoc(collection(db, "suppliers"), { value: trimmedValue });
+        const newOption = { id: docRef.id, value: trimmedValue, isManual: true };
+        const updatedSuppliers = [...allSuppliers, newOption].sort((a, b) => a.value.localeCompare(b.value));
+        setAllSuppliers(updatedSuppliers);
+        applySupplierSelection(trimmedValue);
+        alert(`Supplier "${trimmedValue}" added successfully!`);
+      } catch (error) {
+        console.error("Error adding supplier:", error);
+        alert("Error adding supplier. Please try again.");
+      }
+      return;
     } else if (type === "size" && itemId !== "header") {
       const item = items.find(i => i.id === itemId);
       if (item && item.Section) {
@@ -364,12 +382,11 @@ export default function EntryPage() {
           }
         }
       }
-    } else if (type === "supplier" || type === "section") {
+    } else if (type === "section") {
       const existingItem = currentOptions.find(opt => opt.value.toLowerCase() === trimmedValue.toLowerCase());
       if (existingItem) {
         alert(`"${trimmedValue}" already exists.`);
-        if (type === "supplier") { setSupplierInputText(existingItem.value); applySupplierSelection(existingItem.value); }
-        else if (type === "section") setItems(items.map(item => item.id === itemId ? { ...item, Section: existingItem.value } : item));
+        setItems(items.map(item => item.id === itemId ? { ...item, Section: existingItem.value } : item));
         return;
       }
     }
@@ -441,7 +458,9 @@ export default function EntryPage() {
       if (type === "supplier" || type === "place") {
         if (headerData[fieldName] === optionToDelete.value) {
           setHeaderData(prev => ({ ...prev, [fieldName]: "" }));
-          if (type === "supplier") setSupplierInputText("");
+          if (type === "supplier") {
+            setSupplierInputText("");
+          }
         }
       } else {
         setItems(prevItems => prevItems.map(item => {
@@ -735,13 +754,81 @@ export default function EntryPage() {
             />
           </div>
 
-          {/* ── Supplier Combobox ── */}
+          {/* ── Supplier Name: renderDropdownWithCustom + combobox search ── */}
           <div className="entry-input">
             <label>Name of the Supplier ({allSuppliers.length} options)</label>
             <div className="dropdown-container" ref={supplierWrapperRef}>
 
-              {/* 1) Text search with live autocomplete + keyboard nav */}
-              <div className="supplier-combobox-wrapper">
+              {/* Top: standard dropdown + add/delete panel (same as Supplier Place) */}
+              {(() => {
+                const customState = getCustomInputState("header", "supplier");
+                return (
+                  <>
+                    <div className="dropdown-row">
+                      <select
+                        className="dropdown-select"
+                        value={headerData["Name of the Supplier"]}
+                        onChange={e => handleSupplierDropdownChange(e.target.value)}
+                      >
+                        <option value="">Select Name of the Supplier</option>
+                        {allSuppliers.map(opt => (
+                          <option key={opt.value} value={opt.value}>{opt.value}</option>
+                        ))}
+                      </select>
+                      <button
+                        className="btn-toggle-custom"
+                        onClick={() => toggleCustomInput("header", "supplier")}
+                        type="button"
+                      >
+                        {customState.show ? "✕" : "+"}
+                      </button>
+                    </div>
+                    {customState.show && (
+                      <div className="custom-input-section">
+                        <div className="custom-input-row">
+                          <input
+                            type="text"
+                            className="custom-input-field"
+                            value={customState.value}
+                            onChange={e => setCustomInputValue("header", "supplier", e.target.value)}
+                            placeholder="Enter new name of the supplier"
+                            onKeyPress={e => { if (e.key === 'Enter') handleAddCustomValue("header", "supplier", customState.value); }}
+                          />
+                          <button
+                            className="btn-add-custom"
+                            onClick={() => handleAddCustomValue("header", "supplier", customState.value)}
+                            type="button"
+                          >
+                            Add
+                          </button>
+                        </div>
+                        <div className="manual-values-list">
+                          <div className="custom-values-header">Manually Created Values</div>
+                          {allSuppliers.filter(opt => opt.isManual).length === 0 ? (
+                            <div className="no-manual-values">No manually created values yet</div>
+                          ) : (
+                            allSuppliers.filter(opt => opt.isManual).map(opt => (
+                              <div key={opt.id} className="manual-value-item">
+                                <span className="manual-value-text">{opt.value}</span>
+                                <button
+                                  className="btn-delete-value"
+                                  onClick={() => handleDeleteValue("supplier", opt)}
+                                  type="button"
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+
+              {/* Bottom: text search combobox */}
+              <div className="supplier-combobox-wrapper" style={{ marginTop: "6px" }}>
                 <div className="supplier-search-row">
                   <input
                     type="text"
@@ -759,7 +846,6 @@ export default function EntryPage() {
                     }}
                     onKeyDown={e => {
                       if (!showSupplierSuggestions || supplierSuggestions.length === 0) return;
-
                       if (e.key === "ArrowDown") {
                         e.preventDefault();
                         setHighlightedIndex(i => Math.min(i + 1, supplierSuggestions.length - 1));
@@ -767,7 +853,6 @@ export default function EntryPage() {
                         e.preventDefault();
                         setHighlightedIndex(i => Math.max(i - 1, 0));
                       } else if (e.key === "Tab" || e.key === "Enter") {
-                        // Pick highlighted item, or first suggestion if none highlighted
                         const idx = highlightedIndex >= 0 ? highlightedIndex : 0;
                         const selected = supplierSuggestions[idx];
                         if (selected) {
@@ -780,7 +865,7 @@ export default function EntryPage() {
                         setHighlightedIndex(-1);
                       }
                     }}
-                    placeholder="Type to search supplier..."
+                    placeholder="Or type to search supplier..."
                     autoComplete="off"
                   />
                   {supplierInputText && (
@@ -788,7 +873,6 @@ export default function EntryPage() {
                   )}
                 </div>
 
-                {/* Autocomplete suggestion list */}
                 {showSupplierSuggestions && (
                   <ul className="supplier-suggestions-list">
                     {supplierSuggestions.length > 0 ? (
@@ -811,20 +895,6 @@ export default function EntryPage() {
                     )}
                   </ul>
                 )}
-              </div>
-
-              {/* 2) Regular dropdown */}
-              <div className="supplier-dropdown-row">
-                <select
-                  className="dropdown-select"
-                  value={headerData["Name of the Supplier"]}
-                  onChange={e => handleSupplierDropdownChange(e.target.value)}
-                >
-                  <option value="">— Or select from list —</option>
-                  {allSuppliers.map(opt => (
-                    <option key={opt.value} value={opt.value}>{opt.value}</option>
-                  ))}
-                </select>
               </div>
 
             </div>
