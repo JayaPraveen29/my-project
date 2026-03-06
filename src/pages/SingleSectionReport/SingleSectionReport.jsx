@@ -9,25 +9,21 @@ import "./SingleSectionReport.css";
 export default function SingleSectionReport() {
   const [data, setData] = useState([]);
   const [groupedData, setGroupedData] = useState({});
-  const [financialYear, setFinancialYear] = useState("2025-26"); // UPDATED: Financial Year with default 2025-26
+  const [financialYear, setFinancialYear] = useState("2025-26");
   const [selectedUnit, setSelectedUnit] = useState("Group");
   const [selectedWorkType, setSelectedWorkType] = useState("Group");
   const [selectedSection, setSelectedSection] = useState("");
   const [selectedSize, setSelectedSize] = useState("");
   const [workTypes, setWorkTypes] = useState([]);
 
-  // Fetch data from Firestore
   useEffect(() => {
     async function fetchData() {
       try {
         const querySnapshot = await getDocs(collection(db, "entries"));
         const items = querySnapshot.docs.map(doc => doc.data());
         setData(items);
-        
-        // Extract unique work types
         const uniqueWorkTypes = [...new Set(items.map(item => item["Work Type"] || "Unknown"))];
         setWorkTypes(uniqueWorkTypes);
-        
         processData(items);
       } catch (error) {
         console.error("Error fetching data:", error);
@@ -40,28 +36,23 @@ export default function SingleSectionReport() {
     const grouped = {};
 
     items.forEach(entry => {
-      // Filter by Financial Year - STRICT filtering
       if (financialYear && entry.FinancialYear !== financialYear) return;
-      
-      // Filter by Unit
       if (selectedUnit !== "Group" && entry.Unit !== selectedUnit) return;
-      
-      // Filter by Work Type
       if (selectedWorkType !== "Group" && (entry["Work Type"] || "Unknown") !== selectedWorkType) return;
 
-      // Check if entry has items array
       const itemsArray = entry.items && Array.isArray(entry.items) ? entry.items : [entry];
 
-      // Calculate entry totals for proportional distribution
       const entryTotalBasic = itemsArray.reduce((sum, item) => {
         return sum + (Number(item["Bill Basic Amount"]) || 0);
       }, 0);
-      
+
       const entryNetAmount = Number(entry.finalTotals?.net || entry["Net"] || 0);
 
       itemsArray.forEach(item => {
         const section = (item["Section"] || "Unknown").toString().trim();
-        const size = (item["Size"] || "Unknown").toString().trim();
+        const size = (item["Size"] || "").toString().trim();
+        const width = (item["Width"] || "").toString().trim();
+        const itemLength = (item["Item Length"] || "").toString().trim();
 
         const unit = entry["Unit"] || "";
         const workType = entry["Work Type"] || "";
@@ -70,16 +61,19 @@ export default function SingleSectionReport() {
         const itemCount = Number(item["Number of items Supplied"]) || 0;
         const qty = Number(item["Quantity in Metric Tons"]) || 0;
         const itemBasic = Number(item["Bill Basic Amount"]) || 0;
-        
-        // Calculate proportional amount for this item
-        const itemAmount = entryTotalBasic > 0 
-          ? (itemBasic / entryTotalBasic) * entryNetAmount 
+
+        const itemAmount = entryTotalBasic > 0
+          ? (itemBasic / entryTotalBasic) * entryNetAmount
           : 0;
 
         if (!grouped[section]) grouped[section] = {};
         if (!grouped[section][size]) grouped[section][size] = [];
 
-        grouped[section][size].push({ unit, workType, supplier, place, itemCount, qty, amount: itemAmount });
+        grouped[section][size].push({
+          unit, workType, supplier, place,
+          size, width, itemLength,
+          itemCount, qty, amount: itemAmount
+        });
       });
     });
 
@@ -93,10 +87,10 @@ export default function SingleSectionReport() {
     processData(data);
   }, [financialYear, selectedUnit, selectedWorkType, data]);
 
-  const formatNumber = v =>
+  const formatNumber = (v) =>
     (!v && v !== 0) ? "0" : Number(v).toLocaleString("en-IN", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 
-  const formatAmount = v =>
+  const formatAmount = (v) =>
     (!v && v !== 0) ? "0" : Math.ceil(Number(v)).toLocaleString("en-IN");
 
   const calculateAvgRate = (amount, qty) => (!qty || qty === 0 ? 0 : amount / qty);
@@ -108,40 +102,37 @@ export default function SingleSectionReport() {
     }
 
     const wsData = [];
-    
-    // Add title
-    let title = `Single Section Report - ${selectedSection} (Size: ${selectedSize})`;
+
+    const title = `Single Section Report - ${selectedSection} (Size: ${selectedSize})`;
     wsData.push([title]);
-    
-    // Add filter info
+
     let filterText = "";
     if (selectedUnit !== "Group") filterText += `Unit: ${selectedUnit}`;
     if (selectedWorkType !== "Group") {
       if (filterText) filterText += " | ";
       filterText += `Work Type: ${selectedWorkType}`;
     }
-    if (filterText) {
-      wsData.push([filterText]);
-    }
-    
-    wsData.push([]); // Empty row
+    if (filterText) wsData.push([filterText]);
+
+    wsData.push([]);
 
     const entries = groupedData[selectedSection][selectedSize];
     const totalQty = entries.reduce((s, e) => s + e.qty, 0);
     const totalAmount = entries.reduce((s, e) => s + e.amount, 0);
     const avgRate = calculateAvgRate(totalAmount, totalQty);
 
-    // Add headers
-    const headers = ["Unit", "Work Type", "Supplier", "Place", "Items", "Qty (MT)", "Amount", "Avg. Rate"];
+    const headers = ["Unit", "Work Type", "Supplier", "Place", "Size", "Width", "Length", "Items", "Qty (MT)", "Amount", "Avg. Rate"];
     wsData.push(headers);
 
-    // Add data rows
     entries.forEach(entry => {
       wsData.push([
         entry.unit,
         entry.workType,
         entry.supplier,
         entry.place,
+        entry.size,
+        entry.width,
+        entry.itemLength,
         entry.itemCount,
         entry.qty,
         entry.amount,
@@ -149,77 +140,47 @@ export default function SingleSectionReport() {
       ]);
     });
 
-    // Add total row
-    wsData.push([
-      "TOTAL",
-      "",
-      "",
-      "",
-      "",
-      totalQty,
-      totalAmount,
-      avgRate
-    ]);
+    wsData.push(["TOTAL", "", "", "", "", "", "", "", totalQty, totalAmount, avgRate]);
 
-    // Create workbook and worksheet
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet(wsData);
 
-    // Set column widths
-    ws['!cols'] = [
+    ws["!cols"] = [
       { wch: 12 }, // Unit
       { wch: 15 }, // Work Type
       { wch: 25 }, // Supplier
       { wch: 15 }, // Place
-      { wch: 12 }, // Items
-      { wch: 15 }, // Qty (MT)
+      { wch: 10 }, // Size
+      { wch: 10 }, // Width
+      { wch: 10 }, // Length
+      { wch: 10 }, // Items
+      { wch: 12 }, // Qty (MT)
       { wch: 15 }, // Amount
-      { wch: 15 }  // Avg. Rate
+      { wch: 15 }, // Avg. Rate
     ];
 
-    // Merge cells for title
-    const titleRow = filterText ? 0 : 0;
-    ws['!merges'] = [{ s: { r: titleRow, c: 0 }, e: { r: titleRow, c: headers.length - 1 } }];
+    const titleRow = 0;
+    ws["!merges"] = [
+      { s: { r: titleRow, c: 0 }, e: { r: titleRow, c: headers.length - 1 } }
+    ];
 
-    // Format numbers
-    const range = XLSX.utils.decode_range(ws['!ref']);
-    const dataStartRow = filterText ? 4 : 3;
+    const range = XLSX.utils.decode_range(ws["!ref"]);
+    const dataStartRow = filterText ? 3 : 2;
     for (let R = dataStartRow; R <= range.e.r; R++) {
-      // Items column
-      const itemsCell = XLSX.utils.encode_cell({ r: R, c: 4 });
-      if (ws[itemsCell]) {
-        ws[itemsCell].t = 'n';
-        ws[itemsCell].z = '#,##0';
-      }
-      // Qty column
-      const qtyCell = XLSX.utils.encode_cell({ r: R, c: 5 });
-      if (ws[qtyCell]) {
-        ws[qtyCell].t = 'n';
-        ws[qtyCell].z = '#,##0.000';
-      }
-      // Amount column
-      const amtCell = XLSX.utils.encode_cell({ r: R, c: 6 });
-      if (ws[amtCell]) {
-        ws[amtCell].t = 'n';
-        ws[amtCell].z = '#,##0';
-      }
-      // Avg Rate column
-      const rateCell = XLSX.utils.encode_cell({ r: R, c: 7 });
-      if (ws[rateCell]) {
-        ws[rateCell].t = 'n';
-        ws[rateCell].z = '#,##0';
-      }
+      // Items col index 7, Qty col index 8, Amount col 9, Rate col 10
+      [[7, "#,##0"], [8, "#,##0.000"], [9, "#,##0"], [10, "#,##0"]].forEach(([C, fmt]) => {
+        const addr = XLSX.utils.encode_cell({ r: R, c: C });
+        if (ws[addr] && typeof ws[addr].v === "number") {
+          ws[addr].t = "n";
+          ws[addr].z = fmt;
+        }
+      });
     }
 
-    // Add worksheet to workbook
     XLSX.utils.book_append_sheet(wb, ws, "Single Section");
 
-    // Generate filename with timestamp
     const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
-    const filename = `single_section_${selectedSection}_${selectedSize}_${timestamp}.xlsx`;
-
-    // Save file
-    XLSX.writeFile(wb, filename);
+    XLSX.writeFile(wb, `single_section_${selectedSection}_${selectedSize}_${timestamp}.xlsx`);
   };
 
   const exportPDF = () => {
@@ -228,13 +189,12 @@ export default function SingleSectionReport() {
       return;
     }
 
-    const doc = new jsPDF("p", "pt", "a4");
-    let startY = 40;
+    const doc = new jsPDF("l", "pt", "a4");
 
     let title = `${selectedSection} ${selectedSize}`;
     if (selectedUnit !== "Group") title += ` ${selectedUnit}`;
     if (selectedWorkType !== "Group") title += ` ${selectedWorkType}`;
-    
+
     doc.setFontSize(14);
     doc.text(title, 14, 25);
 
@@ -248,6 +208,9 @@ export default function SingleSectionReport() {
       e.workType,
       e.supplier,
       e.place,
+      e.size,
+      e.width,
+      e.itemLength,
       e.itemCount.toLocaleString("en-IN"),
       formatNumber(e.qty),
       formatAmount(e.amount),
@@ -255,7 +218,7 @@ export default function SingleSectionReport() {
     ]);
 
     tableData.push([
-      "TOTAL", "", "", "",
+      "TOTAL", "", "", "", "", "", "",
       "",
       formatNumber(totalQty),
       formatAmount(totalAmount),
@@ -263,12 +226,12 @@ export default function SingleSectionReport() {
     ]);
 
     autoTable(doc, {
-      head: [["Unit", "Work Type", "Supplier", "Place", "Items", "Qty (MT)", "Amount", "Avg. Rate"]],
+      head: [["Unit", "Work Type", "Supplier", "Place", "Size", "Width", "Length", "Items", "Qty (MT)", "Amount", "Avg. Rate"]],
       body: tableData,
-      startY: startY,
+      startY: 40,
       margin: { left: 14 },
-      styles: { fontSize: 8, halign: "center" },
-      headStyles: { 
+      styles: { fontSize: 7, halign: "center" },
+      headStyles: {
         fillColor: [230, 240, 255],
         textColor: [0, 0, 0],
         fontStyle: "bold"
@@ -279,11 +242,11 @@ export default function SingleSectionReport() {
   };
 
   const sections = Object.keys(groupedData).sort();
-  const sizes = selectedSection ? Object.keys(groupedData[selectedSection]).sort() : [];
+  const sizes = selectedSection ? Object.keys(groupedData[selectedSection] || {}).sort() : [];
   const units = ["Group", ...Array.from(new Set(data.map(d => d.Unit)))];
 
   const clearFilters = () => {
-    setFinancialYear("2025-26"); // UPDATED: Reset to default 2025-26
+    setFinancialYear("2025-26");
     setSelectedUnit("Group");
     setSelectedWorkType("Group");
     setSelectedSection("");
@@ -293,9 +256,9 @@ export default function SingleSectionReport() {
   return (
     <div className="single-section-container">
       <h1 className="single-section-heading">Single Section Report</h1>
+
       <div className="filter-container">
         <div className="filter-row">
-          {/* UPDATED: Financial Year Dropdown with YYYY-YY format */}
           <label htmlFor="financial-year-select">Financial Year:</label>
           <select
             id="financial-year-select"
@@ -309,7 +272,6 @@ export default function SingleSectionReport() {
             <option value="2027-28">2027-28</option>
           </select>
 
-          {/* Unit Dropdown */}
           <label htmlFor="unit-select">Select Unit:</label>
           <select
             id="unit-select"
@@ -320,7 +282,6 @@ export default function SingleSectionReport() {
             {units.map((unit, idx) => <option key={idx} value={unit}>{unit}</option>)}
           </select>
 
-          {/* Work Type Dropdown */}
           <label htmlFor="worktype-select">Work Type:</label>
           <select
             id="worktype-select"
@@ -332,7 +293,6 @@ export default function SingleSectionReport() {
             {workTypes.map((type, idx) => <option key={idx} value={type}>{type}</option>)}
           </select>
 
-          {/* Section Dropdown */}
           <label htmlFor="section-select">Section:</label>
           <select
             id="section-select"
@@ -344,7 +304,6 @@ export default function SingleSectionReport() {
             {sections.map((section, idx) => <option key={idx} value={section}>{section}</option>)}
           </select>
 
-          {/* Size Dropdown */}
           <label htmlFor="size-select">Size:</label>
           <select
             id="size-select"
@@ -359,10 +318,7 @@ export default function SingleSectionReport() {
         </div>
 
         <div className="button-row">
-          <button onClick={clearFilters} className="btn-clear">
-            Clear Filters
-          </button>
-
+          <button onClick={clearFilters} className="btn-clear">Clear Filters</button>
           <button
             onClick={exportExcel}
             className="btn-export btn-excel"
@@ -370,7 +326,6 @@ export default function SingleSectionReport() {
           >
             Export Excel
           </button>
-
           <button
             onClick={exportPDF}
             className="btn-export btn-pdf"
@@ -386,7 +341,9 @@ export default function SingleSectionReport() {
           <div className="section-header">
             <h2 className="section-title">
               {selectedSection}
-              {selectedWorkType !== "Group" && <span className="work-type-badge">({selectedWorkType})</span>}
+              {selectedWorkType !== "Group" && (
+                <span className="work-type-badge">({selectedWorkType})</span>
+              )}
             </h2>
             <h3 className="size-subtitle">Size: {selectedSize}</h3>
           </div>
@@ -405,6 +362,9 @@ export default function SingleSectionReport() {
                     <th>Work Type</th>
                     <th>Supplier</th>
                     <th>Place</th>
+                    <th>Size</th>
+                    <th>Width</th>
+                    <th>Length</th>
                     <th>Items</th>
                     <th>Qty (MT)</th>
                     <th>Amount</th>
@@ -418,6 +378,9 @@ export default function SingleSectionReport() {
                       <td>{entry.workType}</td>
                       <td className="text-left">{entry.supplier}</td>
                       <td>{entry.place}</td>
+                      <td>{entry.size}</td>
+                      <td>{entry.width}</td>
+                      <td>{entry.itemLength}</td>
                       <td>{entry.itemCount.toLocaleString("en-IN")}</td>
                       <td>{formatNumber(entry.qty)}</td>
                       <td>{formatAmount(entry.amount)}</td>
@@ -425,7 +388,7 @@ export default function SingleSectionReport() {
                     </tr>
                   ))}
                   <tr className="total-row">
-                    <td colSpan={4}>TOTAL</td>
+                    <td colSpan={7}>TOTAL</td>
                     <td></td>
                     <td>{formatNumber(totalQty)}</td>
                     <td>{formatAmount(totalAmount)}</td>

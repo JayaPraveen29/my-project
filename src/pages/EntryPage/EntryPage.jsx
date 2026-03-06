@@ -181,6 +181,7 @@ export default function EntryPage() {
         "Supplier Place": relatedPlaces.length === 1 ? relatedPlaces[0].value : ""
       }));
     } else {
+      // New supplier not yet saved — store name, clear place so user can pick from all places
       setHeaderData(prev => ({ ...prev, "Name of the Supplier": value, "Supplier Place": "" }));
     }
   };
@@ -240,13 +241,18 @@ export default function EntryPage() {
     return allSizes.filter(size => relatedSizeIds.includes(size.id));
   };
 
+  // ── UPDATED: show all places when supplier is new (not yet in allSuppliers) ──
   const getAvailablePlaces = (selectedSupplier) => {
     if (!selectedSupplier) return [];
     const supplierObj = allSuppliers.find(s => s.value === selectedSupplier);
-    if (!supplierObj) return [];
+    // Supplier not yet saved → show all places so user can link one
+    if (!supplierObj) return allPlaces;
     const relatedPlaceIds = supplierPlaceRelations.filter(rel => rel.supplierId === supplierObj.id).map(rel => rel.placeId);
+    // Existing supplier with no linked places yet → also show all places
+    if (relatedPlaceIds.length === 0) return allPlaces;
     return allPlaces.filter(place => relatedPlaceIds.includes(place.id));
   };
+  // ─────────────────────────────────────────────────────────────────────────
 
   const handleAddCustomValue = async (itemId, type, value) => {
     if (!value.trim()) { alert("Please enter a value!"); return; }
@@ -286,7 +292,6 @@ export default function EntryPage() {
         }
       }
     } else if (type === "supplier" && itemId === "header") {
-      // Handle adding a new supplier from the renderDropdownWithCustom panel
       const existingSupplier = allSuppliers.find(opt => opt.value.toLowerCase() === trimmedValue.toLowerCase());
       if (existingSupplier) {
         alert(`"${trimmedValue}" already exists.`);
@@ -759,7 +764,6 @@ export default function EntryPage() {
             <label>Name of the Supplier ({allSuppliers.length} options)</label>
             <div className="dropdown-container" ref={supplierWrapperRef}>
 
-              {/* Top: standard dropdown + add/delete panel (same as Supplier Place) */}
               {(() => {
                 const customState = getCustomInputState("header", "supplier");
                 return (
@@ -900,7 +904,7 @@ export default function EntryPage() {
             </div>
           </div>
 
-          {/* Supplier Place */}
+          {/* Supplier Place — passes getAvailablePlaces which now returns all places for new suppliers */}
           {renderDropdownWithCustom(
             "Supplier Place",
             headerData["Supplier Place"],

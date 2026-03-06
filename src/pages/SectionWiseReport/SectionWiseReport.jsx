@@ -9,7 +9,7 @@ import "./SectionWiseReport.css";
 export default function SectionWiseReport() {
   const [data, setData] = useState([]);
   const [groupedData, setGroupedData] = useState({});
-  const [financialYear, setFinancialYear] = useState("2025-26"); // UPDATED: Financial Year with default 2025-26
+  const [financialYear, setFinancialYear] = useState("2025-26");
   const [selectedUnit, setSelectedUnit] = useState("Group");
   const [selectedWorkType, setSelectedWorkType] = useState("Group");
   const [workTypes, setWorkTypes] = useState([]);
@@ -20,11 +20,8 @@ export default function SectionWiseReport() {
         const querySnapshot = await getDocs(collection(db, "entries"));
         const items = querySnapshot.docs.map(doc => doc.data());
         setData(items);
-        
-        // Extract unique work types
         const uniqueWorkTypes = [...new Set(items.map(item => item["Work Type"] || "Unknown"))];
         setWorkTypes(uniqueWorkTypes);
-        
         processData(items);
       } catch (error) {
         console.error("Error fetching data:", error);
@@ -37,28 +34,23 @@ export default function SectionWiseReport() {
     const grouped = {};
 
     items.forEach(entry => {
-      // Filter by Financial Year - STRICT filtering
       if (financialYear && entry.FinancialYear !== financialYear) return;
-      
-      // Filter by Unit
       if (selectedUnit !== "Group" && entry.Unit !== selectedUnit) return;
-      
-      // Filter by Work Type
       if (selectedWorkType !== "Group" && (entry["Work Type"] || "Unknown") !== selectedWorkType) return;
 
-      // Check if entry has items array
       const itemsArray = entry.items && Array.isArray(entry.items) ? entry.items : [entry];
 
-      // Calculate entry totals for proportional distribution
       const entryTotalBasic = itemsArray.reduce((sum, item) => {
         return sum + (Number(item["Bill Basic Amount"]) || 0);
       }, 0);
-      
+
       const entryNetAmount = Number(entry.finalTotals?.net || entry["Net"] || 0);
 
       itemsArray.forEach(item => {
         const section = (item["Section"] || "Unknown").toString().trim();
-        const size = (item["Size"] || "Unknown").toString().trim();
+        const size = (item["Size"] || "").toString().trim();
+        const width = (item["Width"] || "").toString().trim();
+        const itemLength = (item["Item Length"] || "").toString().trim();
 
         const unit = entry["Unit"] || "";
         const workType = entry["Work Type"] || "";
@@ -67,16 +59,19 @@ export default function SectionWiseReport() {
         const itemCount = Number(item["Number of items Supplied"]) || 0;
         const qty = Number(item["Quantity in Metric Tons"]) || 0;
         const itemBasic = Number(item["Bill Basic Amount"]) || 0;
-        
-        // Calculate proportional amount for this item
-        const itemAmount = entryTotalBasic > 0 
-          ? (itemBasic / entryTotalBasic) * entryNetAmount 
+
+        const itemAmount = entryTotalBasic > 0
+          ? (itemBasic / entryTotalBasic) * entryNetAmount
           : 0;
 
         if (!grouped[section]) grouped[section] = {};
         if (!grouped[section][size]) grouped[section][size] = [];
 
-        grouped[section][size].push({ unit, workType, supplier, place, itemCount, qty, amount: itemAmount });
+        grouped[section][size].push({
+          unit, workType, supplier, place,
+          size, width, itemLength,
+          itemCount, qty, amount: itemAmount
+        });
       });
     });
 
@@ -109,11 +104,8 @@ export default function SectionWiseReport() {
     }
 
     const wsData = [];
-    
-    // Add title
     wsData.push(["Section Wise Report"]);
-    
-    // Add filter info if applicable
+
     if (selectedUnit !== "Group" || selectedWorkType !== "Group") {
       let filterText = "";
       if (selectedUnit !== "Group") filterText += selectedUnit;
@@ -123,27 +115,23 @@ export default function SectionWiseReport() {
       }
       wsData.push([filterText]);
     }
-    
-    wsData.push([]); // Empty row
 
-    // Process each section and size
+    wsData.push([]);
+
     Object.keys(groupedData).sort().forEach(section => {
       const sizes = groupedData[section];
 
       Object.keys(sizes).sort().forEach(size => {
         const entries = sizes[size];
 
-        // Add section-size header
         wsData.push([`${section} - ${size}`]);
-        
-        // Add table headers
+
         const headers = [];
         if (showUnitColumn) headers.push("Unit");
         if (showWorkTypeColumn) headers.push("Work Type");
-        headers.push("Supplier", "Place", "Items", "Qty (MT)", "Amount", "Avg. Rate");
+        headers.push("Supplier", "Place", "Size", "Width", "Length", "Items", "Qty (MT)", "Amount", "Avg. Rate");
         wsData.push(headers);
 
-        // Add data rows
         entries.forEach(entry => {
           const row = [];
           if (showUnitColumn) row.push(entry.unit);
@@ -151,6 +139,9 @@ export default function SectionWiseReport() {
           row.push(
             entry.supplier,
             entry.place,
+            entry.size,
+            entry.width,
+            entry.itemLength,
             entry.itemCount,
             entry.qty,
             entry.amount,
@@ -159,72 +150,43 @@ export default function SectionWiseReport() {
           wsData.push(row);
         });
 
-        // Calculate totals
         const totalQty = entries.reduce((sum, e) => sum + e.qty, 0);
         const totalAmount = entries.reduce((sum, e) => sum + e.amount, 0);
 
-        // Add total row
         const totalRow = [];
         if (showUnitColumn) totalRow.push("");
         if (showWorkTypeColumn) totalRow.push("");
-        totalRow.push(
-          "TOTAL",
-          "",
-          "",
-          totalQty,
-          totalAmount,
-          calculateAvgRate(totalAmount, totalQty)
-        );
+        totalRow.push("TOTAL", "", "", "", "", "", totalQty, totalAmount, calculateAvgRate(totalAmount, totalQty));
         wsData.push(totalRow);
-        
-        // Add empty row between tables
         wsData.push([]);
       });
     });
 
-    // Create workbook and worksheet
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet(wsData);
 
-    // Set column widths
     const maxCols = Math.max(...wsData.map(row => row.length));
-    const colWidths = Array(maxCols).fill({ wch: 15 });
-    colWidths[0] = { wch: 12 };
-    if (showUnitColumn || showWorkTypeColumn) {
-      colWidths[1] = { wch: 12 };
-    }
-    ws['!cols'] = colWidths;
+    ws["!cols"] = Array(maxCols).fill({ wch: 15 });
 
-    // Format number columns
-    const range = XLSX.utils.decode_range(ws['!ref']);
+    const range = XLSX.utils.decode_range(ws["!ref"]);
+    const baseOffset = (showUnitColumn ? 1 : 0) + (showWorkTypeColumn ? 1 : 0);
+    // Supplier(0), Place(1), Size(2), Width(3), Length(4), Items(5), Qty(6), Amount(7), Rate(8) after base cols
+    const qtyColIndex = baseOffset + 6;
+
     for (let R = 0; R <= range.e.r; R++) {
       for (let C = 0; C <= range.e.c; C++) {
         const cellAddr = XLSX.utils.encode_cell({ r: R, c: C });
         if (!ws[cellAddr]) continue;
-        
-        const cellValue = ws[cellAddr].v;
-        if (typeof cellValue === 'number') {
-          ws[cellAddr].t = 'n';
-          // Determine format based on column
-          const colHeader = wsData[0] ? wsData[0][C] : '';
-          if (colHeader === 'Qty (MT)') {
-            ws[cellAddr].z = '#,##0.000';
-          } else {
-            ws[cellAddr].z = '#,##0';
-          }
+        if (typeof ws[cellAddr].v === "number") {
+          ws[cellAddr].t = "n";
+          ws[cellAddr].z = C === qtyColIndex ? "#,##0.000" : "#,##0";
         }
       }
     }
 
-    // Add worksheet to workbook
     XLSX.utils.book_append_sheet(wb, ws, "Section Report");
-
-    // Generate filename with timestamp
     const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
-    const filename = `section_report_${timestamp}.xlsx`;
-
-    // Save file
-    XLSX.writeFile(wb, filename);
+    XLSX.writeFile(wb, `section_report_${timestamp}.xlsx`);
   };
 
   const exportPDF = () => {
@@ -233,7 +195,7 @@ export default function SectionWiseReport() {
       return;
     }
 
-    const doc = new jsPDF("p", "pt", "a4");
+    const doc = new jsPDF("l", "pt", "a4");
     let startY = 40;
 
     doc.setFontSize(16);
@@ -265,43 +227,46 @@ export default function SectionWiseReport() {
         doc.text(`${section} - ${size}`, 14, startY);
         startY += 20;
 
+        const headerRow = [];
+        if (showUnitColumn) headerRow.push("Unit");
+        if (showWorkTypeColumn) headerRow.push("Work Type");
+        headerRow.push("Supplier", "Place", "Size", "Width", "Length", "Items", "Qty (MT)", "Amount", "Avg. Rate");
+
         const tableData = entries.map(e => {
-          const row = [
+          const row = [];
+          if (showUnitColumn) row.push(e.unit);
+          if (showWorkTypeColumn) row.push(e.workType);
+          row.push(
             e.supplier,
             e.place,
+            e.size,
+            e.width,
+            e.itemLength,
             e.itemCount.toLocaleString("en-IN"),
             formatNumber(e.qty),
             formatAmount(e.amount),
             formatAmount(calculateAvgRate(e.amount, e.qty))
-          ];
-          if (showWorkTypeColumn) row.unshift(e.workType);
-          if (showUnitColumn) row.unshift(e.unit);
+          );
           return row;
         });
 
-        const totalRow = [
-          "TOTAL", 
-          "", 
-          "",
+        const totalRow = [];
+        if (showUnitColumn) totalRow.push("");
+        if (showWorkTypeColumn) totalRow.push("");
+        totalRow.push(
+          "TOTAL", "", "", "", "", "",
           formatNumber(totalQty),
-          formatAmount(totalAmount), 
+          formatAmount(totalAmount),
           formatAmount(calculateAvgRate(totalAmount, totalQty))
-        ];
-        if (showWorkTypeColumn) totalRow.unshift("");
-        if (showUnitColumn) totalRow.unshift("");
-
+        );
         tableData.push(totalRow);
-
-        const headerRow = ["Supplier", "Place", "Items", "Qty (MT)", "Amount", "Avg. Rate"];
-        if (showWorkTypeColumn) headerRow.unshift("Work Type");
-        if (showUnitColumn) headerRow.unshift("Unit");
 
         autoTable(doc, {
           head: [headerRow],
           body: tableData,
           startY: startY,
           margin: { left: 14 },
-          styles: { fontSize: 8, cellPadding: 3, halign: "center" },
+          styles: { fontSize: 7, cellPadding: 2, halign: "center" },
           headStyles: {
             fillColor: [230, 240, 255],
             textColor: [0, 0, 0],
@@ -311,9 +276,9 @@ export default function SectionWiseReport() {
             startY = data.cursor.y + 10;
           }
         });
-        
+
         startY = doc.lastAutoTable.finalY + 25;
-        if (startY > 700) {
+        if (startY > 500) {
           doc.addPage();
           startY = 40;
         }
@@ -324,7 +289,7 @@ export default function SectionWiseReport() {
   };
 
   const clearFilters = () => {
-    setFinancialYear("2025-26"); // UPDATED: Reset to default 2025-26
+    setFinancialYear("2025-26");
     setSelectedUnit("Group");
     setSelectedWorkType("Group");
   };
@@ -335,7 +300,6 @@ export default function SectionWiseReport() {
 
       <div className="filter-container">
         <div className="filter-row">
-          {/* UPDATED: Financial Year Dropdown with YYYY-YY format */}
           <label htmlFor="financial-year-select">Financial Year:</label>
           <select
             id="financial-year-select"
@@ -375,17 +339,9 @@ export default function SectionWiseReport() {
             ))}
           </select>
 
-          <button onClick={clearFilters} className="btn-clear">
-            Clear Filters
-          </button>
-
-          <button onClick={exportExcel} className="btn-export btn-excel">
-            Export Excel
-          </button>
-          
-          <button onClick={exportPDF} className="btn-export btn-pdf">
-            Export PDF
-          </button>
+          <button onClick={clearFilters} className="btn-clear">Clear Filters</button>
+          <button onClick={exportExcel} className="btn-export btn-excel">Export Excel</button>
+          <button onClick={exportPDF} className="btn-export btn-pdf">Export PDF</button>
         </div>
       </div>
 
@@ -404,9 +360,7 @@ export default function SectionWiseReport() {
 
                 return (
                   <div key={size} className="size-section">
-                    <h2 className="section-size-title">
-                      {section} - {size}
-                    </h2>
+                    <h2 className="section-size-title">{section} - {size}</h2>
 
                     <div className="table-container">
                       <table className="section-table">
@@ -416,6 +370,9 @@ export default function SectionWiseReport() {
                             {showWorkTypeColumn && <th>Work Type</th>}
                             <th>Supplier</th>
                             <th>Place</th>
+                            <th>Size</th>
+                            <th>Width</th>
+                            <th>Length</th>
                             <th>Items</th>
                             <th>Qty (MT)</th>
                             <th>Amount</th>
@@ -429,6 +386,9 @@ export default function SectionWiseReport() {
                               {showWorkTypeColumn && <td className="text-left">{entry.workType}</td>}
                               <td className="text-left">{entry.supplier}</td>
                               <td className="text-left">{entry.place}</td>
+                              <td className="text-center">{entry.size}</td>
+                              <td className="text-center">{entry.width}</td>
+                              <td className="text-center">{entry.itemLength}</td>
                               <td className="text-right">{entry.itemCount.toLocaleString("en-IN")}</td>
                               <td className="text-right">{formatNumber(entry.qty)}</td>
                               <td className="text-right">{formatAmount(entry.amount)}</td>
@@ -439,8 +399,7 @@ export default function SectionWiseReport() {
                             {showUnitColumn && <td></td>}
                             {showWorkTypeColumn && <td></td>}
                             <td className="text-left">TOTAL</td>
-                            <td></td>
-                            <td></td>
+                            <td></td><td></td><td></td><td></td><td></td>
                             <td className="text-right">{formatNumber(totalQty)}</td>
                             <td className="text-right">{formatAmount(totalAmount)}</td>
                             <td className="text-right">{formatAmount(calculateAvgRate(totalAmount, totalQty))}</td>
