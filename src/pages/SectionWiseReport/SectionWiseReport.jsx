@@ -52,6 +52,10 @@ export default function SectionWiseReport() {
         const width = (item["Width"] || "").toString().trim();
         const itemLength = (item["Item Length"] || "").toString().trim();
 
+        // Build group key: Section - Size x Width (if width exists), then itemLength
+        // Group by section + size + width + itemLength so each unique combo is its own table
+        const groupKey = `${section}|||${size}|||${width}|||${itemLength}`;
+
         const unit = entry["Unit"] || "";
         const workType = entry["Work Type"] || "";
         const supplier = entry["Name of the Supplier"] || "";
@@ -65,9 +69,9 @@ export default function SectionWiseReport() {
           : 0;
 
         if (!grouped[section]) grouped[section] = {};
-        if (!grouped[section][size]) grouped[section][size] = [];
+        if (!grouped[section][groupKey]) grouped[section][groupKey] = [];
 
-        grouped[section][size].push({
+        grouped[section][groupKey].push({
           unit, workType, supplier, place,
           size, width, itemLength,
           itemCount, qty, amount: itemAmount
@@ -94,6 +98,17 @@ export default function SectionWiseReport() {
 
   const calculateAvgRate = (amount, qty) => (!qty || qty === 0 ? 0 : amount / qty);
 
+  // Build display title: "Section - Size x Width" or with itemLength appended if present
+  const buildTableTitle = (section, groupKey) => {
+    const [, size, width, itemLength] = groupKey.split("|||");
+    let title = `${section}`;
+    if (size) title += ` - ${size}`;
+    if (width && itemLength) title += ` x ${width} x ${itemLength}`;
+    else if (width) title += ` x ${width}`;
+    else if (itemLength) title += ` x ${itemLength}`;
+    return title;
+  };
+
   const showUnitColumn = selectedUnit === "Group";
   const showWorkTypeColumn = selectedWorkType === "Group";
 
@@ -119,17 +134,18 @@ export default function SectionWiseReport() {
     wsData.push([]);
 
     Object.keys(groupedData).sort().forEach(section => {
-      const sizes = groupedData[section];
+      const groupKeys = groupedData[section];
 
-      Object.keys(sizes).sort().forEach(size => {
-        const entries = sizes[size];
+      Object.keys(groupKeys).sort().forEach(groupKey => {
+        const entries = groupKeys[groupKey];
+        const title = buildTableTitle(section, groupKey);
 
-        wsData.push([`${section} - ${size}`]);
+        wsData.push([title]);
 
         const headers = [];
         if (showUnitColumn) headers.push("Unit");
         if (showWorkTypeColumn) headers.push("Work Type");
-        headers.push("Supplier", "Place", "Size", "Width", "Length", "Items", "Qty (MT)", "Amount", "Avg. Rate");
+        headers.push("Supplier", "Place", "Items", "Qty (MT)", "Amount", "Avg. Rate");
         wsData.push(headers);
 
         entries.forEach(entry => {
@@ -139,9 +155,6 @@ export default function SectionWiseReport() {
           row.push(
             entry.supplier,
             entry.place,
-            entry.size,
-            entry.width,
-            entry.itemLength,
             entry.itemCount,
             entry.qty,
             entry.amount,
@@ -156,7 +169,7 @@ export default function SectionWiseReport() {
         const totalRow = [];
         if (showUnitColumn) totalRow.push("");
         if (showWorkTypeColumn) totalRow.push("");
-        totalRow.push("TOTAL", "", "", "", "", "", totalQty, totalAmount, calculateAvgRate(totalAmount, totalQty));
+        totalRow.push("TOTAL", "", "", totalQty, totalAmount, calculateAvgRate(totalAmount, totalQty));
         wsData.push(totalRow);
         wsData.push([]);
       });
@@ -170,8 +183,8 @@ export default function SectionWiseReport() {
 
     const range = XLSX.utils.decode_range(ws["!ref"]);
     const baseOffset = (showUnitColumn ? 1 : 0) + (showWorkTypeColumn ? 1 : 0);
-    // Supplier(0), Place(1), Size(2), Width(3), Length(4), Items(5), Qty(6), Amount(7), Rate(8) after base cols
-    const qtyColIndex = baseOffset + 6;
+    // Supplier(0), Place(1), Items(2), Qty(3), Amount(4), Rate(5) after base cols
+    const qtyColIndex = baseOffset + 3;
 
     for (let R = 0; R <= range.e.r; R++) {
       for (let C = 0; C <= range.e.c; C++) {
@@ -214,23 +227,24 @@ export default function SectionWiseReport() {
     }
 
     Object.keys(groupedData).sort().forEach(section => {
-      const sizes = groupedData[section];
+      const groupKeys = groupedData[section];
 
-      Object.keys(sizes).sort().forEach(size => {
-        const entries = sizes[size];
+      Object.keys(groupKeys).sort().forEach(groupKey => {
+        const entries = groupKeys[groupKey];
+        const title = buildTableTitle(section, groupKey);
 
         const totalQty = entries.reduce((sum, e) => sum + e.qty, 0);
         const totalAmount = entries.reduce((sum, e) => sum + e.amount, 0);
 
         doc.setFontSize(11);
         doc.setFont(undefined, "bold");
-        doc.text(`${section} - ${size}`, 14, startY);
+        doc.text(title, 14, startY);
         startY += 20;
 
         const headerRow = [];
         if (showUnitColumn) headerRow.push("Unit");
         if (showWorkTypeColumn) headerRow.push("Work Type");
-        headerRow.push("Supplier", "Place", "Size", "Width", "Length", "Items", "Qty (MT)", "Amount", "Avg. Rate");
+        headerRow.push("Supplier", "Place", "Items", "Qty (MT)", "Amount", "Avg. Rate");
 
         const tableData = entries.map(e => {
           const row = [];
@@ -239,9 +253,6 @@ export default function SectionWiseReport() {
           row.push(
             e.supplier,
             e.place,
-            e.size,
-            e.width,
-            e.itemLength,
             e.itemCount.toLocaleString("en-IN"),
             formatNumber(e.qty),
             formatAmount(e.amount),
@@ -254,7 +265,8 @@ export default function SectionWiseReport() {
         if (showUnitColumn) totalRow.push("");
         if (showWorkTypeColumn) totalRow.push("");
         totalRow.push(
-          "TOTAL", "", "", "", "", "",
+          "TOTAL", "",
+          "",
           formatNumber(totalQty),
           formatAmount(totalAmount),
           formatAmount(calculateAvgRate(totalAmount, totalQty))
@@ -353,14 +365,15 @@ export default function SectionWiseReport() {
         ) : (
           Object.keys(groupedData).sort().map(section => (
             <div key={section} className="section-group">
-              {Object.keys(groupedData[section]).sort().map(size => {
-                const entries = groupedData[section][size];
+              {Object.keys(groupedData[section]).sort().map(groupKey => {
+                const entries = groupedData[section][groupKey];
                 const totalQty = entries.reduce((sum, e) => sum + e.qty, 0);
                 const totalAmount = entries.reduce((sum, e) => sum + e.amount, 0);
+                const title = buildTableTitle(section, groupKey);
 
                 return (
-                  <div key={size} className="size-section">
-                    <h2 className="section-size-title">{section} - {size}</h2>
+                  <div key={groupKey} className="size-section">
+                    <h2 className="section-size-title">{title}</h2>
 
                     <div className="table-container">
                       <table className="section-table">
@@ -370,9 +383,6 @@ export default function SectionWiseReport() {
                             {showWorkTypeColumn && <th>Work Type</th>}
                             <th>Supplier</th>
                             <th>Place</th>
-                            <th>Size</th>
-                            <th>Width</th>
-                            <th>Length</th>
                             <th>Items</th>
                             <th>Qty (MT)</th>
                             <th>Amount</th>
@@ -386,9 +396,6 @@ export default function SectionWiseReport() {
                               {showWorkTypeColumn && <td className="text-left">{entry.workType}</td>}
                               <td className="text-left">{entry.supplier}</td>
                               <td className="text-left">{entry.place}</td>
-                              <td className="text-center">{entry.size}</td>
-                              <td className="text-center">{entry.width}</td>
-                              <td className="text-center">{entry.itemLength}</td>
                               <td className="text-right">{entry.itemCount.toLocaleString("en-IN")}</td>
                               <td className="text-right">{formatNumber(entry.qty)}</td>
                               <td className="text-right">{formatAmount(entry.amount)}</td>
@@ -399,7 +406,8 @@ export default function SectionWiseReport() {
                             {showUnitColumn && <td></td>}
                             {showWorkTypeColumn && <td></td>}
                             <td className="text-left">TOTAL</td>
-                            <td></td><td></td><td></td><td></td><td></td>
+                            <td></td>
+                            <td></td>
                             <td className="text-right">{formatNumber(totalQty)}</td>
                             <td className="text-right">{formatAmount(totalAmount)}</td>
                             <td className="text-right">{formatAmount(calculateAvgRate(totalAmount, totalQty))}</td>

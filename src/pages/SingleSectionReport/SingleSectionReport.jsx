@@ -13,7 +13,7 @@ export default function SingleSectionReport() {
   const [selectedUnit, setSelectedUnit] = useState("Group");
   const [selectedWorkType, setSelectedWorkType] = useState("Group");
   const [selectedSection, setSelectedSection] = useState("");
-  const [selectedSize, setSelectedSize] = useState("");
+  const [selectedGroupKey, setSelectedGroupKey] = useState("");
   const [workTypes, setWorkTypes] = useState([]);
 
   useEffect(() => {
@@ -54,6 +54,9 @@ export default function SingleSectionReport() {
         const width = (item["Width"] || "").toString().trim();
         const itemLength = (item["Item Length"] || "").toString().trim();
 
+        // Group by section + size + width + itemLength
+        const groupKey = `${size}|||${width}|||${itemLength}`;
+
         const unit = entry["Unit"] || "";
         const workType = entry["Work Type"] || "";
         const supplier = entry["Name of the Supplier"] || "";
@@ -67,9 +70,9 @@ export default function SingleSectionReport() {
           : 0;
 
         if (!grouped[section]) grouped[section] = {};
-        if (!grouped[section][size]) grouped[section][size] = [];
+        if (!grouped[section][groupKey]) grouped[section][groupKey] = [];
 
-        grouped[section][size].push({
+        grouped[section][groupKey].push({
           unit, workType, supplier, place,
           size, width, itemLength,
           itemCount, qty, amount: itemAmount
@@ -87,6 +90,22 @@ export default function SingleSectionReport() {
     processData(data);
   }, [financialYear, selectedUnit, selectedWorkType, data]);
 
+  // Build display label for a groupKey: "Size x Width x Length" depending on what's present
+  const buildGroupLabel = (groupKey) => {
+    const [size, width, itemLength] = groupKey.split("|||");
+    let label = size || "";
+    if (width && itemLength) label += ` x ${width} x ${itemLength}`;
+    else if (width) label += ` x ${width}`;
+    else if (itemLength) label += ` x ${itemLength}`;
+    return label;
+  };
+
+  // Full title shown as heading: "Section - Size x Width x Length"
+  const buildFullTitle = (section, groupKey) => {
+    const label = buildGroupLabel(groupKey);
+    return label ? `${section} - ${label}` : section;
+  };
+
   const formatNumber = (v) =>
     (!v && v !== 0) ? "0" : Number(v).toLocaleString("en-IN", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 
@@ -96,14 +115,13 @@ export default function SingleSectionReport() {
   const calculateAvgRate = (amount, qty) => (!qty || qty === 0 ? 0 : amount / qty);
 
   const exportExcel = () => {
-    if (!selectedSection || !selectedSize) {
+    if (!selectedSection || !selectedGroupKey) {
       alert("Please select Section and Size to export");
       return;
     }
 
     const wsData = [];
-
-    const title = `Single Section Report - ${selectedSection} (Size: ${selectedSize})`;
+    const title = buildFullTitle(selectedSection, selectedGroupKey);
     wsData.push([title]);
 
     let filterText = "";
@@ -116,12 +134,12 @@ export default function SingleSectionReport() {
 
     wsData.push([]);
 
-    const entries = groupedData[selectedSection][selectedSize];
+    const entries = groupedData[selectedSection][selectedGroupKey];
     const totalQty = entries.reduce((s, e) => s + e.qty, 0);
     const totalAmount = entries.reduce((s, e) => s + e.amount, 0);
     const avgRate = calculateAvgRate(totalAmount, totalQty);
 
-    const headers = ["Unit", "Work Type", "Supplier", "Place", "Size", "Width", "Length", "Items", "Qty (MT)", "Amount", "Avg. Rate"];
+    const headers = ["Unit", "Work Type", "Supplier", "Place", "Items", "Qty (MT)", "Amount", "Avg. Rate"];
     wsData.push(headers);
 
     entries.forEach(entry => {
@@ -130,9 +148,6 @@ export default function SingleSectionReport() {
         entry.workType,
         entry.supplier,
         entry.place,
-        entry.size,
-        entry.width,
-        entry.itemLength,
         entry.itemCount,
         entry.qty,
         entry.amount,
@@ -140,7 +155,7 @@ export default function SingleSectionReport() {
       ]);
     });
 
-    wsData.push(["TOTAL", "", "", "", "", "", "", "", totalQty, totalAmount, avgRate]);
+    wsData.push(["TOTAL", "", "", "", "", totalQty, totalAmount, avgRate]);
 
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet(wsData);
@@ -150,25 +165,21 @@ export default function SingleSectionReport() {
       { wch: 15 }, // Work Type
       { wch: 25 }, // Supplier
       { wch: 15 }, // Place
-      { wch: 10 }, // Size
-      { wch: 10 }, // Width
-      { wch: 10 }, // Length
       { wch: 10 }, // Items
       { wch: 12 }, // Qty (MT)
       { wch: 15 }, // Amount
       { wch: 15 }, // Avg. Rate
     ];
 
-    const titleRow = 0;
     ws["!merges"] = [
-      { s: { r: titleRow, c: 0 }, e: { r: titleRow, c: headers.length - 1 } }
+      { s: { r: 0, c: 0 }, e: { r: 0, c: headers.length - 1 } }
     ];
 
     const range = XLSX.utils.decode_range(ws["!ref"]);
     const dataStartRow = filterText ? 3 : 2;
     for (let R = dataStartRow; R <= range.e.r; R++) {
-      // Items col index 7, Qty col index 8, Amount col 9, Rate col 10
-      [[7, "#,##0"], [8, "#,##0.000"], [9, "#,##0"], [10, "#,##0"]].forEach(([C, fmt]) => {
+      // Items col 4, Qty col 5, Amount col 6, Rate col 7
+      [[4, "#,##0"], [5, "#,##0.000"], [6, "#,##0"], [7, "#,##0"]].forEach(([C, fmt]) => {
         const addr = XLSX.utils.encode_cell({ r: R, c: C });
         if (ws[addr] && typeof ws[addr].v === "number") {
           ws[addr].t = "n";
@@ -179,26 +190,27 @@ export default function SingleSectionReport() {
 
     XLSX.utils.book_append_sheet(wb, ws, "Single Section");
 
+    const [size] = selectedGroupKey.split("|||");
     const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
-    XLSX.writeFile(wb, `single_section_${selectedSection}_${selectedSize}_${timestamp}.xlsx`);
+    XLSX.writeFile(wb, `single_section_${selectedSection}_${size}_${timestamp}.xlsx`);
   };
 
   const exportPDF = () => {
-    if (!selectedSection || !selectedSize) {
+    if (!selectedSection || !selectedGroupKey) {
       alert("Please select Section and Size to export");
       return;
     }
 
     const doc = new jsPDF("l", "pt", "a4");
 
-    let title = `${selectedSection} ${selectedSize}`;
-    if (selectedUnit !== "Group") title += ` ${selectedUnit}`;
-    if (selectedWorkType !== "Group") title += ` ${selectedWorkType}`;
+    let title = buildFullTitle(selectedSection, selectedGroupKey);
+    if (selectedUnit !== "Group") title += ` - ${selectedUnit}`;
+    if (selectedWorkType !== "Group") title += ` (${selectedWorkType})`;
 
     doc.setFontSize(14);
     doc.text(title, 14, 25);
 
-    const entries = groupedData[selectedSection][selectedSize];
+    const entries = groupedData[selectedSection][selectedGroupKey];
     const totalQty = entries.reduce((s, e) => s + e.qty, 0);
     const totalAmount = entries.reduce((s, e) => s + e.amount, 0);
     const avgRate = calculateAvgRate(totalAmount, totalQty);
@@ -208,9 +220,6 @@ export default function SingleSectionReport() {
       e.workType,
       e.supplier,
       e.place,
-      e.size,
-      e.width,
-      e.itemLength,
       e.itemCount.toLocaleString("en-IN"),
       formatNumber(e.qty),
       formatAmount(e.amount),
@@ -218,15 +227,14 @@ export default function SingleSectionReport() {
     ]);
 
     tableData.push([
-      "TOTAL", "", "", "", "", "", "",
-      "",
+      "TOTAL", "", "", "", "",
       formatNumber(totalQty),
       formatAmount(totalAmount),
       formatAmount(avgRate)
     ]);
 
     autoTable(doc, {
-      head: [["Unit", "Work Type", "Supplier", "Place", "Size", "Width", "Length", "Items", "Qty (MT)", "Amount", "Avg. Rate"]],
+      head: [["Unit", "Work Type", "Supplier", "Place", "Items", "Qty (MT)", "Amount", "Avg. Rate"]],
       body: tableData,
       startY: 40,
       margin: { left: 14 },
@@ -238,11 +246,12 @@ export default function SingleSectionReport() {
       },
     });
 
-    doc.save(`Single_Section_Report_${selectedSection}_${selectedSize}.pdf`);
+    const [size] = selectedGroupKey.split("|||");
+    doc.save(`Single_Section_Report_${selectedSection}_${size}.pdf`);
   };
 
   const sections = Object.keys(groupedData).sort();
-  const sizes = selectedSection ? Object.keys(groupedData[selectedSection] || {}).sort() : [];
+  const groupKeys = selectedSection ? Object.keys(groupedData[selectedSection] || {}).sort() : [];
   const units = ["Group", ...Array.from(new Set(data.map(d => d.Unit)))];
 
   const clearFilters = () => {
@@ -250,7 +259,7 @@ export default function SingleSectionReport() {
     setSelectedUnit("Group");
     setSelectedWorkType("Group");
     setSelectedSection("");
-    setSelectedSize("");
+    setSelectedGroupKey("");
   };
 
   return (
@@ -264,7 +273,7 @@ export default function SingleSectionReport() {
             id="financial-year-select"
             className="filter-select"
             value={financialYear}
-            onChange={(e) => { setFinancialYear(e.target.value); setSelectedSection(""); setSelectedSize(""); }}
+            onChange={(e) => { setFinancialYear(e.target.value); setSelectedSection(""); setSelectedGroupKey(""); }}
           >
             <option value="2024-25">2024-25</option>
             <option value="2025-26">2025-26</option>
@@ -277,7 +286,7 @@ export default function SingleSectionReport() {
             id="unit-select"
             className="filter-select"
             value={selectedUnit}
-            onChange={(e) => { setSelectedUnit(e.target.value); setSelectedSection(""); setSelectedSize(""); }}
+            onChange={(e) => { setSelectedUnit(e.target.value); setSelectedSection(""); setSelectedGroupKey(""); }}
           >
             {units.map((unit, idx) => <option key={idx} value={unit}>{unit}</option>)}
           </select>
@@ -287,7 +296,7 @@ export default function SingleSectionReport() {
             id="worktype-select"
             className="filter-select"
             value={selectedWorkType}
-            onChange={(e) => { setSelectedWorkType(e.target.value); setSelectedSection(""); setSelectedSize(""); }}
+            onChange={(e) => { setSelectedWorkType(e.target.value); setSelectedSection(""); setSelectedGroupKey(""); }}
           >
             <option value="Group">Group</option>
             {workTypes.map((type, idx) => <option key={idx} value={type}>{type}</option>)}
@@ -298,7 +307,7 @@ export default function SingleSectionReport() {
             id="section-select"
             className="filter-select"
             value={selectedSection}
-            onChange={(e) => { setSelectedSection(e.target.value); setSelectedSize(""); }}
+            onChange={(e) => { setSelectedSection(e.target.value); setSelectedGroupKey(""); }}
           >
             <option value="">-- Select Section --</option>
             {sections.map((section, idx) => <option key={idx} value={section}>{section}</option>)}
@@ -308,12 +317,14 @@ export default function SingleSectionReport() {
           <select
             id="size-select"
             className="filter-select"
-            value={selectedSize}
-            onChange={(e) => setSelectedSize(e.target.value)}
+            value={selectedGroupKey}
+            onChange={(e) => setSelectedGroupKey(e.target.value)}
             disabled={!selectedSection}
           >
             <option value="">-- Select Size --</option>
-            {sizes.map((size, idx) => <option key={idx} value={size}>{size}</option>)}
+            {groupKeys.map((gk, idx) => (
+              <option key={idx} value={gk}>{buildGroupLabel(gk)}</option>
+            ))}
           </select>
         </div>
 
@@ -322,34 +333,33 @@ export default function SingleSectionReport() {
           <button
             onClick={exportExcel}
             className="btn-export btn-excel"
-            disabled={!selectedSection || !selectedSize}
+            disabled={!selectedSection || !selectedGroupKey}
           >
             Export Excel
           </button>
           <button
             onClick={exportPDF}
             className="btn-export btn-pdf"
-            disabled={!selectedSection || !selectedSize}
+            disabled={!selectedSection || !selectedGroupKey}
           >
             Export PDF
           </button>
         </div>
       </div>
 
-      {selectedSection && selectedSize ? (
+      {selectedSection && selectedGroupKey ? (
         <div className="table-wrapper">
           <div className="section-header">
             <h2 className="section-title">
-              {selectedSection}
+              {buildFullTitle(selectedSection, selectedGroupKey)}
               {selectedWorkType !== "Group" && (
-                <span className="work-type-badge">({selectedWorkType})</span>
+                <span className="work-type-badge"> ({selectedWorkType})</span>
               )}
             </h2>
-            <h3 className="size-subtitle">Size: {selectedSize}</h3>
           </div>
 
           {(() => {
-            const entries = groupedData[selectedSection][selectedSize];
+            const entries = groupedData[selectedSection][selectedGroupKey];
             const totalQty = entries.reduce((s, e) => s + e.qty, 0);
             const totalAmount = entries.reduce((s, e) => s + e.amount, 0);
             const avgRate = calculateAvgRate(totalAmount, totalQty);
@@ -362,9 +372,6 @@ export default function SingleSectionReport() {
                     <th>Work Type</th>
                     <th>Supplier</th>
                     <th>Place</th>
-                    <th>Size</th>
-                    <th>Width</th>
-                    <th>Length</th>
                     <th>Items</th>
                     <th>Qty (MT)</th>
                     <th>Amount</th>
@@ -378,9 +385,6 @@ export default function SingleSectionReport() {
                       <td>{entry.workType}</td>
                       <td className="text-left">{entry.supplier}</td>
                       <td>{entry.place}</td>
-                      <td>{entry.size}</td>
-                      <td>{entry.width}</td>
-                      <td>{entry.itemLength}</td>
                       <td>{entry.itemCount.toLocaleString("en-IN")}</td>
                       <td>{formatNumber(entry.qty)}</td>
                       <td>{formatAmount(entry.amount)}</td>
@@ -388,7 +392,7 @@ export default function SingleSectionReport() {
                     </tr>
                   ))}
                   <tr className="total-row">
-                    <td colSpan={7}>TOTAL</td>
+                    <td colSpan={4}>TOTAL</td>
                     <td></td>
                     <td>{formatNumber(totalQty)}</td>
                     <td>{formatAmount(totalAmount)}</td>

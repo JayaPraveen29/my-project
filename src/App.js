@@ -12,7 +12,7 @@ import BillNumberSearch from './pages/BillNumberSearch/BillNumberSearch';
 import Layout from './components/Layout/Layout';
 import UpdateData from './pages/UpdateData/UpdateData';
 import MasterDataManager from './pages/MasterDataManager/MasterDataManager';
-
+import LastPurchasedReport from './pages/LastPurchasedReport/LastPurchasedReport';
 
 function App() {
   return (
@@ -34,6 +34,7 @@ function App() {
           <Route path="/supplier-report" element={<SupplierReport />} />
           <Route path="/bill-search" element={<BillNumberSearch />} />
           <Route path="/manage-masters" element={<MasterDataManager />} />
+          <Route path="/last-purchased-report" element={<LastPurchasedReport />} />
         </Route>
       </Routes>
     </Router>

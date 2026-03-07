@@ -116,13 +116,13 @@ export default function BillNumberSearch() {
   };
 
   // Avg Rate per item row:
-  // = (Item Basic Amount + Section Freight< + Section Freight>) / Total Bill MT
-  const calcItemAvgRate = (item, totalBillMT) => {
-    if (!totalBillMT || totalBillMT === 0) return 0;
-    const basic = parseFloat(item["Bill Basic Amount"]) || 0;
-    const freightLess = parseFloat(item["Section Freight<"]) || 0;
-    const freightGreater = parseFloat(item["Section Freight>"]) || 0;
-    return (basic + freightLess + freightGreater) / totalBillMT;
+  // = (Basic + Section Loading + Section Freight< + Section Freight>) / Total Bill MT
+  // Others is intentionally excluded
+  const calcItemAvgRate = (item) => {
+    const subtotal = parseFloat(item["Section Subtotal"]) || 0;
+    const itemMT = parseFloat(item["Quantity in Metric Tons"]) || 0;
+    if (itemMT === 0) return 0;
+    return subtotal / itemMT;
   };
 
   const handleBillClick = (bill) => {
@@ -374,7 +374,6 @@ export default function BillNumberSearch() {
                         ))}
                       </tbody>
                     </table>
-                   
                   </div>
                 ) : (
                   <div className="detail-grid">
