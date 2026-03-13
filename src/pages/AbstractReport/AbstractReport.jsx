@@ -40,34 +40,55 @@ export default function AbstractReport() {
     processAbstractData(data, financialYear, selectedUnit, selectedWorkType, fromDate, toDate);
   }, [financialYear, selectedUnit, selectedWorkType, data, fromDate, toDate]);
 
+  const parseDateSafe = (v) => {
+    if (!v) return null;
+    try { if (typeof v.toDate === "function") return v.toDate(); } catch (e) {}
+    if (typeof v === "string") {
+      const ddmmyyyy = v.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+      if (ddmmyyyy) {
+        const [, day, month, year] = ddmmyyyy;
+        const d = new Date(`${year}-${month}-${day}`);
+        if (!isNaN(d)) return d;
+      }
+      const yyyymmdd = v.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (yyyymmdd) {
+        const d = new Date(v);
+        if (!isNaN(d)) return d;
+      }
+    }
+    const dt = new Date(v);
+    return isNaN(dt) ? null : dt;
+  };
+
+  // Sort by day first, then month, then year
+  const compareDatesDayMonthYear = (a, b) => {
+    const da = parseDateSafe(a);
+    const db2 = parseDateSafe(b);
+    if (!da && !db2) return 0;
+    if (!da) return 1;
+    if (!db2) return -1;
+    // day first
+    if (da.getDate() !== db2.getDate()) return da.getDate() - db2.getDate();
+    // then month
+    if (da.getMonth() !== db2.getMonth()) return da.getMonth() - db2.getMonth();
+    // then year
+    return da.getFullYear() - db2.getFullYear();
+  };
+
   const filterByDateRange = (items, from, to) => {
     if (!from && !to) return items;
     return items.filter(item => {
-      const itemDate = item["Received On"] || item["Recd. On"] || item["Recd On"] || item.Date || item.date || "";
-      if (!itemDate) return false;
-      let itemDateObj;
-      try {
-        if (typeof itemDate === "string") {
-          if (itemDate.includes("-")) {
-            const parts = itemDate.split("-");
-            if (parts.length === 3) {
-              if (parts[0].length === 4) itemDateObj = new Date(itemDate);
-              else { const [day, month, year] = parts; itemDateObj = new Date(year, month - 1, day); }
-            }
-          }
-        } else if (itemDate instanceof Date) {
-          itemDateObj = itemDate;
-        }
-        if (!itemDateObj || isNaN(itemDateObj.getTime())) return false;
-        itemDateObj.setHours(0, 0, 0, 0);
-        const fromDateObj = from ? new Date(from) : null;
-        const toDateObj = to ? new Date(to) : null;
-        if (fromDateObj) fromDateObj.setHours(0, 0, 0, 0);
-        if (toDateObj) toDateObj.setHours(23, 59, 59, 999);
-        if (fromDateObj && toDateObj) return itemDateObj >= fromDateObj && itemDateObj <= toDateObj;
-        else if (fromDateObj) return itemDateObj >= fromDateObj;
-        else if (toDateObj) return itemDateObj <= toDateObj;
-      } catch { return false; }
+      const raw = item["Received On"] || item["Recd. On"] || item["Recd On"] || item.Date || item.date || "";
+      const itemDateObj = parseDateSafe(raw);
+      if (!itemDateObj) return false;
+      itemDateObj.setHours(0, 0, 0, 0);
+      const fromDateObj = from ? new Date(from) : null;
+      const toDateObj = to ? new Date(to) : null;
+      if (fromDateObj) fromDateObj.setHours(0, 0, 0, 0);
+      if (toDateObj) toDateObj.setHours(23, 59, 59, 999);
+      if (fromDateObj && toDateObj) return itemDateObj >= fromDateObj && itemDateObj <= toDateObj;
+      else if (fromDateObj) return itemDateObj >= fromDateObj;
+      else if (toDateObj) return itemDateObj <= toDateObj;
       return true;
     });
   };
@@ -81,6 +102,14 @@ export default function AbstractReport() {
     else processNormalData(filteredItems, unit);
   };
 
+  // Show only the earliest date (no range text)
+  const buildRecdOnDisplay = (recdDates) => {
+    const sorted = [...recdDates].sort(compareDatesDayMonthYear);
+    if (sorted.length === 0) return "";
+    if (sorted.length === 1) return sorted[0];
+    return `${sorted[0]} to ${sorted[sorted.length - 1]}`;
+  };
+
   const processNormalData = (items, unit) => {
     const filteredItems = items.filter(item => (item.Unit || "Unknown") === unit);
     const grouped = {};
@@ -88,6 +117,8 @@ export default function AbstractReport() {
       const itemsArray = entry.items && Array.isArray(entry.items) ? entry.items : [entry];
       const entryTotalBasic = itemsArray.reduce((sum, i) => sum + (Number(i["Bill Basic Amount"]) || 0), 0);
       const others = Number(entry.charges?.Others || 0);
+      const recdOn = entry["Received On"] || entry["Recd. On"] || "";
+
       itemsArray.forEach(item => {
         const section = (item["Section"] || "Unknown").toString().trim();
         const size = (item["Size"] || "").toString().trim();
@@ -101,24 +132,40 @@ export default function AbstractReport() {
         const itemFreightGreater = Number(item["Section Freight>"]) || 0;
         const itemOthers = itemProportion * others;
         const itemTotalFreight = itemLoadingCharges + itemFreightLess + itemFreightGreater;
-        // Key now includes width and itemLength
         const key = `${section}|${size}|${width}|${itemLength}`;
         if (!grouped[key]) {
-          grouped[key] = { Unit: entry.Unit || "Unknown", section, size, width, itemLength, totalQty: qty, totalBasic: itemBasic, totalFreight: itemTotalFreight + itemOthers };
+          grouped[key] = {
+            Unit: entry.Unit || "Unknown",
+            section, size, width, itemLength,
+            totalQty: qty,
+            totalBasic: itemBasic,
+            totalFreight: itemTotalFreight + itemOthers,
+            recdDates: recdOn ? [recdOn] : [],
+          };
         } else {
           grouped[key].totalQty += qty;
           grouped[key].totalBasic += itemBasic;
           grouped[key].totalFreight += itemTotalFreight + itemOthers;
+          if (recdOn && !grouped[key].recdDates.includes(recdOn))
+            grouped[key].recdDates.push(recdOn);
         }
       });
     });
+
     const array = Object.values(grouped).map(item => ({
       ...item,
+      recdOnDisplay: buildRecdOnDisplay(item.recdDates),
       invoiceValue: item.totalBasic,
       totalAmount: item.totalBasic + item.totalFreight,
       ratePerMT: item.totalQty > 0 ? (item.totalBasic + item.totalFreight) / item.totalQty : 0,
     }));
+
+    // Sort by day → month → year, tiebreak by section → size → width → length
     array.sort((a, b) => {
+      const rawA = a.recdOnDisplay?.split(" to ")[0] || "";
+      const rawB = b.recdOnDisplay?.split(" to ")[0] || "";
+      const dateCompare = compareDatesDayMonthYear(rawA, rawB);
+      if (dateCompare !== 0) return dateCompare;
       const s = a.section.localeCompare(b.section);
       if (s !== 0) return s;
       const sz = a.size.localeCompare(b.size);
@@ -127,6 +174,7 @@ export default function AbstractReport() {
       if (w !== 0) return w;
       return a.itemLength.localeCompare(b.itemLength);
     });
+
     setAbstractData(array);
     setPivotData([]);
   };
@@ -137,6 +185,8 @@ export default function AbstractReport() {
       const itemsArray = entry.items && Array.isArray(entry.items) ? entry.items : [entry];
       const entryTotalBasic = itemsArray.reduce((sum, i) => sum + (Number(i["Bill Basic Amount"]) || 0), 0);
       const others = Number(entry.charges?.Others || 0);
+      const recdOn = entry["Received On"] || entry["Recd. On"] || "";
+
       itemsArray.forEach(item => {
         const section = (item["Section"] || "Unknown").toString().trim();
         const size = (item["Size"] || "").toString().trim();
@@ -151,19 +201,26 @@ export default function AbstractReport() {
         const itemFreightGreater = Number(item["Section Freight>"]) || 0;
         const itemOthers = itemProportion * others;
         const itemTotalFreight = itemLoadingCharges + itemFreightLess + itemFreightGreater;
-        // Key now includes width and itemLength
         const key = `${section}|${size}|${width}|${itemLength}`;
-        if (!grouped[key]) grouped[key] = { section, size, width, itemLength, units: {} };
+        if (!grouped[key]) {
+          grouped[key] = { section, size, width, itemLength, units: {}, recdDates: recdOn ? [recdOn] : [] };
+        } else {
+          if (recdOn && !grouped[key].recdDates.includes(recdOn))
+            grouped[key].recdDates.push(recdOn);
+        }
         if (!grouped[key].units[unit]) grouped[key].units[unit] = { totalQty: 0, totalBasic: 0, totalFreight: 0 };
         grouped[key].units[unit].totalQty += qty;
         grouped[key].units[unit].totalBasic += itemBasic;
         grouped[key].units[unit].totalFreight += itemTotalFreight + itemOthers;
       });
     });
+
     const GroupUnits = [...new Set(items.map(item => item.Unit || "Unknown"))];
     const array = Object.values(grouped).map(item => {
-      const row = { section: item.section, size: item.size, width: item.width, itemLength: item.itemLength };
-      let combinedQty = 0, combinedBasic = 0, combinedFreight = 0;
+      const row = {
+        section: item.section, size: item.size, width: item.width, itemLength: item.itemLength,
+        recdOnDisplay: buildRecdOnDisplay(item.recdDates),
+      };
       GroupUnits.forEach(unit => {
         if (item.units[unit]) {
           const u = item.units[unit];
@@ -171,23 +228,21 @@ export default function AbstractReport() {
           row[`${unit}_qty`] = u.totalQty;
           row[`${unit}_invoiceValue`] = u.totalBasic;
           row[`${unit}_freight`] = u.totalFreight;
-          row[`${unit}_total`] = unitTotal;
           row[`${unit}_ratePerMT`] = u.totalQty > 0 ? unitTotal / u.totalQty : 0;
-          combinedQty += u.totalQty; combinedBasic += u.totalBasic; combinedFreight += u.totalFreight;
         } else {
-          row[`${unit}_qty`] = 0; row[`${unit}_invoiceValue`] = 0; row[`${unit}_freight`] = 0;
-          row[`${unit}_total`] = 0; row[`${unit}_ratePerMT`] = 0;
+          row[`${unit}_qty`] = 0;
+          row[`${unit}_invoiceValue`] = 0;
+          row[`${unit}_freight`] = 0;
+          row[`${unit}_ratePerMT`] = 0;
         }
       });
-      const combinedTotal = combinedBasic + combinedFreight;
-      row.combined_qty = combinedQty;
-      row.combined_invoiceValue = combinedBasic;
-      row.combined_freight = combinedFreight;
-      row.combined_total = combinedTotal;
-      row.combined_ratePerMT = combinedQty > 0 ? combinedTotal / combinedQty : 0;
       return row;
     });
+
+    // Sort by day → month → year, tiebreak by section → size → width → length
     array.sort((a, b) => {
+      const dateCompare = compareDatesDayMonthYear(a.recdOnDisplay, b.recdOnDisplay);
+      if (dateCompare !== 0) return dateCompare;
       const s = a.section.localeCompare(b.section);
       if (s !== 0) return s;
       const sz = a.size.localeCompare(b.size);
@@ -196,6 +251,7 @@ export default function AbstractReport() {
       if (w !== 0) return w;
       return a.itemLength.localeCompare(b.itemLength);
     });
+
     setPivotData(array);
     setAbstractData([]);
   };
@@ -218,59 +274,81 @@ export default function AbstractReport() {
     if (selectedUnit !== "Group") heading += ` - ${selectedUnit}`;
     if (selectedWorkType !== "Group") heading += ` (${selectedWorkType})`;
     doc.text(heading, 40, 30);
-    if (fromDate || toDate) { doc.setFontSize(9); doc.text(`Period: ${fromDate || "Start"} to ${toDate || "End"}`, 40, 45); }
+    if (fromDate || toDate) {
+      doc.setFontSize(9);
+      doc.text(`Period: ${fromDate || "Start"} to ${toDate || "End"}`, 40, 45);
+    }
 
     if (selectedUnit === "Group" && pivotData.length > 0) {
       const headRow1 = [
-        { content: "S.No.", rowSpan: 2 }, { content: "Section", rowSpan: 2 },
-        { content: "Size", rowSpan: 2 }, { content: "Width", rowSpan: 2 }, { content: "Length", rowSpan: 2 }
+        { content: "S.No.", rowSpan: 2 },
+        { content: "Recd. On", rowSpan: 2 },
+        { content: "Section", rowSpan: 2 },
+        { content: "Size", rowSpan: 2 },
+        { content: "Width", rowSpan: 2 },
+        { content: "Length", rowSpan: 2 },
       ];
       const headRow2 = [];
       units.forEach(unit => {
-        headRow1.push({ content: unit, colSpan: 5 });
-        headRow2.push({ content: "MT" }, { content: "Invoice Value" }, { content: "Freight" }, { content: "Total" }, { content: "Rate/MT" });
+        headRow1.push({ content: unit, colSpan: 4 });
+        headRow2.push({ content: "MT" }, { content: "Invoice Value" }, { content: "Freight" }, { content: "Rate/MT" });
       });
-      headRow1.push({ content: "Total", colSpan: 5 });
-      headRow2.push({ content: "MT" }, { content: "Invoice Value" }, { content: "Freight" }, { content: "Total" }, { content: "Rate/MT" });
 
       const body = pivotData.map((item, index) => {
-        const row = [index + 1, item.section, item.size, item.width, item.itemLength];
+        const row = [index + 1, item.recdOnDisplay || "", item.section, item.size, item.width, item.itemLength];
         units.forEach(unit => {
-          row.push(formatMT(item[`${unit}_qty`] || 0), formatAmount(item[`${unit}_invoiceValue`] || 0), formatAmount(item[`${unit}_freight`] || 0), formatAmount(item[`${unit}_total`] || 0), formatRate(item[`${unit}_ratePerMT`] || 0));
+          row.push(
+            formatMT(item[`${unit}_qty`] || 0),
+            formatAmount(item[`${unit}_invoiceValue`] || 0),
+            formatAmount(item[`${unit}_freight`] || 0),
+            formatRate(item[`${unit}_ratePerMT`] || 0)
+          );
         });
-        row.push(formatMT(item.combined_qty || 0), formatAmount(item.combined_invoiceValue || 0), formatAmount(item.combined_freight || 0), formatAmount(item.combined_total || 0), formatRate(item.combined_ratePerMT || 0));
         return row;
       });
 
-      const totalRow = ["", "TOTAL", "", "", ""];
+      const totalRow = ["", "TOTAL", "", "", "", ""];
       units.forEach(unit => {
         const tQty = pivotData.reduce((s, x) => s + (x[`${unit}_qty`] || 0), 0);
         const tInv = pivotData.reduce((s, x) => s + (x[`${unit}_invoiceValue`] || 0), 0);
         const tFrt = pivotData.reduce((s, x) => s + (x[`${unit}_freight`] || 0), 0);
         const tTot = tInv + tFrt;
-        totalRow.push(formatMT(tQty), formatAmount(tInv), formatAmount(tFrt), formatAmount(tTot), formatRate(tQty ? tTot / tQty : 0));
+        totalRow.push(formatMT(tQty), formatAmount(tInv), formatAmount(tFrt), formatRate(tQty ? tTot / tQty : 0));
       });
-      const gQty = pivotData.reduce((s, x) => s + (x.combined_qty || 0), 0);
-      const gInv = pivotData.reduce((s, x) => s + (x.combined_invoiceValue || 0), 0);
-      const gFrt = pivotData.reduce((s, x) => s + (x.combined_freight || 0), 0);
-      const gTot = gInv + gFrt;
-      totalRow.push(formatMT(gQty), formatAmount(gInv), formatAmount(gFrt), formatAmount(gTot), formatRate(gQty ? gTot / gQty : 0));
       body.push(totalRow);
 
       autoTable(doc, {
-        startY: fromDate || toDate ? 55 : 45, head: [headRow1, headRow2], body,
+        startY: fromDate || toDate ? 55 : 45,
+        head: [headRow1, headRow2],
+        body,
         theme: "grid",
         styles: { fontSize: 6, halign: "center", valign: "middle", cellPadding: 1 },
-        headStyles: { fillColor: [230, 240, 255], textColor: [0, 0, 0], fontStyle: "bold" }
+        headStyles: { fillColor: [230, 240, 255], textColor: [0, 0, 0], fontStyle: "bold" },
       });
     } else {
-      const headers = ["No.", "Section", "Size", "Width", "Length", "MT", "Invoice Value", "Freight", "Total", "Rate/MT"];
+      const headers = ["No.", "Recd. On", "Section", "Size", "Width", "Length", "MT", "Invoice Value", "Freight", "Rate/MT"];
       const body = abstractData.map((item, i) => [
-        i + 1, item.section, item.size, item.width, item.itemLength,
-        formatMT(item.totalQty), formatAmount(item.invoiceValue), formatAmount(item.totalFreight), formatAmount(item.totalAmount), formatRate(item.ratePerMT)
+        i + 1,
+        item.recdOnDisplay || "",
+        item.section, item.size, item.width, item.itemLength,
+        formatMT(item.totalQty),
+        formatAmount(item.invoiceValue),
+        formatAmount(item.totalFreight),
+        formatRate(item.ratePerMT),
       ]);
-      body.push(["", "TOTAL", "", "", "", formatMT(grandTotalQty), formatAmount(grandInvoiceValue), formatAmount(grandTotalFreight), formatAmount(grandTotalAmount), formatRate(grandRatePerMT)]);
-      autoTable(doc, { head: [headers], body, startY: fromDate || toDate ? 55 : 45, styles: { fontSize: 8, cellPadding: 2 }, theme: "grid" });
+      body.push([
+        "", "TOTAL", "", "", "", "",
+        formatMT(grandTotalQty),
+        formatAmount(grandInvoiceValue),
+        formatAmount(grandTotalFreight),
+        formatRate(grandRatePerMT),
+      ]);
+      autoTable(doc, {
+        head: [headers], body,
+        startY: fromDate || toDate ? 55 : 45,
+        styles: { fontSize: 8, cellPadding: 2 },
+        theme: "grid",
+      });
     }
     doc.save("Abstract_Report.pdf");
   };
@@ -280,72 +358,76 @@ export default function AbstractReport() {
     const fmt0 = "#,##0", fmt3 = "#,##0.000";
 
     if (selectedUnit === "Group" && pivotData.length > 0) {
-      const header1 = ["S.No.", "Section", "Size", "Width", "Length"];
-      const header2 = ["", "", "", "", ""];
-      units.forEach(u => { header1.push(u, "", "", "", ""); header2.push("MT", "Invoice Value", "Freight", "Total", "Rate/MT"); });
-      header1.push("Total", "", "", "", "");
-      header2.push("MT", "Invoice Value", "Freight", "Total", "Rate/MT");
+      const header1 = ["S.No.", "Recd. On", "Section", "Size", "Width", "Length"];
+      const header2 = ["", "", "", "", "", ""];
+      units.forEach(u => {
+        header1.push(u, "", "", "");
+        header2.push("MT", "Invoice Value", "Freight", "Rate/MT");
+      });
 
       const rows = pivotData.map((item, i) => {
-        const r = [i + 1, item.section, item.size, item.width, item.itemLength];
-        units.forEach(u => { r.push(item[`${u}_qty`] || 0, item[`${u}_invoiceValue`] || 0, item[`${u}_freight`] || 0, item[`${u}_total`] || 0, item[`${u}_ratePerMT`] || 0); });
-        r.push(item.combined_qty || 0, item.combined_invoiceValue || 0, item.combined_freight || 0, item.combined_total || 0, item.combined_ratePerMT || 0);
+        const r = [i + 1, item.recdOnDisplay || "", item.section, item.size, item.width, item.itemLength];
+        units.forEach(u => {
+          r.push(
+            item[`${u}_qty`] || 0,
+            item[`${u}_invoiceValue`] || 0,
+            item[`${u}_freight`] || 0,
+            item[`${u}_ratePerMT`] || 0
+          );
+        });
         return r;
       });
 
-      const totalRow = ["", "TOTAL", "", "", ""];
+      const totalRow = ["", "TOTAL", "", "", "", ""];
       units.forEach(u => {
         const tq = pivotData.reduce((s, x) => s + (x[`${u}_qty`] || 0), 0);
         const tinv = pivotData.reduce((s, x) => s + (x[`${u}_invoiceValue`] || 0), 0);
         const tf = pivotData.reduce((s, x) => s + (x[`${u}_freight`] || 0), 0);
         const tt = tinv + tf;
-        totalRow.push(tq, tinv, tf, tt, tq ? tt / tq : 0);
+        totalRow.push(tq, tinv, tf, tq ? tt / tq : 0);
       });
-      const gq = pivotData.reduce((s, x) => s + (x.combined_qty || 0), 0);
-      const ginv = pivotData.reduce((s, x) => s + (x.combined_invoiceValue || 0), 0);
-      const gf = pivotData.reduce((s, x) => s + (x.combined_freight || 0), 0);
-      const gt = ginv + gf;
-      totalRow.push(gq, ginv, gf, gt, gq ? gt / gq : 0);
 
       const ws = XLSX.utils.aoa_to_sheet([header1, header2, ...rows, totalRow]);
 
-      // Merges: first 5 columns span both header rows, then each unit group spans 5 cols
       const merges = [
         { s: { r: 0, c: 0 }, e: { r: 1, c: 0 } },
         { s: { r: 0, c: 1 }, e: { r: 1, c: 1 } },
         { s: { r: 0, c: 2 }, e: { r: 1, c: 2 } },
         { s: { r: 0, c: 3 }, e: { r: 1, c: 3 } },
         { s: { r: 0, c: 4 }, e: { r: 1, c: 4 } },
+        { s: { r: 0, c: 5 }, e: { r: 1, c: 5 } },
       ];
-      let c = 5;
-      units.forEach(() => { merges.push({ s: { r: 0, c }, e: { r: 0, c: c + 4 } }); c += 5; });
-      merges.push({ s: { r: 0, c }, e: { r: 0, c: c + 4 } });
+      let c = 6;
+      units.forEach(() => { merges.push({ s: { r: 0, c }, e: { r: 0, c: c + 3 } }); c += 4; });
       ws["!merges"] = merges;
 
       const range = XLSX.utils.decode_range(ws["!ref"]);
       for (let R = 2; R <= range.e.r; R++) {
-        for (let C = 5; C <= range.e.c; C++) {
+        for (let C = 6; C <= range.e.c; C++) {
           const addr = XLSX.utils.encode_cell({ r: R, c: C });
           if (ws[addr] && typeof ws[addr].v !== "string") {
             ws[addr].t = "n";
-            ws[addr].z = (C - 5) % 5 === 0 ? fmt3 : fmt0;
+            ws[addr].z = (C - 6) % 4 === 0 ? fmt3 : fmt0;
           }
         }
       }
       ws["!freeze"] = { ySplit: 2 };
       XLSX.utils.book_append_sheet(wb, ws, "Abstract Report");
     } else {
-      const headers = ["No.", "Section", "Size", "Width", "Length", "MT", "Invoice Value", "Freight", "Total", "Rate/MT"];
-      const rows = abstractData.map((x, i) => [i + 1, x.section, x.size, x.width, x.itemLength, x.totalQty, x.invoiceValue, x.totalFreight, x.totalAmount, x.ratePerMT]);
-      const totalRow = ["", "TOTAL", "", "", "", grandTotalQty, grandInvoiceValue, grandTotalFreight, grandTotalAmount, grandRatePerMT];
+      const headers = ["No.", "Recd. On", "Section", "Size", "Width", "Length", "MT", "Invoice Value", "Freight", "Rate/MT"];
+      const rows = abstractData.map((x, i) => [
+        i + 1, x.recdOnDisplay || "", x.section, x.size, x.width, x.itemLength,
+        x.totalQty, x.invoiceValue, x.totalFreight, x.ratePerMT,
+      ]);
+      const totalRow = ["", "TOTAL", "", "", "", "", grandTotalQty, grandInvoiceValue, grandTotalFreight, grandRatePerMT];
       const ws = XLSX.utils.aoa_to_sheet([headers, ...rows, totalRow]);
       const range = XLSX.utils.decode_range(ws["!ref"]);
       for (let R = 1; R <= range.e.r; R++) {
-        for (let C = 5; C <= range.e.c; C++) {
+        for (let C = 6; C <= range.e.c; C++) {
           const addr = XLSX.utils.encode_cell({ r: R, c: C });
           if (ws[addr] && typeof ws[addr].v !== "string") {
             ws[addr].t = "n";
-            ws[addr].z = C === 5 ? fmt3 : fmt0;
+            ws[addr].z = C === 6 ? fmt3 : fmt0;
           }
         }
       }
@@ -355,7 +437,12 @@ export default function AbstractReport() {
     XLSX.writeFile(wb, "Abstract_Report.xlsx");
   };
 
-  const clearFilters = () => { setFromDate(""); setToDate(""); setFinancialYear("2025-26"); setSelectedUnit("Group"); setSelectedWorkType("Group"); };
+  const clearFilters = () => {
+    setFromDate(""); setToDate("");
+    setFinancialYear("2025-26");
+    setSelectedUnit("Group");
+    setSelectedWorkType("Group");
+  };
 
   return (
     <div className="abstract-container">
@@ -398,30 +485,26 @@ export default function AbstractReport() {
             <thead>
               <tr>
                 <th rowSpan={2}>S.No.</th>
+                <th rowSpan={2} style={{ whiteSpace: "nowrap" }}>Recd. On</th>
                 <th rowSpan={2}>Section</th>
                 <th rowSpan={2}>Size</th>
                 <th rowSpan={2}>Width</th>
                 <th rowSpan={2}>Length</th>
-                {units.map((unit, i) => <th key={i} colSpan={5}>{unit}</th>)}
-                <th colSpan={5} className="total-header">Total</th>
+                {units.map((unit, i) => <th key={i} colSpan={4}>{unit}</th>)}
               </tr>
               <tr>
                 {units.map((unit, i) => (
                   <React.Fragment key={i}>
-                    <th>MT</th><th>Invoice Value</th><th>Freight</th><th>Total</th><th>Rate/MT</th>
+                    <th>MT</th><th>Invoice Value</th><th>Freight</th><th>Rate/MT</th>
                   </React.Fragment>
                 ))}
-                <th className="total-subheader">MT</th>
-                <th className="total-subheader">Invoice Value</th>
-                <th className="total-subheader">Freight</th>
-                <th className="total-subheader">Total</th>
-                <th className="total-subheader">Rate/MT</th>
               </tr>
             </thead>
             <tbody>
               {pivotData.map((item, index) => (
                 <tr key={index}>
                   <td>{index + 1}</td>
+                  <td style={{ whiteSpace: "nowrap" }}>{item.recdOnDisplay || ""}</td>
                   <td className="text-left">{item.section}</td>
                   <td className="text-left">{item.size}</td>
                   <td className="text-left">{item.width}</td>
@@ -431,19 +514,13 @@ export default function AbstractReport() {
                       <td>{formatMT(item[`${unit}_qty`] || 0)}</td>
                       <td>{formatAmount(item[`${unit}_invoiceValue`] || 0)}</td>
                       <td>{formatAmount(item[`${unit}_freight`] || 0)}</td>
-                      <td>{formatAmount(item[`${unit}_total`] || 0)}</td>
                       <td>{formatRate(item[`${unit}_ratePerMT`] || 0)}</td>
                     </React.Fragment>
                   ))}
-                  <td className="total-cell">{formatMT(item.combined_qty || 0)}</td>
-                  <td className="total-cell">{formatAmount(item.combined_invoiceValue || 0)}</td>
-                  <td className="total-cell">{formatAmount(item.combined_freight || 0)}</td>
-                  <td className="total-cell">{formatAmount(item.combined_total || 0)}</td>
-                  <td className="total-cell">{formatRate(item.combined_ratePerMT || 0)}</td>
                 </tr>
               ))}
               <tr className="total-row">
-                <td colSpan={5}>Total</td>
+                <td colSpan={6}>Total</td>
                 {units.map((unit, i) => {
                   const tQty = pivotData.reduce((s, x) => s + (x[`${unit}_qty`] || 0), 0);
                   const tInv = pivotData.reduce((s, x) => s + (x[`${unit}_invoiceValue`] || 0), 0);
@@ -451,23 +528,13 @@ export default function AbstractReport() {
                   const tAmt = tInv + tFrt;
                   return (
                     <React.Fragment key={i}>
-                      <td>{formatMT(tQty)}</td><td>{formatAmount(tInv)}</td><td>{formatAmount(tFrt)}</td>
-                      <td>{formatAmount(tAmt)}</td><td>{formatRate(tQty > 0 ? tAmt / tQty : 0)}</td>
+                      <td>{formatMT(tQty)}</td>
+                      <td>{formatAmount(tInv)}</td>
+                      <td>{formatAmount(tFrt)}</td>
+                      <td>{formatRate(tQty > 0 ? tAmt / tQty : 0)}</td>
                     </React.Fragment>
                   );
                 })}
-                {(() => {
-                  const gQty = pivotData.reduce((s, x) => s + (x.combined_qty || 0), 0);
-                  const gInv = pivotData.reduce((s, x) => s + (x.combined_invoiceValue || 0), 0);
-                  const gFrt = pivotData.reduce((s, x) => s + (x.combined_freight || 0), 0);
-                  const gAmt = gInv + gFrt;
-                  return (
-                    <>
-                      <td>{formatMT(gQty)}</td><td>{formatAmount(gInv)}</td><td>{formatAmount(gFrt)}</td>
-                      <td>{formatAmount(gAmt)}</td><td>{formatRate(gQty > 0 ? gAmt / gQty : 0)}</td>
-                    </>
-                  );
-                })()}
               </tr>
             </tbody>
           </table>
@@ -482,14 +549,23 @@ export default function AbstractReport() {
                 </th>
               </tr>
               <tr>
-                <th>No.</th><th>Section</th><th>Size</th><th>Width</th><th>Length</th>
-                <th>MT</th><th>Invoice Value</th><th>Freight</th><th>Total</th><th>Rate/MT</th>
+                <th>No.</th>
+                <th style={{ whiteSpace: "nowrap" }}>Recd. On</th>
+                <th>Section</th>
+                <th>Size</th>
+                <th>Width</th>
+                <th>Length</th>
+                <th>MT</th>
+                <th>Invoice Value</th>
+                <th>Freight</th>
+                <th>Rate/MT</th>
               </tr>
             </thead>
             <tbody>
               {abstractData.map((item, index) => (
                 <tr key={index}>
                   <td>{index + 1}</td>
+                  <td style={{ whiteSpace: "nowrap" }}>{item.recdOnDisplay || ""}</td>
                   <td className="text-left">{item.section}</td>
                   <td className="text-left">{item.size}</td>
                   <td className="text-left">{item.width}</td>
@@ -497,16 +573,14 @@ export default function AbstractReport() {
                   <td>{formatMT(item.totalQty)}</td>
                   <td>{formatAmount(item.invoiceValue)}</td>
                   <td>{formatAmount(item.totalFreight)}</td>
-                  <td>{formatAmount(item.totalAmount)}</td>
                   <td>{formatRate(item.ratePerMT)}</td>
                 </tr>
               ))}
               <tr className="total-row">
-                <td colSpan={5}>Total</td>
+                <td colSpan={6}>Total</td>
                 <td>{formatMT(grandTotalQty)}</td>
                 <td>{formatAmount(grandInvoiceValue)}</td>
                 <td>{formatAmount(grandTotalFreight)}</td>
-                <td>{formatAmount(grandTotalAmount)}</td>
                 <td>{formatRate(grandRatePerMT)}</td>
               </tr>
             </tbody>

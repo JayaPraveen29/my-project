@@ -257,14 +257,35 @@ export default function ViewData() {
       });
     }
 
-    result.sort((a, b) => {
-      const da = parseDateSafe(a["Received On"]);
-      const db = parseDateSafe(b["Received On"]);
-      if (da && db) return da - db;
-      if (da && !db) return -1;
-      if (!da && db) return 1;
-      return (a["Received On"] || "").toString().localeCompare((b["Received On"] || "").toString());
-    });
+   // FIXED - renamed to avoid shadowing Firebase `db`
+   result.sort((a, b) => {
+    const parseDDMMYYYY = (v) => {
+      if (!v) return null;
+      try { if (typeof v.toDate === "function") return v.toDate(); } catch (e) {}
+      if (typeof v === "string") {
+        const match = v.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+        if (match) {
+          const [, day, month, year] = match;
+          return new Date(`${year}-${month}-${day}`);
+        }
+      }
+      const dt = new Date(v);
+      return isNaN(dt) ? null : dt;
+    };
+  
+    const da = parseDDMMYYYY(a["Received On"]);
+    const db2 = parseDDMMYYYY(b["Received On"]);
+  
+    if (da && db2) {
+      // Sort by Year → Month → Day
+      if (da.getFullYear() !== db2.getFullYear()) return da.getFullYear() - db2.getFullYear();
+      if (da.getMonth() !== db2.getMonth()) return da.getMonth() - db2.getMonth();
+      return da.getDate() - db2.getDate();
+    }
+    if (da && !db2) return -1;
+    if (!da && db2) return 1;
+    return 0;
+  });
 
     setFilteredData(result);
   }, [data, search, financialYear, unitFilter, workTypeFilter, fromDate, toDate]);
