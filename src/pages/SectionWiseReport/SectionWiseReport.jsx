@@ -41,13 +41,14 @@ export default function SectionWiseReport() {
     if (!da && !db2) return 0;
     if (!da) return 1;
     if (!db2) return -1;
-    if (da.getDate() !== db2.getDate()) return da.getDate() - db2.getDate();
+    // Sort by full date (year → month → day) for correct chronological order
+    if (da.getFullYear() !== db2.getFullYear()) return da.getFullYear() - db2.getFullYear();
     if (da.getMonth() !== db2.getMonth()) return da.getMonth() - db2.getMonth();
-    return da.getFullYear() - db2.getFullYear();
+    return da.getDate() - db2.getDate();
   };
 
   const buildRecdOnDisplay = (recdDates) => {
-    const sorted = [...recdDates].sort(compareDatesDayMonthYear);
+    const sorted = [...recdDates].sort((a, b) => compareDatesDayMonthYear(a, b));
     if (sorted.length === 0) return "";
     if (sorted.length === 1) return sorted[0];
     return `${sorted[0]} to ${sorted[sorted.length - 1]}`;
@@ -121,6 +122,15 @@ export default function SectionWiseReport() {
       });
     });
 
+    // ── Sort entries within each group by date (chronological) ──
+    Object.keys(grouped).forEach(section => {
+      Object.keys(grouped[section]).forEach(groupKey => {
+        grouped[section][groupKey].sort((a, b) =>
+          compareDatesDayMonthYear(a.recdOn, b.recdOn)
+        );
+      });
+    });
+
     setGroupedData(grouped);
   };
 
@@ -153,12 +163,6 @@ export default function SectionWiseReport() {
   const showUnitColumn = selectedUnit === "Group";
   const showWorkTypeColumn = selectedWorkType === "Group";
 
-  // ── helper: collect unique recdOn values from a group's entries ──
-  const getGroupRecdOnDisplay = (entries) => {
-    const uniqueDates = [...new Set(entries.map(e => e.recdOn).filter(Boolean))];
-    return buildRecdOnDisplay(uniqueDates);
-  };
-
   const exportExcel = () => {
     if (Object.keys(groupedData).length === 0) {
       alert("No data to export");
@@ -189,7 +193,6 @@ export default function SectionWiseReport() {
 
         wsData.push([title]);
 
-        // ── headers now include Recd. On ──
         const headers = ["Recd. On"];
         if (showUnitColumn) headers.push("Unit");
         if (showWorkTypeColumn) headers.push("Work Type");
@@ -214,8 +217,8 @@ export default function SectionWiseReport() {
         const totalQty = entries.reduce((sum, e) => sum + e.qty, 0);
         const totalAmount = entries.reduce((sum, e) => sum + e.amount, 0);
 
-        // ── total row: show date range in Recd. On cell ──
-        const totalRow = [getGroupRecdOnDisplay(entries)];
+        // ── total row: no date in Recd. On cell ──
+        const totalRow = [""];
         if (showUnitColumn) totalRow.push("");
         if (showWorkTypeColumn) totalRow.push("");
         totalRow.push("TOTAL", "", "", totalQty, totalAmount, calculateAvgRate(totalAmount, totalQty));
@@ -231,7 +234,6 @@ export default function SectionWiseReport() {
     ws["!cols"] = Array(maxCols).fill({ wch: 15 });
 
     const range = XLSX.utils.decode_range(ws["!ref"]);
-    // +1 offset for the new Recd. On column
     const baseOffset = 1 + (showUnitColumn ? 1 : 0) + (showWorkTypeColumn ? 1 : 0);
     const qtyColIndex = baseOffset + 3;
 
@@ -290,7 +292,6 @@ export default function SectionWiseReport() {
         doc.text(title, 14, startY);
         startY += 20;
 
-        // ── headers now include Recd. On ──
         const headerRow = ["Recd. On"];
         if (showUnitColumn) headerRow.push("Unit");
         if (showWorkTypeColumn) headerRow.push("Work Type");
@@ -311,8 +312,8 @@ export default function SectionWiseReport() {
           return row;
         });
 
-        // ── total row ──
-        const totalRow = [getGroupRecdOnDisplay(entries)];
+        // ── total row: no date in Recd. On cell ──
+        const totalRow = [""];
         if (showUnitColumn) totalRow.push("");
         if (showWorkTypeColumn) totalRow.push("");
         totalRow.push(
@@ -430,7 +431,6 @@ export default function SectionWiseReport() {
                       <table className="section-table">
                         <thead>
                           <tr>
-                            {/* ── Recd. On column added ── */}
                             <th style={{ whiteSpace: "nowrap" }}>Recd. On</th>
                             {showUnitColumn && <th>Unit</th>}
                             {showWorkTypeColumn && <th>Work Type</th>}
@@ -457,8 +457,8 @@ export default function SectionWiseReport() {
                             </tr>
                           ))}
                           <tr className="total-row">
-                            {/* ── show date range in total row ── */}
-                            <td style={{ whiteSpace: "nowrap" }}>{getGroupRecdOnDisplay(entries)}</td>
+                            {/* ── no date in total row ── */}
+                            <td></td>
                             {showUnitColumn && <td></td>}
                             {showWorkTypeColumn && <td></td>}
                             <td className="text-left">TOTAL</td>

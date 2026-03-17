@@ -46,7 +46,7 @@ export default function SupplierReport() {
     "hr sheet": "HR Sheet",
   };
 
-  // ─── Recd. On helpers (same as AbstractReport) ───────────────────────────
+  // ─── Recd. On helpers ────────────────────────────────────────────────────
   const parseDateSafe = (v) => {
     if (!v) return null;
     try { if (typeof v.toDate === "function") return v.toDate(); } catch (e) {}
@@ -67,22 +67,16 @@ export default function SupplierReport() {
     return isNaN(dt) ? null : dt;
   };
 
-  const compareDatesDayMonthYear = (a, b) => {
+  // Sort chronologically: year → month → day
+  const compareDatesChronological = (a, b) => {
     const da = parseDateSafe(a);
     const db2 = parseDateSafe(b);
     if (!da && !db2) return 0;
     if (!da) return 1;
     if (!db2) return -1;
-    if (da.getDate() !== db2.getDate()) return da.getDate() - db2.getDate();
+    if (da.getFullYear() !== db2.getFullYear()) return da.getFullYear() - db2.getFullYear();
     if (da.getMonth() !== db2.getMonth()) return da.getMonth() - db2.getMonth();
-    return da.getFullYear() - db2.getFullYear();
-  };
-
-  const buildRecdOnDisplay = (recdDates) => {
-    const sorted = [...recdDates].sort(compareDatesDayMonthYear);
-    if (sorted.length === 0) return "";
-    if (sorted.length === 1) return sorted[0];
-    return `${sorted[0]} to ${sorted[sorted.length - 1]}`;
+    return da.getDate() - db2.getDate();
   };
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -104,7 +98,6 @@ export default function SupplierReport() {
         entries.forEach(entry => {
           const itemsArray = entry.items && Array.isArray(entry.items) ? entry.items : [entry];
 
-          // ── grab Recd. On from the entry ──
           const recdOn = entry["Received On"] || entry["Recd. On"] || "";
 
           itemsArray.forEach(item => {
@@ -147,7 +140,7 @@ export default function SupplierReport() {
               "Number of items Supplied": Number(item["Number of items Supplied"]) || 0,
               "Quantity in Metric Tons": Number(item["Quantity in Metric Tons"]) || 0,
               Amount: sectionSubtotal,
-              "Recd. On": recdOn,   // ← attach to each flattened row
+              "Recd. On": recdOn,
             });
           });
         });
@@ -220,8 +213,9 @@ export default function SupplierReport() {
     if (selectedSize !== "All")
       filtered = filtered.filter(item => item.Size === selectedSize);
 
+    // ── Sort by date chronologically (year → month → day) ──
     filtered.sort((a, b) =>
-      a["Name of the Supplier"].toLowerCase().localeCompare(b["Name of the Supplier"].toLowerCase())
+      compareDatesChronological(a["Recd. On"], b["Recd. On"])
     );
 
     setFilteredData(filtered);
@@ -256,7 +250,6 @@ export default function SupplierReport() {
     setSelectedSize("All");
   };
 
-  // ── visibility flags (unchanged) ──
   const hideFinancialYearCol = selectedFinancialYear !== "All";
   const hideUnitCol = selectedUnit !== "All";
   const hideWorkTypeCol = selectedWorkType !== "All";
@@ -265,15 +258,6 @@ export default function SupplierReport() {
   const hideSectionCol = selectedSection !== "All";
   const hideSizeCol = selectedSize !== "All";
   const hidePlaceCol = selectedSupplier !== "All" || selectedSection !== "All";
-
-  // ── Recd. On is always visible ──
-  const hideRecdOnCol = false;
-
-  // ── helper: get date range display for the whole filtered set ──
-  const getFilteredRecdOnDisplay = () => {
-    const uniqueDates = [...new Set(filteredData.map(e => e["Recd. On"]).filter(Boolean))];
-    return buildRecdOnDisplay(uniqueDates);
-  };
 
   const exportPDF = () => {
     const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
@@ -291,7 +275,6 @@ export default function SupplierReport() {
     if (selectedSize !== "All") filterParts.push(`Size: ${selectedSize}`);
     if (filterParts.length > 0) doc.text(filterParts.join(" | "), 14, 35);
 
-    // ── headers: Recd. On always first after No. ──
     const headers = ["No.", "Recd. On"];
     if (!hideFinancialYearCol) headers.push("FY");
     if (!hideUnitCol) headers.push("Unit");
@@ -331,15 +314,14 @@ export default function SupplierReport() {
     const totalQty = filteredData.reduce((sum, item) => sum + (Number(item["Quantity in Metric Tons"]) || 0), 0);
     const totalAmount = filteredData.reduce((sum, item) => sum + (Number(item.Amount) || 0), 0);
 
-    // ── total row: date range in Recd. On cell ──
-    const totalRow = ["", getFilteredRecdOnDisplay()];
+    // ── total row: no date in Recd. On cell ──
+    const totalRow = ["TOTAL", ""];
     if (!hideFinancialYearCol) totalRow.push("");
     if (!hideUnitCol) totalRow.push("");
     if (!hideWorkTypeCol) totalRow.push("");
     if (!hideSupplierCol) totalRow.push("");
     if (!hideBillNumberCol) totalRow.push("");
-    if (!hidePlaceCol) totalRow.push("TOTAL");
-    else totalRow.push("TOTAL");
+    if (!hidePlaceCol) totalRow.push("");
     if (!hideSectionCol) totalRow.push("");
     if (!hideSizeCol) totalRow.push("");
     totalRow.push("", formatNumber(totalQty), formatAmount(totalAmount), formatAmount(calculateAvgRate(totalAmount, totalQty)));
@@ -367,7 +349,6 @@ export default function SupplierReport() {
       const qty = Number(item["Quantity in Metric Tons"]) || 0;
       const amount = Number(item.Amount) || 0;
 
-      // ── Recd. On always included as second column ──
       const row = { "No.": index + 1, "Recd. On": item["Recd. On"] || "" };
 
       if (!hideFinancialYearCol) row["FY"] = item["Financial Year"] || "Unknown";
@@ -390,15 +371,14 @@ export default function SupplierReport() {
     const totalQty = filteredData.reduce((sum, item) => sum + (Number(item["Quantity in Metric Tons"]) || 0), 0);
     const totalAmount = filteredData.reduce((sum, item) => sum + (Number(item.Amount) || 0), 0);
 
-    // ── total row: date range in Recd. On cell ──
-    const totalRow = { "No.": "", "Recd. On": getFilteredRecdOnDisplay() };
+    // ── total row: no date in Recd. On cell ──
+    const totalRow = { "No.": "TOTAL", "Recd. On": "" };
     if (!hideFinancialYearCol) totalRow["FY"] = "";
     if (!hideUnitCol) totalRow["Unit"] = "";
     if (!hideWorkTypeCol) totalRow["Work Type"] = "";
     if (!hideSupplierCol) totalRow["Supplier"] = "";
     if (!hideBillNumberCol) totalRow["Bill No."] = "";
-    if (!hidePlaceCol) totalRow["Place"] = "TOTAL";
-    else totalRow["No."] = "TOTAL";
+    if (!hidePlaceCol) totalRow["Place"] = "";
     if (!hideSectionCol) totalRow["Section"] = "";
     if (!hideSizeCol) totalRow["Size"] = "";
     totalRow["Items"] = "";
@@ -410,8 +390,7 @@ export default function SupplierReport() {
 
     const ws = XLSX.utils.json_to_sheet(excelData);
 
-    // ── column widths: +1 for Recd. On ──
-    const colWidths = [{ wch: 5 }, { wch: 22 }]; // No. + Recd. On
+    const colWidths = [{ wch: 5 }, { wch: 22 }];
     if (!hideFinancialYearCol) colWidths.push({ wch: 10 });
     if (!hideUnitCol) colWidths.push({ wch: 10 });
     if (!hideWorkTypeCol) colWidths.push({ wch: 12 });
@@ -445,9 +424,8 @@ export default function SupplierReport() {
 
   const financialYears = [...new Set(data.map(item => item["Financial Year"]))].sort();
 
-  // ── total visible columns count for empty-state colspan ──
   const visibleColCount =
-    2 + // No. + Recd. On (always visible)
+    2 +
     (hideFinancialYearCol ? 0 : 1) +
     (hideUnitCol ? 0 : 1) +
     (hideWorkTypeCol ? 0 : 1) +
@@ -456,7 +434,7 @@ export default function SupplierReport() {
     (hidePlaceCol ? 0 : 1) +
     (hideSectionCol ? 0 : 1) +
     (hideSizeCol ? 0 : 1) +
-    4; // Items + Qty + Amount + Avg.Rate
+    4;
 
   return (
     <div className="entry-layout">
@@ -518,7 +496,6 @@ export default function SupplierReport() {
             <thead>
               <tr>
                 <th style={{ width: "3%" }}>No.</th>
-                {/* ── Recd. On always visible ── */}
                 <th style={{ width: "9%", whiteSpace: "nowrap" }}>Recd. On</th>
                 {!hideFinancialYearCol && <th style={{ width: "6%" }}>FY</th>}
                 {!hideUnitCol && <th style={{ width: "5%" }}>Unit</th>}
@@ -546,7 +523,6 @@ export default function SupplierReport() {
                     return (
                       <tr key={index}>
                         <td className="text-center">{index + 1}</td>
-                        {/* ── Recd. On cell ── */}
                         <td className="text-center" style={{ whiteSpace: "nowrap" }}>{item["Recd. On"] || ""}</td>
                         {!hideFinancialYearCol && <td className="text-left">{item["Financial Year"] || "Unknown"}</td>}
                         {!hideUnitCol && <td className="text-left">{item.Unit || "Unknown"}</td>}
@@ -565,8 +541,8 @@ export default function SupplierReport() {
                   })}
                   <tr className="total-row">
                     <td className="text-left">TOTAL</td>
-                    {/* ── date range in total row ── */}
-                    <td className="text-center" style={{ whiteSpace: "nowrap" }}>{getFilteredRecdOnDisplay()}</td>
+                    {/* ── no date in total row ── */}
+                    <td></td>
                     {!hideFinancialYearCol && <td></td>}
                     {!hideUnitCol && <td></td>}
                     {!hideWorkTypeCol && <td></td>}
