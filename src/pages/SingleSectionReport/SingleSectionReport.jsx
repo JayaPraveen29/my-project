@@ -16,6 +16,51 @@ export default function SingleSectionReport() {
   const [selectedGroupKey, setSelectedGroupKey] = useState("");
   const [workTypes, setWorkTypes] = useState([]);
 
+  // ─── Recd. On helpers (same as AbstractReport) ───────────────────────────
+  const parseDateSafe = (v) => {
+    if (!v) return null;
+    try { if (typeof v.toDate === "function") return v.toDate(); } catch (e) {}
+    if (typeof v === "string") {
+      const ddmmyyyy = v.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+      if (ddmmyyyy) {
+        const [, day, month, year] = ddmmyyyy;
+        const d = new Date(`${year}-${month}-${day}`);
+        if (!isNaN(d)) return d;
+      }
+      const yyyymmdd = v.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (yyyymmdd) {
+        const d = new Date(v);
+        if (!isNaN(d)) return d;
+      }
+    }
+    const dt = new Date(v);
+    return isNaN(dt) ? null : dt;
+  };
+
+  const compareDatesDayMonthYear = (a, b) => {
+    const da = parseDateSafe(a);
+    const db2 = parseDateSafe(b);
+    if (!da && !db2) return 0;
+    if (!da) return 1;
+    if (!db2) return -1;
+    if (da.getDate() !== db2.getDate()) return da.getDate() - db2.getDate();
+    if (da.getMonth() !== db2.getMonth()) return da.getMonth() - db2.getMonth();
+    return da.getFullYear() - db2.getFullYear();
+  };
+
+  const buildRecdOnDisplay = (recdDates) => {
+    const sorted = [...recdDates].sort(compareDatesDayMonthYear);
+    if (sorted.length === 0) return "";
+    if (sorted.length === 1) return sorted[0];
+    return `${sorted[0]} to ${sorted[sorted.length - 1]}`;
+  };
+
+  const getGroupRecdOnDisplay = (entries) => {
+    const uniqueDates = [...new Set(entries.map(e => e.recdOn).filter(Boolean))];
+    return buildRecdOnDisplay(uniqueDates);
+  };
+  // ─────────────────────────────────────────────────────────────────────────
+
   useEffect(() => {
     async function fetchData() {
       try {
@@ -48,13 +93,15 @@ export default function SingleSectionReport() {
 
       const entryNetAmount = Number(entry.finalTotals?.net || entry["Net"] || 0);
 
+      // ── grab Recd. On from the entry ──
+      const recdOn = entry["Received On"] || entry["Recd. On"] || "";
+
       itemsArray.forEach(item => {
         const section = (item["Section"] || "Unknown").toString().trim();
         const size = (item["Size"] || "").toString().trim();
         const width = (item["Width"] || "").toString().trim();
         const itemLength = (item["Item Length"] || "").toString().trim();
 
-        // Group by section + size + width + itemLength
         const groupKey = `${size}|||${width}|||${itemLength}`;
 
         const unit = entry["Unit"] || "";
@@ -75,7 +122,8 @@ export default function SingleSectionReport() {
         grouped[section][groupKey].push({
           unit, workType, supplier, place,
           size, width, itemLength,
-          itemCount, qty, amount: itemAmount
+          itemCount, qty, amount: itemAmount,
+          recdOn,   // ← attach to each row
         });
       });
     });
@@ -90,7 +138,6 @@ export default function SingleSectionReport() {
     processData(data);
   }, [financialYear, selectedUnit, selectedWorkType, data]);
 
-  // Build display label for a groupKey: "Size x Width x Length" depending on what's present
   const buildGroupLabel = (groupKey) => {
     const [size, width, itemLength] = groupKey.split("|||");
     let label = size || "";
@@ -100,7 +147,6 @@ export default function SingleSectionReport() {
     return label;
   };
 
-  // Full title shown as heading: "Section - Size x Width x Length"
   const buildFullTitle = (section, groupKey) => {
     const label = buildGroupLabel(groupKey);
     return label ? `${section} - ${label}` : section;
@@ -139,11 +185,13 @@ export default function SingleSectionReport() {
     const totalAmount = entries.reduce((s, e) => s + e.amount, 0);
     const avgRate = calculateAvgRate(totalAmount, totalQty);
 
-    const headers = ["Unit", "Work Type", "Supplier", "Place", "Items", "Qty (MT)", "Amount", "Avg. Rate"];
+    // ── Recd. On added as first column ──
+    const headers = ["Recd. On", "Unit", "Work Type", "Supplier", "Place", "Items", "Qty (MT)", "Amount", "Avg. Rate"];
     wsData.push(headers);
 
     entries.forEach(entry => {
       wsData.push([
+        entry.recdOn || "",
         entry.unit,
         entry.workType,
         entry.supplier,
@@ -155,12 +203,14 @@ export default function SingleSectionReport() {
       ]);
     });
 
-    wsData.push(["TOTAL", "", "", "", "", totalQty, totalAmount, avgRate]);
+    // ── total row: date range in Recd. On cell ──
+    wsData.push([getGroupRecdOnDisplay(entries), "TOTAL", "", "", "", "", totalQty, totalAmount, avgRate]);
 
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet(wsData);
 
     ws["!cols"] = [
+      { wch: 22 }, // Recd. On
       { wch: 12 }, // Unit
       { wch: 15 }, // Work Type
       { wch: 25 }, // Supplier
@@ -178,8 +228,8 @@ export default function SingleSectionReport() {
     const range = XLSX.utils.decode_range(ws["!ref"]);
     const dataStartRow = filterText ? 3 : 2;
     for (let R = dataStartRow; R <= range.e.r; R++) {
-      // Items col 4, Qty col 5, Amount col 6, Rate col 7
-      [[4, "#,##0"], [5, "#,##0.000"], [6, "#,##0"], [7, "#,##0"]].forEach(([C, fmt]) => {
+      // Items col 5, Qty col 6, Amount col 7, Rate col 8 (shifted +1 for Recd. On)
+      [[5, "#,##0"], [6, "#,##0.000"], [7, "#,##0"], [8, "#,##0"]].forEach(([C, fmt]) => {
         const addr = XLSX.utils.encode_cell({ r: R, c: C });
         if (ws[addr] && typeof ws[addr].v === "number") {
           ws[addr].t = "n";
@@ -215,7 +265,9 @@ export default function SingleSectionReport() {
     const totalAmount = entries.reduce((s, e) => s + e.amount, 0);
     const avgRate = calculateAvgRate(totalAmount, totalQty);
 
+    // ── Recd. On added as first column ──
     const tableData = entries.map(e => [
+      e.recdOn || "",
       e.unit,
       e.workType,
       e.supplier,
@@ -226,7 +278,9 @@ export default function SingleSectionReport() {
       formatAmount(calculateAvgRate(e.amount, e.qty))
     ]);
 
+    // ── total row: date range in Recd. On cell ──
     tableData.push([
+      getGroupRecdOnDisplay(entries),
       "TOTAL", "", "", "", "",
       formatNumber(totalQty),
       formatAmount(totalAmount),
@@ -234,7 +288,7 @@ export default function SingleSectionReport() {
     ]);
 
     autoTable(doc, {
-      head: [["Unit", "Work Type", "Supplier", "Place", "Items", "Qty (MT)", "Amount", "Avg. Rate"]],
+      head: [["Recd. On", "Unit", "Work Type", "Supplier", "Place", "Items", "Qty (MT)", "Amount", "Avg. Rate"]],
       body: tableData,
       startY: 40,
       margin: { left: 14 },
@@ -368,6 +422,8 @@ export default function SingleSectionReport() {
               <table className="single-section-table">
                 <thead>
                   <tr>
+                    {/* ── Recd. On column added ── */}
+                    <th style={{ whiteSpace: "nowrap" }}>Recd. On</th>
                     <th>Unit</th>
                     <th>Work Type</th>
                     <th>Supplier</th>
@@ -381,6 +437,7 @@ export default function SingleSectionReport() {
                 <tbody>
                   {entries.map((entry, idx) => (
                     <tr key={idx}>
+                      <td style={{ whiteSpace: "nowrap" }}>{entry.recdOn || ""}</td>
                       <td>{entry.unit}</td>
                       <td>{entry.workType}</td>
                       <td className="text-left">{entry.supplier}</td>
@@ -392,6 +449,8 @@ export default function SingleSectionReport() {
                     </tr>
                   ))}
                   <tr className="total-row">
+                    {/* ── date range in total row ── */}
+                    <td style={{ whiteSpace: "nowrap" }}>{getGroupRecdOnDisplay(entries)}</td>
                     <td colSpan={4}>TOTAL</td>
                     <td></td>
                     <td>{formatNumber(totalQty)}</td>

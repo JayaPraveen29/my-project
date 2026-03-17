@@ -14,6 +14,46 @@ export default function SectionWiseReport() {
   const [selectedWorkType, setSelectedWorkType] = useState("Group");
   const [workTypes, setWorkTypes] = useState([]);
 
+  // ─── Recd. On helpers (same as AbstractReport) ───────────────────────────
+  const parseDateSafe = (v) => {
+    if (!v) return null;
+    try { if (typeof v.toDate === "function") return v.toDate(); } catch (e) {}
+    if (typeof v === "string") {
+      const ddmmyyyy = v.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+      if (ddmmyyyy) {
+        const [, day, month, year] = ddmmyyyy;
+        const d = new Date(`${year}-${month}-${day}`);
+        if (!isNaN(d)) return d;
+      }
+      const yyyymmdd = v.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (yyyymmdd) {
+        const d = new Date(v);
+        if (!isNaN(d)) return d;
+      }
+    }
+    const dt = new Date(v);
+    return isNaN(dt) ? null : dt;
+  };
+
+  const compareDatesDayMonthYear = (a, b) => {
+    const da = parseDateSafe(a);
+    const db2 = parseDateSafe(b);
+    if (!da && !db2) return 0;
+    if (!da) return 1;
+    if (!db2) return -1;
+    if (da.getDate() !== db2.getDate()) return da.getDate() - db2.getDate();
+    if (da.getMonth() !== db2.getMonth()) return da.getMonth() - db2.getMonth();
+    return da.getFullYear() - db2.getFullYear();
+  };
+
+  const buildRecdOnDisplay = (recdDates) => {
+    const sorted = [...recdDates].sort(compareDatesDayMonthYear);
+    if (sorted.length === 0) return "";
+    if (sorted.length === 1) return sorted[0];
+    return `${sorted[0]} to ${sorted[sorted.length - 1]}`;
+  };
+  // ─────────────────────────────────────────────────────────────────────────
+
   useEffect(() => {
     async function fetchData() {
       try {
@@ -46,14 +86,15 @@ export default function SectionWiseReport() {
 
       const entryNetAmount = Number(entry.finalTotals?.net || entry["Net"] || 0);
 
+      // ── grab Recd. On from the entry ──
+      const recdOn = entry["Received On"] || entry["Recd. On"] || "";
+
       itemsArray.forEach(item => {
         const section = (item["Section"] || "Unknown").toString().trim();
         const size = (item["Size"] || "").toString().trim();
         const width = (item["Width"] || "").toString().trim();
         const itemLength = (item["Item Length"] || "").toString().trim();
 
-        // Build group key: Section - Size x Width (if width exists), then itemLength
-        // Group by section + size + width + itemLength so each unique combo is its own table
         const groupKey = `${section}|||${size}|||${width}|||${itemLength}`;
 
         const unit = entry["Unit"] || "";
@@ -74,7 +115,8 @@ export default function SectionWiseReport() {
         grouped[section][groupKey].push({
           unit, workType, supplier, place,
           size, width, itemLength,
-          itemCount, qty, amount: itemAmount
+          itemCount, qty, amount: itemAmount,
+          recdOn,   // ← attach to each row
         });
       });
     });
@@ -98,7 +140,6 @@ export default function SectionWiseReport() {
 
   const calculateAvgRate = (amount, qty) => (!qty || qty === 0 ? 0 : amount / qty);
 
-  // Build display title: "Section - Size x Width" or with itemLength appended if present
   const buildTableTitle = (section, groupKey) => {
     const [, size, width, itemLength] = groupKey.split("|||");
     let title = `${section}`;
@@ -111,6 +152,12 @@ export default function SectionWiseReport() {
 
   const showUnitColumn = selectedUnit === "Group";
   const showWorkTypeColumn = selectedWorkType === "Group";
+
+  // ── helper: collect unique recdOn values from a group's entries ──
+  const getGroupRecdOnDisplay = (entries) => {
+    const uniqueDates = [...new Set(entries.map(e => e.recdOn).filter(Boolean))];
+    return buildRecdOnDisplay(uniqueDates);
+  };
 
   const exportExcel = () => {
     if (Object.keys(groupedData).length === 0) {
@@ -142,14 +189,15 @@ export default function SectionWiseReport() {
 
         wsData.push([title]);
 
-        const headers = [];
+        // ── headers now include Recd. On ──
+        const headers = ["Recd. On"];
         if (showUnitColumn) headers.push("Unit");
         if (showWorkTypeColumn) headers.push("Work Type");
         headers.push("Supplier", "Place", "Items", "Qty (MT)", "Amount", "Avg. Rate");
         wsData.push(headers);
 
         entries.forEach(entry => {
-          const row = [];
+          const row = [entry.recdOn || ""];
           if (showUnitColumn) row.push(entry.unit);
           if (showWorkTypeColumn) row.push(entry.workType);
           row.push(
@@ -166,7 +214,8 @@ export default function SectionWiseReport() {
         const totalQty = entries.reduce((sum, e) => sum + e.qty, 0);
         const totalAmount = entries.reduce((sum, e) => sum + e.amount, 0);
 
-        const totalRow = [];
+        // ── total row: show date range in Recd. On cell ──
+        const totalRow = [getGroupRecdOnDisplay(entries)];
         if (showUnitColumn) totalRow.push("");
         if (showWorkTypeColumn) totalRow.push("");
         totalRow.push("TOTAL", "", "", totalQty, totalAmount, calculateAvgRate(totalAmount, totalQty));
@@ -182,8 +231,8 @@ export default function SectionWiseReport() {
     ws["!cols"] = Array(maxCols).fill({ wch: 15 });
 
     const range = XLSX.utils.decode_range(ws["!ref"]);
-    const baseOffset = (showUnitColumn ? 1 : 0) + (showWorkTypeColumn ? 1 : 0);
-    // Supplier(0), Place(1), Items(2), Qty(3), Amount(4), Rate(5) after base cols
+    // +1 offset for the new Recd. On column
+    const baseOffset = 1 + (showUnitColumn ? 1 : 0) + (showWorkTypeColumn ? 1 : 0);
     const qtyColIndex = baseOffset + 3;
 
     for (let R = 0; R <= range.e.r; R++) {
@@ -241,13 +290,14 @@ export default function SectionWiseReport() {
         doc.text(title, 14, startY);
         startY += 20;
 
-        const headerRow = [];
+        // ── headers now include Recd. On ──
+        const headerRow = ["Recd. On"];
         if (showUnitColumn) headerRow.push("Unit");
         if (showWorkTypeColumn) headerRow.push("Work Type");
         headerRow.push("Supplier", "Place", "Items", "Qty (MT)", "Amount", "Avg. Rate");
 
         const tableData = entries.map(e => {
-          const row = [];
+          const row = [e.recdOn || ""];
           if (showUnitColumn) row.push(e.unit);
           if (showWorkTypeColumn) row.push(e.workType);
           row.push(
@@ -261,7 +311,8 @@ export default function SectionWiseReport() {
           return row;
         });
 
-        const totalRow = [];
+        // ── total row ──
+        const totalRow = [getGroupRecdOnDisplay(entries)];
         if (showUnitColumn) totalRow.push("");
         if (showWorkTypeColumn) totalRow.push("");
         totalRow.push(
@@ -379,6 +430,8 @@ export default function SectionWiseReport() {
                       <table className="section-table">
                         <thead>
                           <tr>
+                            {/* ── Recd. On column added ── */}
+                            <th style={{ whiteSpace: "nowrap" }}>Recd. On</th>
                             {showUnitColumn && <th>Unit</th>}
                             {showWorkTypeColumn && <th>Work Type</th>}
                             <th>Supplier</th>
@@ -392,6 +445,7 @@ export default function SectionWiseReport() {
                         <tbody>
                           {entries.map((entry, idx) => (
                             <tr key={idx}>
+                              <td style={{ whiteSpace: "nowrap" }}>{entry.recdOn || ""}</td>
                               {showUnitColumn && <td className="text-left">{entry.unit}</td>}
                               {showWorkTypeColumn && <td className="text-left">{entry.workType}</td>}
                               <td className="text-left">{entry.supplier}</td>
@@ -403,6 +457,8 @@ export default function SectionWiseReport() {
                             </tr>
                           ))}
                           <tr className="total-row">
+                            {/* ── show date range in total row ── */}
+                            <td style={{ whiteSpace: "nowrap" }}>{getGroupRecdOnDisplay(entries)}</td>
                             {showUnitColumn && <td></td>}
                             {showWorkTypeColumn && <td></td>}
                             <td className="text-left">TOTAL</td>
