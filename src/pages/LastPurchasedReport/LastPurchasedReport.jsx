@@ -58,8 +58,6 @@ export default function LastPurchasedReport() {
   const processData = () => {
     // bestMap: groupKey -> latest entry candidate
     const bestMap = {};
-    // For weighted avg rate: groupKey -> { totalAmount, totalQty }
-    const weightedMap = {};
 
     data.forEach(entry => {
       if (financialYear && entry.FinancialYear !== financialYear) return;
@@ -89,16 +87,6 @@ export default function LastPurchasedReport() {
         const qty = Number(item["Quantity in Metric Tons"]) || 0;
         const itemBasic = Number(item["Bill Basic Amount"]) || 0;
 
-        // Proportional net amount for this item (same as SingleSectionReport)
-        const itemAmount = entryTotalBasic > 0
-          ? (itemBasic / entryTotalBasic) * entryNetAmount
-          : 0;
-
-        // Accumulate totals for weighted avg rate
-        if (!weightedMap[groupKey]) weightedMap[groupKey] = { totalAmount: 0, totalQty: 0 };
-        weightedMap[groupKey].totalAmount += itemAmount;
-        weightedMap[groupKey].totalQty += qty;
-
         // Track latest purchase entry
         const candidate = {
           groupKey,
@@ -113,6 +101,11 @@ export default function LastPurchasedReport() {
           unit: entry.Unit || "",
           workType: entry["Work Type"] || "",
           billNumber: entry["Bill Number"] || "",
+          // Store this specific entry's values for last purchase rate calculation
+          lastEntryBasic: itemBasic,
+          lastEntryQty: qty,
+          lastEntryNetAmount: entryNetAmount,
+          lastEntryTotalBasic: entryTotalBasic,
         };
 
         if (!bestMap[groupKey]) {
@@ -137,13 +130,26 @@ export default function LastPurchasedReport() {
       });
     });
 
-    // Attach weighted avg rate (totalAmount / totalQty) — same as SingleSectionReport total row
+    // Compute last purchase rate from the winning (most recent) entry only
     const rows = Object.values(bestMap).map(row => {
-      const { totalAmount = 0, totalQty = 0 } = weightedMap[row.groupKey] || {};
-      const weightedAvgRate = totalQty > 0 ? totalAmount / totalQty : 0;
+      const {
+        lastEntryBasic,
+        lastEntryQty,
+        lastEntryNetAmount,
+        lastEntryTotalBasic,
+      } = row;
+
+      // Proportional net amount for this item in the last purchase entry
+      const lastItemAmount = lastEntryTotalBasic > 0
+        ? (lastEntryBasic / lastEntryTotalBasic) * lastEntryNetAmount
+        : 0;
+
+      // Rate = amount / qty for the last purchase only
+      const lastPurchaseRate = lastEntryQty > 0 ? lastItemAmount / lastEntryQty : 0;
+
       return {
         ...row,
-        weightedAvgRate,
+        lastPurchaseRate,
       };
     }).sort((a, b) => {
       const titleA = buildFullTitle(a.section, a.size, a.width, a.itemLength);
@@ -190,7 +196,7 @@ export default function LastPurchasedReport() {
         row.supplier,
         row.billNumber,
         row.receivedOn,
-        Math.ceil(row.weightedAvgRate)
+        Math.ceil(row.lastPurchaseRate)
       );
       wsData.push(r);
     });
@@ -237,7 +243,7 @@ export default function LastPurchasedReport() {
         row.supplier,
         row.billNumber,
         row.receivedOn,
-        formatAmount(row.weightedAvgRate)
+        formatAmount(row.lastPurchaseRate)
       );
       return r;
     });
@@ -347,7 +353,7 @@ export default function LastPurchasedReport() {
                     <td className="text-left">{row.supplier}</td>
                     <td className="text-center">{row.billNumber}</td>
                     <td className="text-center">{row.receivedOn}</td>
-                    <td className="text-right">{formatAmount(row.weightedAvgRate)}</td>
+                    <td className="text-right">{formatAmount(row.lastPurchaseRate)}</td>
                   </tr>
                 );
               })}
