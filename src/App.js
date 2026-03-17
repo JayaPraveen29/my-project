@@ -13,6 +13,7 @@ import Layout from './components/Layout/Layout';
 import UpdateData from './pages/UpdateData/UpdateData';
 import MasterDataManager from './pages/MasterDataManager/MasterDataManager';
 import LastPurchasedReport from './pages/LastPurchasedReport/LastPurchasedReport';
+import PriceComparison from './pages/PriceComparison/PriceComparison';
 
 function App() {
   return (
@@ -35,6 +36,7 @@ function App() {
           <Route path="/bill-search" element={<BillNumberSearch />} />
           <Route path="/manage-masters" element={<MasterDataManager />} />
           <Route path="/last-purchased-report" element={<LastPurchasedReport />} />
+          <Route path="/Price-Comparison" element={<PriceComparison />} />
         </Route>
       </Routes>
     </Router>

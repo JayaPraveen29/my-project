@@ -203,17 +203,45 @@ export default function ViewData() {
     return ["Group", ...Array.from(setWorkTypes)];
   }, [data]);
 
+  // ✅ FIXED: Now correctly handles DD-MM-YYYY, DD/MM/YYYY, Firestore Timestamps, and ISO strings
   const parseDateSafe = (v) => {
     if (!v) return null;
-    try { if (typeof v.toDate === "function") return v.toDate(); } catch (e) {}
+
+    // Handle Firestore Timestamp
+    try {
+      if (typeof v.toDate === "function") return v.toDate();
+    } catch (e) {}
+
+    if (typeof v === "string") {
+      // Handle DD-MM-YYYY
+      const ddmmyyyy = v.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+      if (ddmmyyyy) {
+        const [, day, month, year] = ddmmyyyy;
+        const dt = new Date(`${year}-${month}-${day}`);
+        if (!isNaN(dt)) return dt;
+      }
+
+      // Handle DD/MM/YYYY
+      const ddmmyyyySlash = v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+      if (ddmmyyyySlash) {
+        const [, day, month, year] = ddmmyyyySlash;
+        const dt = new Date(`${year}-${month}-${day}`);
+        if (!isNaN(dt)) return dt;
+      }
+
+      // Handle DD.MM.YYYY
+      const ddmmyyyyDot = v.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+      if (ddmmyyyyDot) {
+        const [, day, month, year] = ddmmyyyyDot;
+        const dt = new Date(`${year}-${month}-${day}`);
+        if (!isNaN(dt)) return dt;
+      }
+    }
+
+    // Fallback: try native Date parsing (handles ISO strings like YYYY-MM-DD)
     const dt = new Date(v);
     if (!isNaN(dt)) return dt;
-    const parts = v.toString().split(/[\\/\-\s.]/).map(p => p.trim());
-    if (parts.length >= 3) {
-      const [d, m, y] = parts;
-      const maybe = new Date(`${y}-${m}-${d}`);
-      if (!isNaN(maybe)) return maybe;
-    }
+
     return null;
   };
 
@@ -246,46 +274,42 @@ export default function ViewData() {
       result = result.filter(item => {
         const itemDate = parseDateSafe(item["Received On"]);
         if (!itemDate) return false;
-        const from = fromDate ? new Date(fromDate) : null;
-        const to = toDate ? new Date(toDate) : null;
-        if (from) from.setHours(0, 0, 0, 0);
-        if (to) to.setHours(23, 59, 59, 999);
-        if (from && to) return itemDate >= from && itemDate <= to;
-        else if (from) return itemDate >= from;
-        else if (to) return itemDate <= to;
+
+        // Normalize itemDate to local midnight for fair comparison
+        const itemDateOnly = new Date(itemDate.getFullYear(), itemDate.getMonth(), itemDate.getDate());
+
+        // ✅ Parse from/to using local date parts to avoid UTC timezone shift (important for IST +5:30)
+        const parseLocalDate = (str) => {
+          if (!str) return null;
+          const [y, m, d] = str.split("-").map(Number);
+          return new Date(y, m - 1, d); // local midnight, no UTC shift
+        };
+
+        const from = parseLocalDate(fromDate);
+        const to = parseLocalDate(toDate);
+        // ✅ Extend 'to' to end of day so the selected date itself is fully included
+        const toEndOfDay = to ? new Date(to.getFullYear(), to.getMonth(), to.getDate(), 23, 59, 59, 999) : null;
+
+        if (from && toEndOfDay) return itemDateOnly >= from && itemDateOnly <= toEndOfDay;
+        if (from) return itemDateOnly >= from;
+        if (toEndOfDay) return itemDateOnly <= toEndOfDay;
         return true;
       });
     }
 
-   // FIXED - renamed to avoid shadowing Firebase `db`
-   result.sort((a, b) => {
-    const parseDDMMYYYY = (v) => {
-      if (!v) return null;
-      try { if (typeof v.toDate === "function") return v.toDate(); } catch (e) {}
-      if (typeof v === "string") {
-        const match = v.match(/^(\d{2})-(\d{2})-(\d{4})$/);
-        if (match) {
-          const [, day, month, year] = match;
-          return new Date(`${year}-${month}-${day}`);
-        }
+    result.sort((a, b) => {
+      const da = parseDateSafe(a["Received On"]);
+      const db2 = parseDateSafe(b["Received On"]);
+
+      if (da && db2) {
+        if (da.getFullYear() !== db2.getFullYear()) return da.getFullYear() - db2.getFullYear();
+        if (da.getMonth() !== db2.getMonth()) return da.getMonth() - db2.getMonth();
+        return da.getDate() - db2.getDate();
       }
-      const dt = new Date(v);
-      return isNaN(dt) ? null : dt;
-    };
-  
-    const da = parseDDMMYYYY(a["Received On"]);
-    const db2 = parseDDMMYYYY(b["Received On"]);
-  
-    if (da && db2) {
-      // Sort by Year → Month → Day
-      if (da.getFullYear() !== db2.getFullYear()) return da.getFullYear() - db2.getFullYear();
-      if (da.getMonth() !== db2.getMonth()) return da.getMonth() - db2.getMonth();
-      return da.getDate() - db2.getDate();
-    }
-    if (da && !db2) return -1;
-    if (!da && db2) return 1;
-    return 0;
-  });
+      if (da && !db2) return -1;
+      if (!da && db2) return 1;
+      return 0;
+    });
 
     setFilteredData(result);
   }, [data, search, financialYear, unitFilter, workTypeFilter, fromDate, toDate]);
@@ -608,13 +632,11 @@ export default function ViewData() {
                   let cellIsNumeric = isNumeric;
 
                   if (f === "Item Per Rate") {
-                    // Rate: comma formatted, right aligned
                     displayValue = formatRate(row[f]);
                     cellIsNumeric = true;
                   } else if (!isNumeric) {
                     displayValue = row[f] ?? "";
                   } else if (f === "Quantity in Metric Tons") {
-                    // MT: always 3 decimal places
                     displayValue = formatQtyRowValue(row[f]);
                   } else if (!isNaN(Number(row[f])) && row[f] !== "" && row[f] !== null && row[f] !== undefined) {
                     displayValue = Math.round(Number(row[f])).toLocaleString("en-IN");

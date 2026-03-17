@@ -61,7 +61,8 @@ export default function SideNavbar() {
                 <li><Link to="/single-section-report" className="dropdown-item" onClick={closeMobileMenu}>Single Section Report</Link></li>
                 <li><Link to="/supplier-report" className="dropdown-item" onClick={closeMobileMenu}>Supplier Report</Link></li>
                 <li><Link to="/bill-search" className="dropdown-item" onClick={closeMobileMenu}>Bill Number Search</Link></li>
-                <li><Link to="/last-purchased-report" className="dropdown-item" onClick={closeMobileMenu}>Last purchase summary</Link></li>
+                <li><Link to="/last-purchased-report" className="dropdown-item" onClick={closeMobileMenu}>Last Purchase Summary</Link></li>
+                <li><Link to="/Price-Comparison" className="dropdown-item" onClick={closeMobileMenu}>Price Comparison</Link></li>
               </ul>
             )}
           </li>

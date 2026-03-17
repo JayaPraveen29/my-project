@@ -4,9 +4,9 @@ import { collection, getDocs } from "firebase/firestore";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
-import "./LastPurchasedReport.css";
+import "./PriceComparison.css";
 
-export default function LastPurchasedReport() {
+export default function PriceComparison() {
   const [data, setData] = useState([]);
   const [reportRows, setReportRows] = useState([]);
   const [financialYear, setFinancialYear] = useState("2025-26");
@@ -29,15 +29,6 @@ export default function LastPurchasedReport() {
     fetchData();
   }, []);
 
-  const parseDate = (dateStr) => {
-    if (!dateStr) return null;
-    const ddmmyyyy = dateStr.match(/^(\d{2})-(\d{2})-(\d{4})$/);
-    if (ddmmyyyy) return new Date(`${ddmmyyyy[3]}-${ddmmyyyy[2]}-${ddmmyyyy[1]}`);
-    const yyyymmdd = dateStr.match(/^\d{4}-\d{2}-\d{2}$/);
-    if (yyyymmdd) return new Date(dateStr);
-    return null;
-  };
-
   const buildGroupLabel = (size, width, itemLength) => {
     let label = size || "";
     if (width && itemLength) label += ` x ${width} x ${itemLength}`;
@@ -56,27 +47,25 @@ export default function LastPurchasedReport() {
   }, [data, financialYear, selectedUnit, selectedWorkType]);
 
   const processData = () => {
-    // bestMap: groupKey -> latest entry candidate
-    const bestMap = {};
-    // For weighted avg rate: groupKey -> { totalAmount, totalQty }
-    const weightedMap = {};
+    // perEntryMap: groupKey -> array of { weightedAvgRate, unit, workType } per entry
+    const perEntryMap = {};
+    // metaMap: groupKey -> { section, size, width, itemLength, unit, workType }
+    const metaMap = {};
 
     data.forEach(entry => {
       if (financialYear && entry.FinancialYear !== financialYear) return;
       if (selectedUnit !== "Group" && entry.Unit !== selectedUnit) return;
       if (selectedWorkType !== "Group" && (entry["Work Type"] || "Unknown") !== selectedWorkType) return;
 
-      const receivedOn = entry["Received On"] || "";
-      const receivedDate = parseDate(receivedOn);
-      const entryNo = Number(entry.No) || 0;
-
       const itemsArray = Array.isArray(entry.items) ? entry.items : [];
 
-      // Compute entry-level totals (mirrors SingleSectionReport logic)
       const entryTotalBasic = itemsArray.reduce((sum, item) => {
         return sum + (Number(item["Bill Basic Amount"]) || 0);
       }, 0);
       const entryNetAmount = Number(entry.finalTotals?.net || entry["Net"] || 0);
+
+      // Group items within this entry by groupKey first
+      const entryGroupMap = {};
 
       itemsArray.forEach(item => {
         const section = (item["Section"] || "Unknown").toString().trim();
@@ -88,62 +77,89 @@ export default function LastPurchasedReport() {
 
         const qty = Number(item["Quantity in Metric Tons"]) || 0;
         const itemBasic = Number(item["Bill Basic Amount"]) || 0;
-
-        // Proportional net amount for this item (same as SingleSectionReport)
         const itemAmount = entryTotalBasic > 0
           ? (itemBasic / entryTotalBasic) * entryNetAmount
           : 0;
 
-        // Accumulate totals for weighted avg rate
-        if (!weightedMap[groupKey]) weightedMap[groupKey] = { totalAmount: 0, totalQty: 0 };
-        weightedMap[groupKey].totalAmount += itemAmount;
-        weightedMap[groupKey].totalQty += qty;
-
-        // Track latest purchase entry
-        const candidate = {
-          groupKey,
-          section,
-          size,
-          width,
-          itemLength,
-          receivedOn,
-          receivedDate,
-          entryNo,
-          supplier: entry["Name of the Supplier"] || "",
-          unit: entry.Unit || "",
-          workType: entry["Work Type"] || "",
-          billNumber: entry["Bill Number"] || "",
-        };
-
-        if (!bestMap[groupKey]) {
-          bestMap[groupKey] = candidate;
-        } else {
-          const existing = bestMap[groupKey];
-          const existingDate = existing.receivedDate;
-          const newDate = receivedDate;
-
-          if (newDate && existingDate) {
-            if (newDate > existingDate) {
-              bestMap[groupKey] = candidate;
-            } else if (newDate.getTime() === existingDate.getTime() && entryNo > existing.entryNo) {
-              bestMap[groupKey] = candidate;
-            }
-          } else if (newDate && !existingDate) {
-            bestMap[groupKey] = candidate;
-          } else if (!newDate && !existingDate && entryNo > existing.entryNo) {
-            bestMap[groupKey] = candidate;
-          }
+        if (!entryGroupMap[groupKey]) {
+          entryGroupMap[groupKey] = { totalQty: 0, totalAmount: 0, section, size, width, itemLength };
         }
+        entryGroupMap[groupKey].totalQty += qty;
+        entryGroupMap[groupKey].totalAmount += itemAmount;
+
+        if (!metaMap[groupKey]) {
+          metaMap[groupKey] = {
+            section,
+            size,
+            width,
+            itemLength,
+            unit: entry.Unit || "",
+            workType: entry["Work Type"] || "",
+          };
+        }
+      });
+
+      // For each groupKey in this entry, compute the entry-level avg rate
+      Object.entries(entryGroupMap).forEach(([groupKey, vals]) => {
+        const entryAvgRate = vals.totalQty > 0 ? vals.totalAmount / vals.totalQty : 0;
+        if (entryAvgRate <= 0) return;
+
+        if (!perEntryMap[groupKey]) perEntryMap[groupKey] = [];
+        perEntryMap[groupKey].push(entryAvgRate);
       });
     });
 
-    // Attach weighted avg rate (totalAmount / totalQty) — same as SingleSectionReport total row
-    const rows = Object.values(bestMap).map(row => {
-      const { totalAmount = 0, totalQty = 0 } = weightedMap[row.groupKey] || {};
+    // Now compute overall weighted avg, highest, lowest per groupKey
+    // For overall weighted avg: accumulate across all entries
+    const overallWeightedMap = {};
+
+    data.forEach(entry => {
+      if (financialYear && entry.FinancialYear !== financialYear) return;
+      if (selectedUnit !== "Group" && entry.Unit !== selectedUnit) return;
+      if (selectedWorkType !== "Group" && (entry["Work Type"] || "Unknown") !== selectedWorkType) return;
+
+      const itemsArray = Array.isArray(entry.items) ? entry.items : [];
+      const entryTotalBasic = itemsArray.reduce((sum, item) => sum + (Number(item["Bill Basic Amount"]) || 0), 0);
+      const entryNetAmount = Number(entry.finalTotals?.net || entry["Net"] || 0);
+
+      itemsArray.forEach(item => {
+        const section = (item["Section"] || "Unknown").toString().trim();
+        const size = (item["Size"] || "").toString().trim();
+        const width = (item["Width"] || "").toString().trim();
+        const itemLength = (item["Item Length"] || "").toString().trim();
+        const groupKey = `${section}|||${size}|||${width}|||${itemLength}`;
+
+        const qty = Number(item["Quantity in Metric Tons"]) || 0;
+        const itemBasic = Number(item["Bill Basic Amount"]) || 0;
+        const itemAmount = entryTotalBasic > 0
+          ? (itemBasic / entryTotalBasic) * entryNetAmount
+          : 0;
+
+        if (!overallWeightedMap[groupKey]) overallWeightedMap[groupKey] = { totalAmount: 0, totalQty: 0 };
+        overallWeightedMap[groupKey].totalAmount += itemAmount;
+        overallWeightedMap[groupKey].totalQty += qty;
+      });
+    });
+
+    const rows = Object.keys(metaMap).map(groupKey => {
+      const meta = metaMap[groupKey];
+      const entryRates = perEntryMap[groupKey] || [];
+      const { totalAmount = 0, totalQty = 0 } = overallWeightedMap[groupKey] || {};
       const weightedAvgRate = totalQty > 0 ? totalAmount / totalQty : 0;
+      const highestRate = entryRates.length > 0 ? Math.max(...entryRates) : 0;
+      const lowestRate = entryRates.length > 0 ? Math.min(...entryRates) : 0;
+
       return {
-        ...row,
+        groupKey,
+        section: meta.section,
+        size: meta.size,
+        width: meta.width,
+        itemLength: meta.itemLength,
+        unit: meta.unit,
+        workType: meta.workType,
         weightedAvgRate,
+        highestRate,
+        lowestRate,
       };
     }).sort((a, b) => {
       const titleA = buildFullTitle(a.section, a.size, a.width, a.itemLength);
@@ -166,7 +182,7 @@ export default function LastPurchasedReport() {
     if (reportRows.length === 0) { alert("No data to export"); return; }
 
     const wsData = [];
-    wsData.push(["Last Purchased Report"]);
+    wsData.push(["Price Comparison Report"]);
 
     const filterParts = [];
     if (financialYear) filterParts.push(financialYear);
@@ -178,7 +194,7 @@ export default function LastPurchasedReport() {
     const headers = ["S.No", "Section"];
     if (showUnitColumn) headers.push("Unit");
     if (showWorkTypeColumn) headers.push("Work Type");
-    headers.push("Supplier", "Bill No", "Recd. Date", "Last Purchase Rate");
+    headers.push("Avg. Rate", "Highest Rate", "Lowest Rate");
     wsData.push(headers);
 
     reportRows.forEach((row, idx) => {
@@ -187,10 +203,9 @@ export default function LastPurchasedReport() {
       if (showUnitColumn) r.push(row.unit);
       if (showWorkTypeColumn) r.push(row.workType);
       r.push(
-        row.supplier,
-        row.billNumber,
-        row.receivedOn,
-        Math.ceil(row.weightedAvgRate)
+        Math.ceil(row.weightedAvgRate),
+        Math.ceil(row.highestRate),
+        Math.ceil(row.lowestRate)
       );
       wsData.push(r);
     });
@@ -198,13 +213,13 @@ export default function LastPurchasedReport() {
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet(wsData);
     ws["!cols"] = headers.map((h) => ({
-      wch: h === "Section" ? 28 : h === "Supplier" ? 25 : 14
+      wch: h === "Section" ? 30 : 15
     }));
     ws["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: headers.length - 1 } }];
 
-    XLSX.utils.book_append_sheet(wb, ws, "Last Purchased");
+    XLSX.utils.book_append_sheet(wb, ws, "Price Comparison");
     const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
-    XLSX.writeFile(wb, `last_purchased_report_${timestamp}.xlsx`);
+    XLSX.writeFile(wb, `price_comparison_report_${timestamp}.xlsx`);
   };
 
   const exportPDF = () => {
@@ -212,7 +227,7 @@ export default function LastPurchasedReport() {
 
     const doc = new jsPDF("l", "pt", "a4");
     doc.setFontSize(16);
-    doc.text("Last Purchased Report", 14, 25);
+    doc.text("Price Comparison Report", 14, 25);
 
     const filterParts = [];
     if (financialYear) filterParts.push(financialYear);
@@ -226,7 +241,7 @@ export default function LastPurchasedReport() {
     const headers = ["S.No", "Section"];
     if (showUnitColumn) headers.push("Unit");
     if (showWorkTypeColumn) headers.push("Work Type");
-    headers.push("Supplier", "Bill No", "Recd. Date", "Last Purchase Rate");
+    headers.push("Avg. Rate", "Highest Rate", "Lowest Rate");
 
     const tableData = reportRows.map((row, idx) => {
       const title = buildFullTitle(row.section, row.size, row.width, row.itemLength);
@@ -234,10 +249,9 @@ export default function LastPurchasedReport() {
       if (showUnitColumn) r.push(row.unit);
       if (showWorkTypeColumn) r.push(row.workType);
       r.push(
-        row.supplier,
-        row.billNumber,
-        row.receivedOn,
-        formatAmount(row.weightedAvgRate)
+        formatAmount(row.weightedAvgRate),
+        formatAmount(row.highestRate),
+        formatAmount(row.lowestRate)
       );
       return r;
     });
@@ -249,10 +263,10 @@ export default function LastPurchasedReport() {
       margin: { left: 14 },
       styles: { fontSize: 8, cellPadding: 3, halign: "center" },
       headStyles: { fillColor: [230, 240, 255], textColor: [0, 0, 0], fontStyle: "bold" },
-      columnStyles: { 1: { halign: "left" }, 4: { halign: "left" } },
+      columnStyles: { 1: { halign: "left" } },
     });
 
-    doc.save("Last_Purchased_Report.pdf");
+    doc.save("Price_Comparison_Report.pdf");
   };
 
   const clearFilters = () => {
@@ -262,8 +276,8 @@ export default function LastPurchasedReport() {
   };
 
   return (
-    <div className="last-purchased-container">
-      <h1 className="last-purchased-heading">Last Purchased Report</h1>
+    <div className="price-comparison-container">
+      <h1 className="price-comparison-heading">Price Comparison Report</h1>
 
       <div className="filter-container">
         <div className="filter-row">
@@ -322,17 +336,16 @@ export default function LastPurchasedReport() {
             <p>No data available. Please add entries first.</p>
           </div>
         ) : (
-          <table className="last-purchased-table">
+          <table className="price-comparison-table">
             <thead>
               <tr>
                 <th className="col-sno">S.No</th>
                 <th className="col-section">Section</th>
                 {showUnitColumn && <th className="col-unit">Unit</th>}
                 {showWorkTypeColumn && <th className="col-worktype">Work Type</th>}
-                <th className="col-supplier">Supplier</th>
-                <th className="col-billno">Bill No</th>
-                <th className="col-date">Recd. Date</th>
-                <th className="col-rate">Last Purchase Rate</th>
+                <th className="col-rate">Avg. Rate</th>
+                <th className="col-rate col-highest">Highest Rate</th>
+                <th className="col-rate col-lowest">Lowest Rate</th>
               </tr>
             </thead>
             <tbody>
@@ -344,10 +357,9 @@ export default function LastPurchasedReport() {
                     <td className="text-left section-cell">{title}</td>
                     {showUnitColumn && <td className="text-center">{row.unit}</td>}
                     {showWorkTypeColumn && <td className="text-center">{row.workType}</td>}
-                    <td className="text-left">{row.supplier}</td>
-                    <td className="text-center">{row.billNumber}</td>
-                    <td className="text-center">{row.receivedOn}</td>
                     <td className="text-right">{formatAmount(row.weightedAvgRate)}</td>
+                    <td className="text-right rate-high">{formatAmount(row.highestRate)}</td>
+                    <td className="text-right rate-low">{formatAmount(row.lowestRate)}</td>
                   </tr>
                 );
               })}
