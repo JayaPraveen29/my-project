@@ -29,15 +29,10 @@ export default function LastPurchasedReport() {
     fetchData();
   }, []);
 
-  // Parse stored date string "DD-MM-YYYY" or "YYYY-MM-DD" to a Date object for comparison
   const parseDate = (dateStr) => {
     if (!dateStr) return null;
-    // Try DD-MM-YYYY
     const ddmmyyyy = dateStr.match(/^(\d{2})-(\d{2})-(\d{4})$/);
-    if (ddmmyyyy) {
-      return new Date(`${ddmmyyyy[3]}-${ddmmyyyy[2]}-${ddmmyyyy[1]}`);
-    }
-    // Try YYYY-MM-DD
+    if (ddmmyyyy) return new Date(`${ddmmyyyy[3]}-${ddmmyyyy[2]}-${ddmmyyyy[1]}`);
     const yyyymmdd = dateStr.match(/^\d{4}-\d{2}-\d{2}$/);
     if (yyyymmdd) return new Date(dateStr);
     return null;
@@ -61,9 +56,10 @@ export default function LastPurchasedReport() {
   }, [data, financialYear, selectedUnit, selectedWorkType]);
 
   const processData = () => {
-    // Map: groupKey -> best candidate entry
-    // groupKey = "section|||size|||width|||itemLength"
+    // bestMap: groupKey -> latest entry candidate
     const bestMap = {};
+    // rateMap: groupKey -> array of all landed cost rates
+    const rateMap = {};
 
     data.forEach(entry => {
       if (financialYear && entry.FinancialYear !== financialYear) return;
@@ -74,7 +70,7 @@ export default function LastPurchasedReport() {
       const receivedDate = parseDate(receivedOn);
       const entryNo = Number(entry.No) || 0;
 
-      const itemsArray = entry.items && Array.isArray(entry.items) ? entry.items : [];
+      const itemsArray = Array.isArray(entry.items) ? entry.items : [];
 
       itemsArray.forEach(item => {
         const section = (item["Section"] || "Unknown").toString().trim();
@@ -86,7 +82,13 @@ export default function LastPurchasedReport() {
 
         const subtotal = parseFloat(item["Section Subtotal"]) || 0;
         const mt = parseFloat(item["Quantity in Metric Tons"]) || 0;
-        const avgRate = mt > 0 ? subtotal / mt : 0;
+        const landedRate = mt > 0 ? subtotal / mt : 0;
+
+        // Collect all rates for highest/lowest
+        if (landedRate > 0) {
+          if (!rateMap[groupKey]) rateMap[groupKey] = [];
+          rateMap[groupKey].push(landedRate);
+        }
 
         const candidate = {
           groupKey,
@@ -97,9 +99,8 @@ export default function LastPurchasedReport() {
           receivedOn,
           receivedDate,
           entryNo,
-          avgRate,
+          avgRate: landedRate,
           supplier: entry["Name of the Supplier"] || "",
-          supplierPlace: entry["Supplier Place"] || "",
           unit: entry.Unit || "",
           workType: entry["Work Type"] || "",
           billNumber: entry["Bill Number"] || "",
@@ -112,7 +113,6 @@ export default function LastPurchasedReport() {
           const existingDate = existing.receivedDate;
           const newDate = receivedDate;
 
-          // Compare dates first, then entry number
           if (newDate && existingDate) {
             if (newDate > existingDate) {
               bestMap[groupKey] = candidate;
@@ -128,8 +128,15 @@ export default function LastPurchasedReport() {
       });
     });
 
-    // Sort by section name, then group label
-    const rows = Object.values(bestMap).sort((a, b) => {
+    // Attach highest and lowest rates
+    const rows = Object.values(bestMap).map(row => {
+      const rates = rateMap[row.groupKey] || [];
+      return {
+        ...row,
+        highestRate: rates.length > 0 ? Math.max(...rates) : 0,
+        lowestRate: rates.length > 0 ? Math.min(...rates) : 0,
+      };
+    }).sort((a, b) => {
       const titleA = buildFullTitle(a.section, a.size, a.width, a.itemLength);
       const titleB = buildFullTitle(b.section, b.size, b.width, b.itemLength);
       return titleA.localeCompare(titleB);
@@ -162,7 +169,7 @@ export default function LastPurchasedReport() {
     const headers = ["S.No", "Section"];
     if (showUnitColumn) headers.push("Unit");
     if (showWorkTypeColumn) headers.push("Work Type");
-    headers.push("Supplier", "Place", "Bill No", "Recd. Date", "Avg. Rate");
+    headers.push("Supplier", "Bill No", "Recd. Date", "Avg. Rate", "Highest Rate", "Lowest Rate");
     wsData.push(headers);
 
     reportRows.forEach((row, idx) => {
@@ -170,13 +177,22 @@ export default function LastPurchasedReport() {
       const r = [idx + 1, title];
       if (showUnitColumn) r.push(row.unit);
       if (showWorkTypeColumn) r.push(row.workType);
-      r.push(row.supplier, row.supplierPlace, row.billNumber, row.receivedOn, Math.ceil(row.avgRate));
+      r.push(
+        row.supplier,
+        row.billNumber,
+        row.receivedOn,
+        Math.ceil(row.avgRate),
+        Math.ceil(row.highestRate),
+        Math.ceil(row.lowestRate)
+      );
       wsData.push(r);
     });
 
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet(wsData);
-    ws["!cols"] = headers.map((h) => ({ wch: h === "Section" ? 25 : h === "Supplier" ? 25 : 14 }));
+    ws["!cols"] = headers.map((h) => ({
+      wch: h === "Section" ? 28 : h === "Supplier" ? 25 : 14
+    }));
     ws["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: headers.length - 1 } }];
 
     XLSX.utils.book_append_sheet(wb, ws, "Last Purchased");
@@ -203,14 +219,21 @@ export default function LastPurchasedReport() {
     const headers = ["S.No", "Section"];
     if (showUnitColumn) headers.push("Unit");
     if (showWorkTypeColumn) headers.push("Work Type");
-    headers.push("Supplier", "Place", "Bill No", "Recd. Date", "Avg. Rate");
+    headers.push("Supplier", "Bill No", "Recd. Date", "Avg. Rate", "Highest Rate", "Lowest Rate");
 
     const tableData = reportRows.map((row, idx) => {
       const title = buildFullTitle(row.section, row.size, row.width, row.itemLength);
       const r = [idx + 1, title];
       if (showUnitColumn) r.push(row.unit);
       if (showWorkTypeColumn) r.push(row.workType);
-      r.push(row.supplier, row.supplierPlace, row.billNumber, row.receivedOn, formatAmount(row.avgRate));
+      r.push(
+        row.supplier,
+        row.billNumber,
+        row.receivedOn,
+        formatAmount(row.avgRate),
+        formatAmount(row.highestRate),
+        formatAmount(row.lowestRate)
+      );
       return r;
     });
 
@@ -302,10 +325,11 @@ export default function LastPurchasedReport() {
                 {showUnitColumn && <th className="col-unit">Unit</th>}
                 {showWorkTypeColumn && <th className="col-worktype">Work Type</th>}
                 <th className="col-supplier">Supplier</th>
-                <th className="col-place">Place</th>
                 <th className="col-billno">Bill No</th>
                 <th className="col-date">Recd. Date</th>
                 <th className="col-rate">Avg. Rate</th>
+                <th className="col-rate col-highest">Highest Rate</th>
+                <th className="col-rate col-lowest">Lowest Rate</th>
               </tr>
             </thead>
             <tbody>
@@ -318,10 +342,11 @@ export default function LastPurchasedReport() {
                     {showUnitColumn && <td className="text-center">{row.unit}</td>}
                     {showWorkTypeColumn && <td className="text-center">{row.workType}</td>}
                     <td className="text-left">{row.supplier}</td>
-                    <td className="text-left">{row.supplierPlace}</td>
                     <td className="text-center">{row.billNumber}</td>
                     <td className="text-center">{row.receivedOn}</td>
                     <td className="text-right">{formatAmount(row.avgRate)}</td>
+                    <td className="text-right rate-high">{formatAmount(row.highestRate)}</td>
+                    <td className="text-right rate-low">{formatAmount(row.lowestRate)}</td>
                   </tr>
                 );
               })}

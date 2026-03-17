@@ -181,3 +181,8 @@
   font-size: 14px;
 }
 
+.col-highest { background-color: #fff3f3; }
+.col-lowest  { background-color: #f3fff3; }
+
+.rate-high { color: #c0392b; font-weight: 600; }
+.rate-low  { color: #27ae60; font-weight: 600; }
