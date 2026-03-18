@@ -67,7 +67,6 @@ export default function SupplierReport() {
     return isNaN(dt) ? null : dt;
   };
 
-  // Sort chronologically: year → month → day
   const compareDatesChronological = (a, b) => {
     const da = parseDateSafe(a);
     const db2 = parseDateSafe(b);
@@ -175,7 +174,6 @@ export default function SupplierReport() {
     fetchData();
   }, []);
 
-  // Dynamically update bill numbers based on selected supplier
   useEffect(() => {
     const sourceData = selectedSupplier !== "All"
       ? data.filter(item => item["Name of the Supplier"] === selectedSupplier)
@@ -213,7 +211,6 @@ export default function SupplierReport() {
     if (selectedSize !== "All")
       filtered = filtered.filter(item => item.Size === selectedSize);
 
-    // ── Sort by date chronologically (year → month → day) ──
     filtered.sort((a, b) =>
       compareDatesChronological(a["Recd. On"], b["Recd. On"])
     );
@@ -259,6 +256,7 @@ export default function SupplierReport() {
   const hideSizeCol = selectedSize !== "All";
   const hidePlaceCol = selectedSupplier !== "All" || selectedSection !== "All";
 
+  // ─── PDF EXPORT ───────────────────────────────────────────────────────────
   const exportPDF = () => {
     const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
     doc.setFontSize(16);
@@ -275,6 +273,7 @@ export default function SupplierReport() {
     if (selectedSize !== "All") filterParts.push(`Size: ${selectedSize}`);
     if (filterParts.length > 0) doc.text(filterParts.join(" | "), 14, 35);
 
+    // Build headers array and track each column's index for alignment
     const headers = ["No.", "Recd. On"];
     if (!hideFinancialYearCol) headers.push("FY");
     if (!hideUnitCol) headers.push("Unit");
@@ -285,6 +284,19 @@ export default function SupplierReport() {
     if (!hideSectionCol) headers.push("Section");
     if (!hideSizeCol) headers.push("Size");
     headers.push("Items", "Qty (MT)", "Amount", "Avg. Rate");
+
+    // ── Find the index of "Size" column (or first right-align col if Size hidden) ──
+    // Columns from "Size" onwards should be right-aligned.
+    // If Size is hidden, right-align starts from "Items".
+    const sizeColIndex = hideSizeCol
+      ? headers.indexOf("Items")   // Size hidden → start from Items
+      : headers.indexOf("Size");   // Size visible → start from Size
+
+    // Build columnStyles: right-align every column from sizeColIndex onwards
+    const columnStyles = {};
+    for (let i = sizeColIndex; i < headers.length; i++) {
+      columnStyles[i] = { halign: "right" };
+    }
 
     const tableData = filteredData.map((item, index) => {
       let section = (item.Section || "Unknown").toString().trim();
@@ -314,7 +326,6 @@ export default function SupplierReport() {
     const totalQty = filteredData.reduce((sum, item) => sum + (Number(item["Quantity in Metric Tons"]) || 0), 0);
     const totalAmount = filteredData.reduce((sum, item) => sum + (Number(item.Amount) || 0), 0);
 
-    // ── total row: no date in Recd. On cell ──
     const totalRow = ["TOTAL", ""];
     if (!hideFinancialYearCol) totalRow.push("");
     if (!hideUnitCol) totalRow.push("");
@@ -333,6 +344,11 @@ export default function SupplierReport() {
       startY: filterParts.length > 0 ? 50 : 35,
       styles: { fontSize: 7, cellPadding: 2 },
       headStyles: { fillColor: [230, 240, 255], textColor: [40, 40, 40], fontStyle: "bold" },
+      columnStyles,   // ← right-align from Size column onwards
+      didParseCell: function (data) {
+        // Bold the total row
+        if (data.row.index === tableData.length - 1) data.cell.styles.fontStyle = "bold";
+      },
       theme: "grid",
       margin: { left: 14, right: 14 },
       tableWidth: "auto",
@@ -341,6 +357,7 @@ export default function SupplierReport() {
     doc.save("Supplier_Report.pdf");
   };
 
+  // ─── EXCEL EXPORT ─────────────────────────────────────────────────────────
   const exportExcel = () => {
     const excelData = filteredData.map((item, index) => {
       let section = (item.Section || "Unknown").toString().trim();
@@ -371,7 +388,6 @@ export default function SupplierReport() {
     const totalQty = filteredData.reduce((sum, item) => sum + (Number(item["Quantity in Metric Tons"]) || 0), 0);
     const totalAmount = filteredData.reduce((sum, item) => sum + (Number(item.Amount) || 0), 0);
 
-    // ── total row: no date in Recd. On cell ──
     const totalRow = { "No.": "TOTAL", "Recd. On": "" };
     if (!hideFinancialYearCol) totalRow["FY"] = "";
     if (!hideUnitCol) totalRow["Unit"] = "";
@@ -541,7 +557,6 @@ export default function SupplierReport() {
                   })}
                   <tr className="total-row">
                     <td className="text-left">TOTAL</td>
-                    {/* ── no date in total row ── */}
                     <td></td>
                     {!hideFinancialYearCol && <td></td>}
                     {!hideUnitCol && <td></td>}

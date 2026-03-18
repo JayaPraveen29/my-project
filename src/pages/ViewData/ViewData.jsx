@@ -63,6 +63,14 @@ export default function ViewData() {
     "Landed Cost": "Landed Cost"
   };
 
+  // Columns from "Width" onwards that should be right-aligned in exports
+  const rightAlignFromWidth = new Set([
+    "Width", "Item Length", "Number of items Supplied",
+    "Quantity in Metric Tons", "Item Per Rate", "Bill Basic Amount",
+    "Loading Charges", "Freight<", "Others", "CGST", "SGST", "IGST",
+    "Total", "Freight>", "G. Total", "Net", "Landed Cost",
+  ]);
+
   const fetchData = async () => {
     try {
       const querySnapshot = await getDocs(collection(db, "entries"));
@@ -203,17 +211,14 @@ export default function ViewData() {
     return ["Group", ...Array.from(setWorkTypes)];
   }, [data]);
 
-  // ✅ FIXED: Now correctly handles DD-MM-YYYY, DD/MM/YYYY, Firestore Timestamps, and ISO strings
   const parseDateSafe = (v) => {
     if (!v) return null;
 
-    // Handle Firestore Timestamp
     try {
       if (typeof v.toDate === "function") return v.toDate();
     } catch (e) {}
 
     if (typeof v === "string") {
-      // Handle DD-MM-YYYY
       const ddmmyyyy = v.match(/^(\d{2})-(\d{2})-(\d{4})$/);
       if (ddmmyyyy) {
         const [, day, month, year] = ddmmyyyy;
@@ -221,7 +226,6 @@ export default function ViewData() {
         if (!isNaN(dt)) return dt;
       }
 
-      // Handle DD/MM/YYYY
       const ddmmyyyySlash = v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
       if (ddmmyyyySlash) {
         const [, day, month, year] = ddmmyyyySlash;
@@ -229,7 +233,6 @@ export default function ViewData() {
         if (!isNaN(dt)) return dt;
       }
 
-      // Handle DD.MM.YYYY
       const ddmmyyyyDot = v.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
       if (ddmmyyyyDot) {
         const [, day, month, year] = ddmmyyyyDot;
@@ -238,7 +241,6 @@ export default function ViewData() {
       }
     }
 
-    // Fallback: try native Date parsing (handles ISO strings like YYYY-MM-DD)
     const dt = new Date(v);
     if (!isNaN(dt)) return dt;
 
@@ -275,19 +277,16 @@ export default function ViewData() {
         const itemDate = parseDateSafe(item["Received On"]);
         if (!itemDate) return false;
 
-        // Normalize itemDate to local midnight for fair comparison
         const itemDateOnly = new Date(itemDate.getFullYear(), itemDate.getMonth(), itemDate.getDate());
 
-        // ✅ Parse from/to using local date parts to avoid UTC timezone shift (important for IST +5:30)
         const parseLocalDate = (str) => {
           if (!str) return null;
           const [y, m, d] = str.split("-").map(Number);
-          return new Date(y, m - 1, d); // local midnight, no UTC shift
+          return new Date(y, m - 1, d);
         };
 
         const from = parseLocalDate(fromDate);
         const to = parseLocalDate(toDate);
-        // ✅ Extend 'to' to end of day so the selected date itself is fully included
         const toEndOfDay = to ? new Date(to.getFullYear(), to.getMonth(), to.getDate(), 23, 59, 59, 999) : null;
 
         if (from && toEndOfDay) return itemDateOnly >= from && itemDateOnly <= toEndOfDay;
@@ -314,7 +313,6 @@ export default function ViewData() {
     setFilteredData(result);
   }, [data, search, financialYear, unitFilter, workTypeFilter, fromDate, toDate]);
 
-  // Format MT value: always 3 decimal places
   const formatQtyRowValue = (value) => {
     if (value === null || value === undefined) return "";
     const n = Number(value);
@@ -328,7 +326,6 @@ export default function ViewData() {
     return n.toFixed(3);
   };
 
-  // Format Rate: comma separated, no decimals, right aligned
   const formatRate = (value) => {
     if (value === null || value === undefined || value === "") return "";
     const num = Number(value);
@@ -435,6 +432,7 @@ export default function ViewData() {
     (totals["Others"] || 0);
   const landedCostTotal = totalMT ? (totalBasic + totalFreight) / totalMT : 0;
 
+  // ─── EXCEL EXPORT ────────────────────────────────────────────────────────────
   const exportExcel = () => {
     if (!filteredData.length) { alert("No data to export"); return; }
 
@@ -479,12 +477,39 @@ export default function ViewData() {
 
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+    // ── Right-align cells from "Width" column onwards (data rows + total row) ──
+    const headerRowIndex = 2; // 0-based: row 0=heading, 1=blank, 2=headers
+    const dataStartRow = 3;   // data rows start here
+    const totalRowIndex = dataStartRow + filteredData.length;
+
+    headers.forEach((label, colIdx) => {
+      // Find the field key for this header label
+      const fieldKey = colIdx === 0
+        ? null // S.No column
+        : fields[colIdx - 1];
+
+      if (fieldKey && rightAlignFromWidth.has(fieldKey)) {
+        // Apply right alignment to every row in this column (header + data + total)
+        const allRows = [headerRowIndex, ...Array.from({ length: filteredData.length + 1 }, (_, i) => dataStartRow + i)];
+        allRows.forEach(rowIdx => {
+          const cellAddress = XLSX.utils.encode_cell({ r: rowIdx, c: colIdx });
+          if (!ws[cellAddress]) ws[cellAddress] = { v: "", t: "s" };
+          ws[cellAddress].s = {
+            ...(ws[cellAddress].s || {}),
+            alignment: { horizontal: "right" }
+          };
+        });
+      }
+    });
+
     ws['!cols'] = headers.map(() => ({ wch: 12 }));
     ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: headers.length - 1 } }];
     XLSX.utils.book_append_sheet(wb, ws, "View Data");
     XLSX.writeFile(wb, `viewdata_export_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.xlsx`);
   };
 
+  // ─── PDF EXPORT ──────────────────────────────────────────────────────────────
   const exportPDF = () => {
     if (!filteredData.length) { alert("No data to export"); return; }
 
@@ -527,12 +552,22 @@ export default function ViewData() {
       })
     ]);
 
+    // ── Build columnStyles: right-align from "Width" column onwards ──
+    // Column 0 = "S.No", columns 1..n map to fields[0..n-1]
+    const columnStyles = {};
+    fields.forEach((f, idx) => {
+      if (rightAlignFromWidth.has(f)) {
+        columnStyles[idx + 1] = { halign: "right" }; // +1 for S.No offset
+      }
+    });
+
     autoTable(pdf, {
       startY: 60,
       head: [tableColumns],
       body: tableRows,
       styles: { fontSize: 8, cellPadding: 4, overflow: "linebreak" },
       headStyles: { fillColor: [230, 230, 230], textColor: 20, fontStyle: "bold" },
+      columnStyles,
       didParseCell: function (data) {
         if (data.row.index === tableRows.length - 1) data.cell.styles.fontStyle = "bold";
       },
