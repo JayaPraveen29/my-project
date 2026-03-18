@@ -143,7 +143,6 @@ export default function AbstractReport() {
       ratePerMT: item.totalQty > 0 ? (item.totalBasic + item.totalFreight) / item.totalQty : 0,
     }));
 
-    // Sort by section → size → width → length
     array.sort((a, b) => {
       const s = a.section.localeCompare(b.section);
       if (s !== 0) return s;
@@ -213,7 +212,6 @@ export default function AbstractReport() {
       return row;
     });
 
-    // Sort by section → size → width → length
     array.sort((a, b) => {
       const s = a.section.localeCompare(b.section);
       if (s !== 0) return s;
@@ -252,7 +250,10 @@ export default function AbstractReport() {
     }
 
     if (selectedUnit === "Group" && pivotData.length > 0) {
-      // ── pivot table: no Recd. On column ──
+      // Pivot table
+      // Columns: S.No.(0), Section(1), Size(2), Width(3), Length(4), then per unit: MT, Invoice Value, Freight, Rate/MT
+      // Right-align from Size(col index 2) onwards → all numeric cols + Size, Width, Length
+
       const headRow1 = [
         { content: "S.No.", rowSpan: 2 },
         { content: "Section", rowSpan: 2 },
@@ -267,25 +268,42 @@ export default function AbstractReport() {
       });
 
       const body = pivotData.map((item, index) => {
-        const row = [index + 1, item.section, item.size, item.width, item.itemLength];
+        const row = [
+          index + 1,
+          item.section,
+          { content: item.size, styles: { halign: "right" } },
+          { content: item.width, styles: { halign: "right" } },
+          { content: item.itemLength, styles: { halign: "right" } },
+        ];
         units.forEach(unit => {
           row.push(
-            formatMT(item[`${unit}_qty`] || 0),
-            formatAmount(item[`${unit}_invoiceValue`] || 0),
-            formatAmount(item[`${unit}_freight`] || 0),
-            formatRate(item[`${unit}_ratePerMT`] || 0)
+            { content: formatMT(item[`${unit}_qty`] || 0), styles: { halign: "right" } },
+            { content: formatAmount(item[`${unit}_invoiceValue`] || 0), styles: { halign: "right" } },
+            { content: formatAmount(item[`${unit}_freight`] || 0), styles: { halign: "right" } },
+            { content: formatRate(item[`${unit}_ratePerMT`] || 0), styles: { halign: "right" } }
           );
         });
         return row;
       });
 
-      const totalRow = ["", "TOTAL", "", "", ""];
+      const totalRow = [
+        "",
+        "TOTAL",
+        { content: "", styles: { halign: "right" } },
+        { content: "", styles: { halign: "right" } },
+        { content: "", styles: { halign: "right" } },
+      ];
       units.forEach(unit => {
         const tQty = pivotData.reduce((s, x) => s + (x[`${unit}_qty`] || 0), 0);
         const tInv = pivotData.reduce((s, x) => s + (x[`${unit}_invoiceValue`] || 0), 0);
         const tFrt = pivotData.reduce((s, x) => s + (x[`${unit}_freight`] || 0), 0);
         const tTot = tInv + tFrt;
-        totalRow.push(formatMT(tQty), formatAmount(tInv), formatAmount(tFrt), formatRate(tQty ? tTot / tQty : 0));
+        totalRow.push(
+          { content: formatMT(tQty), styles: { halign: "right" } },
+          { content: formatAmount(tInv), styles: { halign: "right" } },
+          { content: formatAmount(tFrt), styles: { halign: "right" } },
+          { content: formatRate(tQty ? tTot / tQty : 0), styles: { halign: "right" } }
+        );
       });
       body.push(totalRow);
 
@@ -296,30 +314,59 @@ export default function AbstractReport() {
         theme: "grid",
         styles: { fontSize: 6, halign: "center", valign: "middle", cellPadding: 1 },
         headStyles: { fillColor: [230, 240, 255], textColor: [0, 0, 0], fontStyle: "bold" },
+        // Right-align header row2 (numeric sub-headers) and fixed cols 2-4
+        columnStyles: {
+          2: { halign: "right" },
+          3: { halign: "right" },
+          4: { halign: "right" },
+        },
       });
     } else {
-      // ── normal table: no Recd. On column ──
+      // Normal table
+      // Columns: No.(0), Section(1), Size(2), Width(3), Length(4), MT(5), Invoice Value(6), Freight(7), Rate/MT(8)
+      // Right-align from Size(2) onwards
+
       const headers = ["No.", "Section", "Size", "Width", "Length", "MT", "Invoice Value", "Freight", "Rate/MT"];
+
       const body = abstractData.map((item, i) => [
         i + 1,
-        item.section, item.size, item.width, item.itemLength,
-        formatMT(item.totalQty),
-        formatAmount(item.invoiceValue),
-        formatAmount(item.totalFreight),
-        formatRate(item.ratePerMT),
+        item.section,
+        { content: item.size, styles: { halign: "right" } },
+        { content: item.width, styles: { halign: "right" } },
+        { content: item.itemLength, styles: { halign: "right" } },
+        { content: formatMT(item.totalQty), styles: { halign: "right" } },
+        { content: formatAmount(item.invoiceValue), styles: { halign: "right" } },
+        { content: formatAmount(item.totalFreight), styles: { halign: "right" } },
+        { content: formatRate(item.ratePerMT), styles: { halign: "right" } },
       ]);
+
       body.push([
-        "", "TOTAL", "", "", "",
-        formatMT(grandTotalQty),
-        formatAmount(grandInvoiceValue),
-        formatAmount(grandTotalFreight),
-        formatRate(grandRatePerMT),
+        "",
+        "TOTAL",
+        { content: "", styles: { halign: "right" } },
+        { content: "", styles: { halign: "right" } },
+        { content: "", styles: { halign: "right" } },
+        { content: formatMT(grandTotalQty), styles: { halign: "right" } },
+        { content: formatAmount(grandInvoiceValue), styles: { halign: "right" } },
+        { content: formatAmount(grandTotalFreight), styles: { halign: "right" } },
+        { content: formatRate(grandRatePerMT), styles: { halign: "right" } },
       ]);
+
       autoTable(doc, {
-        head: [headers], body,
+        head: [headers],
+        body,
         startY: fromDate || toDate ? 55 : 45,
         styles: { fontSize: 8, cellPadding: 2 },
         theme: "grid",
+        columnStyles: {
+          2: { halign: "right" },
+          3: { halign: "right" },
+          4: { halign: "right" },
+          5: { halign: "right" },
+          6: { halign: "right" },
+          7: { halign: "right" },
+          8: { halign: "right" },
+        },
       });
     }
     doc.save("Abstract_Report.pdf");
@@ -329,8 +376,10 @@ export default function AbstractReport() {
     const wb = XLSX.utils.book_new();
     const fmt0 = "#,##0", fmt3 = "#,##0.000";
 
+    // Right-align style helper
+    const rightAlign = { alignment: { horizontal: "right" } };
+
     if (selectedUnit === "Group" && pivotData.length > 0) {
-      // ── pivot: no Recd. On column ──
       const header1 = ["S.No.", "Section", "Size", "Width", "Length"];
       const header2 = ["", "", "", "", ""];
       units.forEach(u => {
@@ -362,7 +411,6 @@ export default function AbstractReport() {
 
       const ws = XLSX.utils.aoa_to_sheet([header1, header2, ...rows, totalRow]);
 
-      // ── merges: 5 fixed cols (no Recd. On) ──
       const merges = [
         { s: { r: 0, c: 0 }, e: { r: 1, c: 0 } },
         { s: { r: 0, c: 1 }, e: { r: 1, c: 1 } },
@@ -375,20 +423,28 @@ export default function AbstractReport() {
       ws["!merges"] = merges;
 
       const range = XLSX.utils.decode_range(ws["!ref"]);
-      // ── numeric cols start at C=5 now (was 6) ──
-      for (let R = 2; R <= range.e.r; R++) {
-        for (let C = 5; C <= range.e.c; C++) {
+
+      for (let R = 0; R <= range.e.r; R++) {
+        for (let C = 0; C <= range.e.c; C++) {
           const addr = XLSX.utils.encode_cell({ r: R, c: C });
-          if (ws[addr] && typeof ws[addr].v !== "string") {
+          if (!ws[addr]) ws[addr] = { t: "z" };
+
+          // Right-align from col 2 (Size) onwards
+          if (C >= 2) {
+            ws[addr].s = { ...(ws[addr].s || {}), alignment: { horizontal: "right" } };
+          }
+
+          // Apply number formats to numeric data rows (row index >= 2)
+          if (R >= 2 && C >= 5 && typeof ws[addr].v !== "string") {
             ws[addr].t = "n";
             ws[addr].z = (C - 5) % 4 === 0 ? fmt3 : fmt0;
           }
         }
       }
+
       ws["!freeze"] = { ySplit: 2 };
       XLSX.utils.book_append_sheet(wb, ws, "Abstract Report");
     } else {
-      // ── normal: no Recd. On column ──
       const headers = ["No.", "Section", "Size", "Width", "Length", "MT", "Invoice Value", "Freight", "Rate/MT"];
       const rows = abstractData.map((x, i) => [
         i + 1, x.section, x.size, x.width, x.itemLength,
@@ -396,17 +452,27 @@ export default function AbstractReport() {
       ]);
       const totalRow = ["", "TOTAL", "", "", "", grandTotalQty, grandInvoiceValue, grandTotalFreight, grandRatePerMT];
       const ws = XLSX.utils.aoa_to_sheet([headers, ...rows, totalRow]);
+
       const range = XLSX.utils.decode_range(ws["!ref"]);
-      // ── numeric cols start at C=5 now (was 6) ──
-      for (let R = 1; R <= range.e.r; R++) {
-        for (let C = 5; C <= range.e.c; C++) {
+
+      for (let R = 0; R <= range.e.r; R++) {
+        for (let C = 0; C <= range.e.c; C++) {
           const addr = XLSX.utils.encode_cell({ r: R, c: C });
-          if (ws[addr] && typeof ws[addr].v !== "string") {
+          if (!ws[addr]) ws[addr] = { t: "z" };
+
+          // Right-align from col 2 (Size) onwards
+          if (C >= 2) {
+            ws[addr].s = { ...(ws[addr].s || {}), alignment: { horizontal: "right" } };
+          }
+
+          // Apply number formats to numeric data rows (row index >= 1)
+          if (R >= 1 && C >= 5 && typeof ws[addr].v !== "string") {
             ws[addr].t = "n";
             ws[addr].z = C === 5 ? fmt3 : fmt0;
           }
         }
       }
+
       ws["!freeze"] = { ySplit: 1 };
       XLSX.utils.book_append_sheet(wb, ws, "Abstract Report");
     }
@@ -460,7 +526,6 @@ export default function AbstractReport() {
           <table className="abstract-table">
             <thead>
               <tr>
-                {/* ── pivot header: no Recd. On ── */}
                 <th rowSpan={2}>S.No.</th>
                 <th rowSpan={2}>Section</th>
                 <th rowSpan={2}>Size</th>
@@ -523,7 +588,6 @@ export default function AbstractReport() {
                   {selectedWorkType !== "Group" && ` (${selectedWorkType})`}
                 </th>
               </tr>
-              {/* ── normal header: no Recd. On ── */}
               <tr>
                 <th>No.</th>
                 <th>Section</th>
