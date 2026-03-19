@@ -225,7 +225,7 @@ export default function PriceComparison() {
   const exportPDF = () => {
     if (reportRows.length === 0) { alert("No data to export"); return; }
 
-    const doc = new jsPDF("l", "pt", "a4");
+    const doc = new jsPDF("p", "pt", "a4");
     doc.setFontSize(16);
     doc.text("Price Comparison Report", 14, 25);
 
@@ -261,9 +261,12 @@ export default function PriceComparison() {
       body: tableData,
       startY: filterParts.length > 0 ? 50 : 35,
       margin: { left: 14 },
-      styles: { fontSize: 8, cellPadding: 3, halign: "center" },
-      headStyles: { fillColor: [230, 240, 255], textColor: [0, 0, 0], fontStyle: "bold" },
-      columnStyles: { 1: { halign: "left" } },
+      styles: { fontSize: 6.5, cellPadding: 0.5, halign: "center" },
+      headStyles: { fillColor: [230, 240, 255], textColor: [0, 0, 0], fontStyle: "bold", cellPadding: 1 },
+      columnStyles: { 
+        1: { halign: "left", cellWidth: 180 },  // fix Section column width
+      },
+      rowPageBreak: "avoid",   // ← prevents unnecessary row splitting
     });
 
     doc.save("Price_Comparison_Report.pdf");

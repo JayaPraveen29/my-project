@@ -46,7 +46,6 @@ export default function SupplierReport() {
     "hr sheet": "HR Sheet",
   };
 
-  // ─── Recd. On helpers ────────────────────────────────────────────────────
   const parseDateSafe = (v) => {
     if (!v) return null;
     try { if (typeof v.toDate === "function") return v.toDate(); } catch (e) {}
@@ -77,7 +76,6 @@ export default function SupplierReport() {
     if (da.getMonth() !== db2.getMonth()) return da.getMonth() - db2.getMonth();
     return da.getDate() - db2.getDate();
   };
-  // ─────────────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     const savedTheme = localStorage.getItem("appTheme") || "light";
@@ -91,12 +89,9 @@ export default function SupplierReport() {
         const querySnapshot = await getDocs(collection(db, "entries"));
         const entries = querySnapshot.docs.map(doc => doc.data());
 
-        console.log("Sample entry:", entries[0]);
-
         const flattenedData = [];
         entries.forEach(entry => {
           const itemsArray = entry.items && Array.isArray(entry.items) ? entry.items : [entry];
-
           const recdOn = entry["Received On"] || entry["Recd. On"] || "";
 
           itemsArray.forEach(item => {
@@ -124,7 +119,6 @@ export default function SupplierReport() {
 
             const unit = entry.Unit || entry.unit || "Unknown";
             const workType = entry["Work Type"] || entry.workType || "Unknown";
-
             const sectionSubtotal = Number(item["Section Subtotal"]) || 0;
 
             flattenedData.push({
@@ -143,8 +137,6 @@ export default function SupplierReport() {
             });
           });
         });
-
-        console.log("Flattened data sample:", flattenedData[0]);
 
         setData(flattenedData);
 
@@ -259,12 +251,18 @@ export default function SupplierReport() {
   // ─── PDF EXPORT ───────────────────────────────────────────────────────────
   const exportPDF = () => {
     const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
-    doc.setFontSize(16);
-    doc.text("Supplier Report", 14, 20);
 
+    // Derive FY string from filtered data (actual years present)
+    const fyInData = [...new Set(filteredData.map(item => item["Financial Year"]).filter(Boolean))].sort();
+    const fyLabel = fyInData.length > 0 ? fyInData.join(", ") : "Unknown";
+
+    // Main heading with FY embedded
+    doc.setFontSize(16);
+    doc.text(`Supplier Report – FY ${fyLabel}`, 14, 20);
+
+    // Filter summary line — FY intentionally excluded here
     doc.setFontSize(10);
     const filterParts = [];
-    if (selectedFinancialYear !== "All") filterParts.push(`FY: ${selectedFinancialYear}`);
     if (selectedUnit !== "All") filterParts.push(`Unit: ${selectedUnit}`);
     if (selectedWorkType !== "All") filterParts.push(`Work Type: ${selectedWorkType}`);
     if (selectedSupplier !== "All") filterParts.push(`${selectedSupplier}`);
@@ -273,9 +271,8 @@ export default function SupplierReport() {
     if (selectedSize !== "All") filterParts.push(`Size: ${selectedSize}`);
     if (filterParts.length > 0) doc.text(filterParts.join(" | "), 14, 35);
 
-    // Build headers array and track each column's index for alignment
+    // Build headers — FY column completely excluded from PDF table
     const headers = ["No.", "Recd. On"];
-    if (!hideFinancialYearCol) headers.push("FY");
     if (!hideUnitCol) headers.push("Unit");
     if (!hideWorkTypeCol) headers.push("Work Type");
     if (!hideSupplierCol) headers.push("Supplier");
@@ -285,14 +282,10 @@ export default function SupplierReport() {
     if (!hideSizeCol) headers.push("Size");
     headers.push("Items", "Qty (MT)", "Amount", "Avg. Rate");
 
-    // ── Find the index of "Size" column (or first right-align col if Size hidden) ──
-    // Columns from "Size" onwards should be right-aligned.
-    // If Size is hidden, right-align starts from "Items".
     const sizeColIndex = hideSizeCol
-      ? headers.indexOf("Items")   // Size hidden → start from Items
-      : headers.indexOf("Size");   // Size visible → start from Size
+      ? headers.indexOf("Items")
+      : headers.indexOf("Size");
 
-    // Build columnStyles: right-align every column from sizeColIndex onwards
     const columnStyles = {};
     for (let i = sizeColIndex; i < headers.length; i++) {
       columnStyles[i] = { halign: "right" };
@@ -305,8 +298,8 @@ export default function SupplierReport() {
       const qty = Number(item["Quantity in Metric Tons"]) || 0;
       const amount = Number(item.Amount) || 0;
 
+      // No FY field pushed into row
       const row = [index + 1, item["Recd. On"] || ""];
-      if (!hideFinancialYearCol) row.push(item["Financial Year"] || "Unknown");
       if (!hideUnitCol) row.push(item.Unit || "Unknown");
       if (!hideWorkTypeCol) row.push(item["Work Type"] || "Unknown");
       if (!hideSupplierCol) row.push(item["Name of the Supplier"] || "Unknown");
@@ -326,8 +319,8 @@ export default function SupplierReport() {
     const totalQty = filteredData.reduce((sum, item) => sum + (Number(item["Quantity in Metric Tons"]) || 0), 0);
     const totalAmount = filteredData.reduce((sum, item) => sum + (Number(item.Amount) || 0), 0);
 
+    // Total row — no FY cell
     const totalRow = ["TOTAL", ""];
-    if (!hideFinancialYearCol) totalRow.push("");
     if (!hideUnitCol) totalRow.push("");
     if (!hideWorkTypeCol) totalRow.push("");
     if (!hideSupplierCol) totalRow.push("");
@@ -344,9 +337,8 @@ export default function SupplierReport() {
       startY: filterParts.length > 0 ? 50 : 35,
       styles: { fontSize: 7, cellPadding: 2 },
       headStyles: { fillColor: [230, 240, 255], textColor: [40, 40, 40], fontStyle: "bold" },
-      columnStyles,   // ← right-align from Size column onwards
+      columnStyles,
       didParseCell: function (data) {
-        // Bold the total row
         if (data.row.index === tableData.length - 1) data.cell.styles.fontStyle = "bold";
       },
       theme: "grid",

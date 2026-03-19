@@ -250,10 +250,6 @@ export default function AbstractReport() {
     }
 
     if (selectedUnit === "Group" && pivotData.length > 0) {
-      // Pivot table
-      // Columns: S.No.(0), Section(1), Size(2), Width(3), Length(4), then per unit: MT, Invoice Value, Freight, Rate/MT
-      // Right-align from Size(col index 2) onwards → all numeric cols + Size, Width, Length
-
       const headRow1 = [
         { content: "S.No.", rowSpan: 2 },
         { content: "Section", rowSpan: 2 },
@@ -270,9 +266,13 @@ export default function AbstractReport() {
       const body = pivotData.map((item, index) => {
         const row = [
           index + 1,
-          item.section,
-          { content: item.size, styles: { halign: "right" } },
+          // Section — left aligned
+          { content: item.section, styles: { halign: "left" } },
+          // Size — left aligned
+          { content: item.size, styles: { halign: "left" } },
+          // Width — right aligned
           { content: item.width, styles: { halign: "right" } },
+          // Length — right aligned
           { content: item.itemLength, styles: { halign: "right" } },
         ];
         units.forEach(unit => {
@@ -288,8 +288,8 @@ export default function AbstractReport() {
 
       const totalRow = [
         "",
-        "TOTAL",
-        { content: "", styles: { halign: "right" } },
+        { content: "TOTAL", styles: { halign: "left" } },
+        { content: "", styles: { halign: "left" } },
         { content: "", styles: { halign: "right" } },
         { content: "", styles: { halign: "right" } },
       ];
@@ -314,25 +314,32 @@ export default function AbstractReport() {
         theme: "grid",
         styles: { fontSize: 6, halign: "center", valign: "middle", cellPadding: 1 },
         headStyles: { fillColor: [230, 240, 255], textColor: [0, 0, 0], fontStyle: "bold" },
-        // Right-align header row2 (numeric sub-headers) and fixed cols 2-4
         columnStyles: {
-          2: { halign: "right" },
+          // Section (col 1) — left aligned
+          1: { halign: "left" },
+          // Size (col 2) — left aligned
+          2: { halign: "left" },
+          // Width (col 3) — right aligned
           3: { halign: "right" },
+          // Length (col 4) — right aligned
           4: { halign: "right" },
         },
       });
     } else {
       // Normal table
-      // Columns: No.(0), Section(1), Size(2), Width(3), Length(4), MT(5), Invoice Value(6), Freight(7), Rate/MT(8)
-      // Right-align from Size(2) onwards
-
+      // Col 0: No., Col 1: Section, Col 2: Size, Col 3: Width, Col 4: Length,
+      // Col 5: MT, Col 6: Invoice Value, Col 7: Freight, Col 8: Rate/MT
       const headers = ["No.", "Section", "Size", "Width", "Length", "MT", "Invoice Value", "Freight", "Rate/MT"];
 
       const body = abstractData.map((item, i) => [
         i + 1,
-        item.section,
-        { content: item.size, styles: { halign: "right" } },
+        // Section — left aligned
+        { content: item.section, styles: { halign: "left" } },
+        // Size — left aligned
+        { content: item.size, styles: { halign: "left" } },
+        // Width — right aligned
         { content: item.width, styles: { halign: "right" } },
+        // Length — right aligned
         { content: item.itemLength, styles: { halign: "right" } },
         { content: formatMT(item.totalQty), styles: { halign: "right" } },
         { content: formatAmount(item.invoiceValue), styles: { halign: "right" } },
@@ -342,8 +349,8 @@ export default function AbstractReport() {
 
       body.push([
         "",
-        "TOTAL",
-        { content: "", styles: { halign: "right" } },
+        { content: "TOTAL", styles: { halign: "left" } },
+        { content: "", styles: { halign: "left" } },
         { content: "", styles: { halign: "right" } },
         { content: "", styles: { halign: "right" } },
         { content: formatMT(grandTotalQty), styles: { halign: "right" } },
@@ -359,8 +366,13 @@ export default function AbstractReport() {
         styles: { fontSize: 8, cellPadding: 2 },
         theme: "grid",
         columnStyles: {
-          2: { halign: "right" },
+          // Section (col 1) — left aligned
+          1: { halign: "left" },
+          // Size (col 2) — left aligned
+          2: { halign: "left" },
+          // Width (col 3) — right aligned
           3: { halign: "right" },
+          // Length (col 4) — right aligned
           4: { halign: "right" },
           5: { halign: "right" },
           6: { halign: "right" },
@@ -375,9 +387,6 @@ export default function AbstractReport() {
   const exportExcel = () => {
     const wb = XLSX.utils.book_new();
     const fmt0 = "#,##0", fmt3 = "#,##0.000";
-
-    // Right-align style helper
-    const rightAlign = { alignment: { horizontal: "right" } };
 
     if (selectedUnit === "Group" && pivotData.length > 0) {
       const header1 = ["S.No.", "Section", "Size", "Width", "Length"];
@@ -429,8 +438,10 @@ export default function AbstractReport() {
           const addr = XLSX.utils.encode_cell({ r: R, c: C });
           if (!ws[addr]) ws[addr] = { t: "z" };
 
-          // Right-align from col 2 (Size) onwards
-          if (C >= 2) {
+          // Right-align from col 3 (Width) onwards; left-align col 1 (Section) and col 2 (Size)
+          if (C === 1 || C === 2) {
+            ws[addr].s = { ...(ws[addr].s || {}), alignment: { horizontal: "left" } };
+          } else if (C >= 3) {
             ws[addr].s = { ...(ws[addr].s || {}), alignment: { horizontal: "right" } };
           }
 
@@ -460,8 +471,10 @@ export default function AbstractReport() {
           const addr = XLSX.utils.encode_cell({ r: R, c: C });
           if (!ws[addr]) ws[addr] = { t: "z" };
 
-          // Right-align from col 2 (Size) onwards
-          if (C >= 2) {
+          // Right-align from col 3 (Width) onwards; left-align col 1 (Section) and col 2 (Size)
+          if (C === 1 || C === 2) {
+            ws[addr].s = { ...(ws[addr].s || {}), alignment: { horizontal: "left" } };
+          } else if (C >= 3) {
             ws[addr].s = { ...(ws[addr].s || {}), alignment: { horizontal: "right" } };
           }
 
