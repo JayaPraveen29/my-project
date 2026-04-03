@@ -10,7 +10,7 @@ export default function AbstractReport() {
   const [data, setData] = useState([]);
   const [abstractData, setAbstractData] = useState([]);
   const [pivotData, setPivotData] = useState([]);
-  const [financialYear, setFinancialYear] = useState("2025-26");
+  const [financialYear, setFinancialYear] = useState("all");
   const [selectedUnit, setSelectedUnit] = useState("Group");
   const [selectedWorkType, setSelectedWorkType] = useState("Group");
   const [units, setUnits] = useState([]);
@@ -91,7 +91,9 @@ export default function AbstractReport() {
 
   const processAbstractData = (items, finYear, unit, workType, from, to) => {
     let filteredItems = items;
-    if (finYear) filteredItems = filteredItems.filter(item => item.FinancialYear === finYear);
+    if (finYear && finYear !== "all") {
+      filteredItems = filteredItems.filter(item => item.FinancialYear === finYear);
+    }
     filteredItems = filterByDateRange(filteredItems, from, to);
     if (workType !== "Group") filteredItems = filteredItems.filter(item => (item["Work Type"] || "Unknown") === workType);
     if (unit === "Group") processPivotData(filteredItems);
@@ -266,13 +268,9 @@ export default function AbstractReport() {
       const body = pivotData.map((item, index) => {
         const row = [
           index + 1,
-          // Section — left aligned
           { content: item.section, styles: { halign: "left" } },
-          // Size — left aligned
           { content: item.size, styles: { halign: "left" } },
-          // Width — right aligned
           { content: item.width, styles: { halign: "right" } },
-          // Length — right aligned
           { content: item.itemLength, styles: { halign: "right" } },
         ];
         units.forEach(unit => {
@@ -315,31 +313,20 @@ export default function AbstractReport() {
         styles: { fontSize: 6, halign: "center", valign: "middle", cellPadding: 1 },
         headStyles: { fillColor: [230, 240, 255], textColor: [0, 0, 0], fontStyle: "bold" },
         columnStyles: {
-          // Section (col 1) — left aligned
           1: { halign: "left" },
-          // Size (col 2) — left aligned
           2: { halign: "left" },
-          // Width (col 3) — right aligned
           3: { halign: "right" },
-          // Length (col 4) — right aligned
           4: { halign: "right" },
         },
       });
     } else {
-      // Normal table
-      // Col 0: No., Col 1: Section, Col 2: Size, Col 3: Width, Col 4: Length,
-      // Col 5: MT, Col 6: Invoice Value, Col 7: Freight, Col 8: Rate/MT
       const headers = ["No.", "Section", "Size", "Width", "Length", "MT", "Invoice Value", "Freight", "Rate/MT"];
 
       const body = abstractData.map((item, i) => [
         i + 1,
-        // Section — left aligned
         { content: item.section, styles: { halign: "left" } },
-        // Size — left aligned
         { content: item.size, styles: { halign: "left" } },
-        // Width — right aligned
         { content: item.width, styles: { halign: "right" } },
-        // Length — right aligned
         { content: item.itemLength, styles: { halign: "right" } },
         { content: formatMT(item.totalQty), styles: { halign: "right" } },
         { content: formatAmount(item.invoiceValue), styles: { halign: "right" } },
@@ -366,13 +353,9 @@ export default function AbstractReport() {
         styles: { fontSize: 8, cellPadding: 2 },
         theme: "grid",
         columnStyles: {
-          // Section (col 1) — left aligned
           1: { halign: "left" },
-          // Size (col 2) — left aligned
           2: { halign: "left" },
-          // Width (col 3) — right aligned
           3: { halign: "right" },
-          // Length (col 4) — right aligned
           4: { halign: "right" },
           5: { halign: "right" },
           6: { halign: "right" },
@@ -432,20 +415,15 @@ export default function AbstractReport() {
       ws["!merges"] = merges;
 
       const range = XLSX.utils.decode_range(ws["!ref"]);
-
       for (let R = 0; R <= range.e.r; R++) {
         for (let C = 0; C <= range.e.c; C++) {
           const addr = XLSX.utils.encode_cell({ r: R, c: C });
           if (!ws[addr]) ws[addr] = { t: "z" };
-
-          // Right-align from col 3 (Width) onwards; left-align col 1 (Section) and col 2 (Size)
           if (C === 1 || C === 2) {
             ws[addr].s = { ...(ws[addr].s || {}), alignment: { horizontal: "left" } };
           } else if (C >= 3) {
             ws[addr].s = { ...(ws[addr].s || {}), alignment: { horizontal: "right" } };
           }
-
-          // Apply number formats to numeric data rows (row index >= 2)
           if (R >= 2 && C >= 5 && typeof ws[addr].v !== "string") {
             ws[addr].t = "n";
             ws[addr].z = (C - 5) % 4 === 0 ? fmt3 : fmt0;
@@ -465,20 +443,15 @@ export default function AbstractReport() {
       const ws = XLSX.utils.aoa_to_sheet([headers, ...rows, totalRow]);
 
       const range = XLSX.utils.decode_range(ws["!ref"]);
-
       for (let R = 0; R <= range.e.r; R++) {
         for (let C = 0; C <= range.e.c; C++) {
           const addr = XLSX.utils.encode_cell({ r: R, c: C });
           if (!ws[addr]) ws[addr] = { t: "z" };
-
-          // Right-align from col 3 (Width) onwards; left-align col 1 (Section) and col 2 (Size)
           if (C === 1 || C === 2) {
             ws[addr].s = { ...(ws[addr].s || {}), alignment: { horizontal: "left" } };
           } else if (C >= 3) {
             ws[addr].s = { ...(ws[addr].s || {}), alignment: { horizontal: "right" } };
           }
-
-          // Apply number formats to numeric data rows (row index >= 1)
           if (R >= 1 && C >= 5 && typeof ws[addr].v !== "string") {
             ws[addr].t = "n";
             ws[addr].z = C === 5 ? fmt3 : fmt0;
@@ -493,8 +466,9 @@ export default function AbstractReport() {
   };
 
   const clearFilters = () => {
-    setFromDate(""); setToDate("");
-    setFinancialYear("2025-26");
+    setFromDate("");
+    setToDate("");
+    setFinancialYear("all");
     setSelectedUnit("Group");
     setSelectedWorkType("Group");
   };
@@ -507,6 +481,7 @@ export default function AbstractReport() {
         <div className="filter-row">
           <label htmlFor="financialYear">Financial Year:</label>
           <select id="financialYear" value={financialYear} onChange={e => setFinancialYear(e.target.value)} className="filter-select">
+            <option value="all">All Years</option>
             <option value="2024-25">2024-25</option>
             <option value="2025-26">2025-26</option>
             <option value="2026-27">2026-27</option>

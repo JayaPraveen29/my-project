@@ -3,10 +3,9 @@ import { HiMagnifyingGlass, HiXMark } from "react-icons/hi2";
 import { db } from "../../firebase";
 import { collection, getDocs } from "firebase/firestore";
 import "./BillNumberSearch.css";
-
 export default function BillNumberSearch() {
   const [theme, setTheme] = useState("light");
-  const [financialYear, setFinancialYear] = useState("2025-26");
+  const [financialYear, setFinancialYear] = useState("all");  // ← changed
   const [selectedUnit, setSelectedUnit] = useState("");
   const [selectedWorkType, setSelectedWorkType] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
@@ -14,21 +13,17 @@ export default function BillNumberSearch() {
   const [loading, setLoading] = useState(false);
   const [allBills, setAllBills] = useState([]);
   const [filteredBills, setFilteredBills] = useState([]);
-
   useEffect(() => {
     const savedTheme = localStorage.getItem("appTheme") || "light";
     setTheme(savedTheme);
     document.body.setAttribute("data-theme", savedTheme);
   }, []);
-
   const toggleTheme = () => {
     const newTheme = theme === "dark" ? "light" : "dark";
     setTheme(newTheme);
     document.body.setAttribute("data-theme", newTheme);
     localStorage.setItem("appTheme", newTheme);
   };
-
-  // Fetch all bills when financial year changes
   useEffect(() => {
     const fetchAllBills = async () => {
       setLoading(true);
@@ -47,7 +42,7 @@ export default function BillNumberSearch() {
           }))
           .filter(bill => {
             if (!bill.billNumber || !bill.billNumber.trim()) return false;
-            if (financialYear && bill.financialYear !== financialYear) return false;
+            if (financialYear && financialYear !== "all" && bill.financialYear !== financialYear) return false;  // ← changed
             return true;
           })
           .sort((a, b) => {
@@ -55,7 +50,6 @@ export default function BillNumberSearch() {
             if (a.billNumber > b.billNumber) return 1;
             return 0;
           });
-
         setAllBills(bills);
         setFilteredBills(bills);
         setSelectedUnit("");
@@ -69,30 +63,21 @@ export default function BillNumberSearch() {
     };
     fetchAllBills();
   }, [financialYear]);
-
-  // Get unique units from fetched bills
   const uniqueUnits = [...new Set(allBills.map(b => b.unit).filter(Boolean))].sort();
-
-  // Get unique work types based on selected unit (or all if no unit selected)
   const uniqueWorkTypes = [...new Set(
     allBills
       .filter(b => !selectedUnit || b.unit === selectedUnit)
       .map(b => b.workType)
       .filter(Boolean)
   )].sort();
-
-  // Filter bills based on unit, work type, and search term
   useEffect(() => {
     let filtered = allBills;
-
     if (selectedUnit) {
       filtered = filtered.filter(bill => bill.unit === selectedUnit);
     }
-
     if (selectedWorkType) {
       filtered = filtered.filter(bill => bill.workType === selectedWorkType);
     }
-
     if (searchTerm.trim()) {
       filtered = filtered.filter(bill =>
         (bill.billNumber && bill.billNumber.toLowerCase().includes(searchTerm.toLowerCase())) ||
@@ -100,43 +85,32 @@ export default function BillNumberSearch() {
         (bill.unit && bill.unit.toLowerCase().includes(searchTerm.toLowerCase()))
       );
     }
-
     setFilteredBills(filtered);
   }, [searchTerm, allBills, selectedUnit, selectedWorkType]);
-
   const formatNum = (n) => {
     const num = typeof n === 'number' ? n : parseFloat(n) || 0;
     return num.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
-
-  // Total MT across all items in the bill
   const getBillTotalMT = (fullData) => {
     const itemsArray = fullData.items && Array.isArray(fullData.items) ? fullData.items : [];
     return itemsArray.reduce((sum, i) => sum + (parseFloat(i["Quantity in Metric Tons"]) || 0), 0);
   };
-
-  // Avg Rate per item row:
-  // = (Basic + Section Loading + Section Freight< + Section Freight>) / Total Bill MT
-  // Others is intentionally excluded
   const calcItemAvgRate = (item) => {
     const subtotal = parseFloat(item["Section Subtotal"]) || 0;
     const itemMT = parseFloat(item["Quantity in Metric Tons"]) || 0;
     if (itemMT === 0) return 0;
     return subtotal / itemMT;
   };
-
   const handleBillClick = (bill) => {
     setSelectedEntry({
       id: bill.id,
       ...bill.fullData
     });
   };
-
   const handleClear = () => {
     setSearchTerm("");
     setSelectedEntry(null);
   };
-
   const selectStyle = {
     padding: '8px 12px',
     fontSize: '14px',
@@ -144,15 +118,11 @@ export default function BillNumberSearch() {
     borderRadius: '4px',
     cursor: 'pointer'
   };
-
   return (
     <div className="entry-layout">
       <div className="bill-search-container">
         <h1 className="bill-search-heading">Search Entry by Bill Number</h1>
-
-        {/* Filters Row */}
         <div className="filter-section" style={{ marginBottom: '20px', display: 'flex', gap: '20px', flexWrap: 'wrap', alignItems: 'center' }}>
-
           {/* Financial Year */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <label htmlFor="financial-year-filter" style={{ fontWeight: '600' }}>
@@ -168,13 +138,13 @@ export default function BillNumberSearch() {
               }}
               style={selectStyle}
             >
+              <option value="all">All Years</option>  {/* ← added */}
               <option value="2024-25">2024-25</option>
               <option value="2025-26">2025-26</option>
               <option value="2026-27">2026-27</option>
               <option value="2027-28">2027-28</option>
             </select>
           </div>
-
           {/* Unit Filter */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <label htmlFor="unit-filter" style={{ fontWeight: '600' }}>
@@ -197,7 +167,6 @@ export default function BillNumberSearch() {
               ))}
             </select>
           </div>
-
           {/* Work Type Filter */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <label htmlFor="worktype-filter" style={{ fontWeight: '600' }}>
@@ -219,9 +188,7 @@ export default function BillNumberSearch() {
               ))}
             </select>
           </div>
-
         </div>
-
         {!selectedEntry && (
           <div className="search-section">
             <div className="search-input-wrapper">
@@ -238,13 +205,12 @@ export default function BillNumberSearch() {
                 </button>
               )}
             </div>
-
             {loading ? (
               <div className="loading-state">Loading bills from database...</div>
             ) : filteredBills.length > 0 ? (
               <>
                 <h3 className="bills-count">
-                  Available Bills for {financialYear}{selectedUnit ? ` • ${selectedUnit}` : ''}{selectedWorkType ? ` • ${selectedWorkType}` : ''} ({filteredBills.length})
+                  Available Bills for {financialYear === "all" ? "All Years" : financialYear}{selectedUnit ? ` • ${selectedUnit}` : ''}{selectedWorkType ? ` • ${selectedWorkType}` : ''} ({filteredBills.length})
                 </h3>
                 <div className="bills-grid">
                   {filteredBills.map((bill) => (
@@ -273,12 +239,11 @@ export default function BillNumberSearch() {
             ) : (
               <div className="no-results">
                 <HiMagnifyingGlass size={60} style={{ opacity: 0.3 }} />
-                <p>No bills found for {financialYear}{selectedUnit ? ` • ${selectedUnit}` : ''}{selectedWorkType ? ` • ${selectedWorkType}` : ''}{searchTerm ? ` matching: ${searchTerm}` : ''}</p>
+                <p>No bills found for {financialYear === "all" ? "All Years" : financialYear}{selectedUnit ? ` • ${selectedUnit}` : ''}{selectedWorkType ? ` • ${selectedWorkType}` : ''}{searchTerm ? ` matching: ${searchTerm}` : ''}</p>
               </div>
             )}
           </div>
         )}
-
         {selectedEntry && (() => {
           const totalBillMT = getBillTotalMT(selectedEntry);
           return (
@@ -291,7 +256,6 @@ export default function BillNumberSearch() {
                   <HiXMark /> Back to List
                 </button>
               </div>
-
               <div className="detail-section">
                 <h3>Basic Information</h3>
                 <div className="detail-grid">
@@ -325,7 +289,6 @@ export default function BillNumberSearch() {
                   </div>
                 </div>
               </div>
-
               <div className="detail-section">
                 <h3>Supplier Information</h3>
                 <div className="detail-grid">
@@ -339,7 +302,6 @@ export default function BillNumberSearch() {
                   </div>
                 </div>
               </div>
-
               <div className="detail-section">
                 <h3>Items Supplied</h3>
                 {selectedEntry.items && selectedEntry.items.length > 0 ? (
@@ -404,7 +366,6 @@ export default function BillNumberSearch() {
                   </div>
                 )}
               </div>
-
               <div className="detail-section">
                 <h3>Additional Charges</h3>
                 <div className="detail-grid">
@@ -416,7 +377,6 @@ export default function BillNumberSearch() {
                   ))}
                 </div>
               </div>
-
               <div className="detail-section">
                 <h3>GST Details</h3>
                 <div className="detail-grid">
@@ -447,7 +407,6 @@ export default function BillNumberSearch() {
                   </div>
                 </div>
               </div>
-
               {selectedEntry.finalTotals && (
                 <div className="summary-card">
                   <h3>Bill Summary</h3>

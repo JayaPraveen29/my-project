@@ -7,7 +7,7 @@ import "./EntryPage.css";
 export default function EntryPage() {
   const [loading, setLoading] = useState(false);
   const [entryNo, setEntryNo] = useState(1);
-  const [financialYear, setFinancialYear] = useState("2025-26");
+  const [financialYear, setFinancialYear] = useState("2026-27");
   const [unit, setUnit] = useState("");
   const [workType, setWorkType] = useState("");
   const [headerData, setHeaderData] = useState({

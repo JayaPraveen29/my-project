@@ -5,16 +5,13 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
 import "./SectionWiseReport.css";
-
 export default function SectionWiseReport() {
   const [data, setData] = useState([]);
   const [groupedData, setGroupedData] = useState({});
-  const [financialYear, setFinancialYear] = useState("2025-26");
+  const [financialYear, setFinancialYear] = useState("all");  // ← changed from "2026-27"
   const [selectedUnit, setSelectedUnit] = useState("Group");
   const [selectedWorkType, setSelectedWorkType] = useState("Group");
   const [workTypes, setWorkTypes] = useState([]);
-
-  // ─── Recd. On helpers (same as AbstractReport) ───────────────────────────
   const parseDateSafe = (v) => {
     if (!v) return null;
     try { if (typeof v.toDate === "function") return v.toDate(); } catch (e) {}
@@ -34,27 +31,22 @@ export default function SectionWiseReport() {
     const dt = new Date(v);
     return isNaN(dt) ? null : dt;
   };
-
   const compareDatesDayMonthYear = (a, b) => {
     const da = parseDateSafe(a);
     const db2 = parseDateSafe(b);
     if (!da && !db2) return 0;
     if (!da) return 1;
     if (!db2) return -1;
-    // Sort by full date (year → month → day) for correct chronological order
     if (da.getFullYear() !== db2.getFullYear()) return da.getFullYear() - db2.getFullYear();
     if (da.getMonth() !== db2.getMonth()) return da.getMonth() - db2.getMonth();
     return da.getDate() - db2.getDate();
   };
-
   const buildRecdOnDisplay = (recdDates) => {
     const sorted = [...recdDates].sort((a, b) => compareDatesDayMonthYear(a, b));
     if (sorted.length === 0) return "";
     if (sorted.length === 1) return sorted[0];
     return `${sorted[0]} to ${sorted[sorted.length - 1]}`;
   };
-  // ─────────────────────────────────────────────────────────────────────────
-
   useEffect(() => {
     async function fetchData() {
       try {
@@ -70,34 +62,24 @@ export default function SectionWiseReport() {
     }
     fetchData();
   }, []);
-
   const processData = (items) => {
     const grouped = {};
-
     items.forEach(entry => {
-      if (financialYear && entry.FinancialYear !== financialYear) return;
+      if (financialYear && financialYear !== "all" && entry.FinancialYear !== financialYear) return;
       if (selectedUnit !== "Group" && entry.Unit !== selectedUnit) return;
       if (selectedWorkType !== "Group" && (entry["Work Type"] || "Unknown") !== selectedWorkType) return;
-
       const itemsArray = entry.items && Array.isArray(entry.items) ? entry.items : [entry];
-
       const entryTotalBasic = itemsArray.reduce((sum, item) => {
         return sum + (Number(item["Bill Basic Amount"]) || 0);
       }, 0);
-
       const entryNetAmount = Number(entry.finalTotals?.net || entry["Net"] || 0);
-
-      // ── grab Recd. On from the entry ──
       const recdOn = entry["Received On"] || entry["Recd. On"] || "";
-
       itemsArray.forEach(item => {
         const section = (item["Section"] || "Unknown").toString().trim();
         const size = (item["Size"] || "").toString().trim();
         const width = (item["Width"] || "").toString().trim();
         const itemLength = (item["Item Length"] || "").toString().trim();
-
         const groupKey = `${section}|||${size}|||${width}|||${itemLength}`;
-
         const unit = entry["Unit"] || "";
         const workType = entry["Work Type"] || "";
         const supplier = entry["Name of the Supplier"] || "";
@@ -105,24 +87,19 @@ export default function SectionWiseReport() {
         const itemCount = Number(item["Number of items Supplied"]) || 0;
         const qty = Number(item["Quantity in Metric Tons"]) || 0;
         const itemBasic = Number(item["Bill Basic Amount"]) || 0;
-
         const itemAmount = entryTotalBasic > 0
           ? (itemBasic / entryTotalBasic) * entryNetAmount
           : 0;
-
         if (!grouped[section]) grouped[section] = {};
         if (!grouped[section][groupKey]) grouped[section][groupKey] = [];
-
         grouped[section][groupKey].push({
           unit, workType, supplier, place,
           size, width, itemLength,
           itemCount, qty, amount: itemAmount,
-          recdOn,   // ← attach to each row
+          recdOn,
         });
       });
     });
-
-    // ── Sort entries within each group by date (chronological) ──
     Object.keys(grouped).forEach(section => {
       Object.keys(grouped[section]).forEach(groupKey => {
         grouped[section][groupKey].sort((a, b) =>
@@ -130,26 +107,20 @@ export default function SectionWiseReport() {
         );
       });
     });
-
     setGroupedData(grouped);
   };
-
   useEffect(() => {
     processData(data);
   }, [financialYear, selectedUnit, selectedWorkType, data]);
-
   const formatNumber = (value) =>
     !value && value !== 0
       ? "0"
       : Number(value).toLocaleString("en-IN", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
-
   const formatAmount = (value) =>
     !value && value !== 0
       ? "0"
       : Math.ceil(Number(value)).toLocaleString("en-IN");
-
   const calculateAvgRate = (amount, qty) => (!qty || qty === 0 ? 0 : amount / qty);
-
   const buildTableTitle = (section, groupKey) => {
     const [, size, width, itemLength] = groupKey.split("|||");
     let title = `${section}`;
@@ -159,19 +130,15 @@ export default function SectionWiseReport() {
     else if (itemLength) title += ` x ${itemLength}`;
     return title;
   };
-
   const showUnitColumn = selectedUnit === "Group";
   const showWorkTypeColumn = selectedWorkType === "Group";
-
   const exportExcel = () => {
     if (Object.keys(groupedData).length === 0) {
       alert("No data to export");
       return;
     }
-
     const wsData = [];
     wsData.push(["Section Wise Report"]);
-
     if (selectedUnit !== "Group" || selectedWorkType !== "Group") {
       let filterText = "";
       if (selectedUnit !== "Group") filterText += selectedUnit;
@@ -181,24 +148,18 @@ export default function SectionWiseReport() {
       }
       wsData.push([filterText]);
     }
-
     wsData.push([]);
-
     Object.keys(groupedData).sort().forEach(section => {
       const groupKeys = groupedData[section];
-
       Object.keys(groupKeys).sort().forEach(groupKey => {
         const entries = groupKeys[groupKey];
         const title = buildTableTitle(section, groupKey);
-
         wsData.push([title]);
-
         const headers = ["Recd. On"];
         if (showUnitColumn) headers.push("Unit");
         if (showWorkTypeColumn) headers.push("Work Type");
         headers.push("Supplier", "Place", "Items", "Qty (MT)", "Amount", "Avg. Rate");
         wsData.push(headers);
-
         entries.forEach(entry => {
           const row = [entry.recdOn || ""];
           if (showUnitColumn) row.push(entry.unit);
@@ -213,11 +174,8 @@ export default function SectionWiseReport() {
           );
           wsData.push(row);
         });
-
         const totalQty = entries.reduce((sum, e) => sum + e.qty, 0);
         const totalAmount = entries.reduce((sum, e) => sum + e.amount, 0);
-
-        // ── total row: no date in Recd. On cell ──
         const totalRow = [""];
         if (showUnitColumn) totalRow.push("");
         if (showWorkTypeColumn) totalRow.push("");
@@ -226,17 +184,13 @@ export default function SectionWiseReport() {
         wsData.push([]);
       });
     });
-
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet(wsData);
-
     const maxCols = Math.max(...wsData.map(row => row.length));
     ws["!cols"] = Array(maxCols).fill({ wch: 15 });
-
     const range = XLSX.utils.decode_range(ws["!ref"]);
     const baseOffset = 1 + (showUnitColumn ? 1 : 0) + (showWorkTypeColumn ? 1 : 0);
     const qtyColIndex = baseOffset + 3;
-
     for (let R = 0; R <= range.e.r; R++) {
       for (let C = 0; C <= range.e.c; C++) {
         const cellAddr = XLSX.utils.encode_cell({ r: R, c: C });
@@ -247,24 +201,19 @@ export default function SectionWiseReport() {
         }
       }
     }
-
     XLSX.utils.book_append_sheet(wb, ws, "Section Report");
     const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
     XLSX.writeFile(wb, `section_report_${timestamp}.xlsx`);
   };
-
   const exportPDF = () => {
     if (Object.keys(groupedData).length === 0) {
       alert("No data to export");
       return;
     }
-
     const doc = new jsPDF("l", "pt", "a4");
     let startY = 40;
-
     doc.setFontSize(16);
     doc.text("Section Wise Report", 14, 20);
-
     if (selectedUnit !== "Group" || selectedWorkType !== "Group") {
       doc.setFontSize(10);
       let filterText = "";
@@ -276,27 +225,21 @@ export default function SectionWiseReport() {
       doc.text(filterText, 14, 35);
       startY = 50;
     }
-
     Object.keys(groupedData).sort().forEach(section => {
       const groupKeys = groupedData[section];
-
       Object.keys(groupKeys).sort().forEach(groupKey => {
         const entries = groupKeys[groupKey];
         const title = buildTableTitle(section, groupKey);
-
         const totalQty = entries.reduce((sum, e) => sum + e.qty, 0);
         const totalAmount = entries.reduce((sum, e) => sum + e.amount, 0);
-
         doc.setFontSize(11);
         doc.setFont(undefined, "bold");
         doc.text(title, 14, startY);
         startY += 20;
-
         const headerRow = ["Recd. On"];
         if (showUnitColumn) headerRow.push("Unit");
         if (showWorkTypeColumn) headerRow.push("Work Type");
         headerRow.push("Supplier", "Place", "Items", "Qty (MT)", "Amount", "Avg. Rate");
-
         const tableData = entries.map(e => {
           const row = [e.recdOn || ""];
           if (showUnitColumn) row.push(e.unit);
@@ -311,8 +254,6 @@ export default function SectionWiseReport() {
           );
           return row;
         });
-
-        // ── total row: no date in Recd. On cell ──
         const totalRow = [""];
         if (showUnitColumn) totalRow.push("");
         if (showWorkTypeColumn) totalRow.push("");
@@ -324,7 +265,6 @@ export default function SectionWiseReport() {
           formatAmount(calculateAvgRate(totalAmount, totalQty))
         );
         tableData.push(totalRow);
-
         autoTable(doc, {
           head: [headerRow],
           body: tableData,
@@ -340,7 +280,6 @@ export default function SectionWiseReport() {
             startY = data.cursor.y + 10;
           }
         });
-
         startY = doc.lastAutoTable.finalY + 25;
         if (startY > 500) {
           doc.addPage();
@@ -348,20 +287,16 @@ export default function SectionWiseReport() {
         }
       });
     });
-
     doc.save("Section_Wise_Report.pdf");
   };
-
   const clearFilters = () => {
-    setFinancialYear("2025-26");
+    setFinancialYear("all");  // ← changed from "2026-27"
     setSelectedUnit("Group");
     setSelectedWorkType("Group");
   };
-
   return (
     <div className="section-wise-container">
       <h1 className="section-wise-heading">Section Wise Report</h1>
-
       <div className="filter-container">
         <div className="filter-row">
           <label htmlFor="financial-year-select">Financial Year:</label>
@@ -371,12 +306,12 @@ export default function SectionWiseReport() {
             value={financialYear}
             onChange={(e) => setFinancialYear(e.target.value)}
           >
+            <option value="all">All Years</option>
             <option value="2024-25">2024-25</option>
             <option value="2025-26">2025-26</option>
             <option value="2026-27">2026-27</option>
             <option value="2027-28">2027-28</option>
           </select>
-
           <label htmlFor="unit-select">Select Unit:</label>
           <select
             id="unit-select"
@@ -389,7 +324,6 @@ export default function SectionWiseReport() {
               <option key={i} value={unit}>{unit}</option>
             ))}
           </select>
-
           <label htmlFor="worktype-select">Work Type:</label>
           <select
             id="worktype-select"
@@ -402,13 +336,11 @@ export default function SectionWiseReport() {
               <option key={i} value={type}>{type}</option>
             ))}
           </select>
-
           <button onClick={clearFilters} className="btn-clear">Clear Filters</button>
           <button onClick={exportExcel} className="btn-export btn-excel">Export Excel</button>
           <button onClick={exportPDF} className="btn-export btn-pdf">Export PDF</button>
         </div>
       </div>
-
       <div className="sections-wrapper">
         {Object.keys(groupedData).length === 0 ? (
           <div className="empty-state">
@@ -422,11 +354,9 @@ export default function SectionWiseReport() {
                 const totalQty = entries.reduce((sum, e) => sum + e.qty, 0);
                 const totalAmount = entries.reduce((sum, e) => sum + e.amount, 0);
                 const title = buildTableTitle(section, groupKey);
-
                 return (
                   <div key={groupKey} className="size-section">
                     <h2 className="section-size-title">{title}</h2>
-
                     <div className="table-container">
                       <table className="section-table">
                         <thead>
@@ -457,7 +387,6 @@ export default function SectionWiseReport() {
                             </tr>
                           ))}
                           <tr className="total-row">
-                            {/* ── no date in total row ── */}
                             <td></td>
                             {showUnitColumn && <td></td>}
                             {showWorkTypeColumn && <td></td>}
