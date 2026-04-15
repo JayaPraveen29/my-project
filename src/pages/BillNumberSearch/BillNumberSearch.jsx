@@ -5,7 +5,7 @@ import { collection, getDocs } from "firebase/firestore";
 import "./BillNumberSearch.css";
 export default function BillNumberSearch() {
   const [theme, setTheme] = useState("light");
-  const [financialYear, setFinancialYear] = useState("all");  // ← changed
+  const [financialYear, setFinancialYear] = useState("2026-27");
   const [selectedUnit, setSelectedUnit] = useState("");
   const [selectedWorkType, setSelectedWorkType] = useState("");
   const [searchTerm, setSearchTerm] = useState("");

@@ -14,6 +14,7 @@ import UpdateData from './pages/UpdateData/UpdateData';
 import MasterDataManager from './pages/MasterDataManager/MasterDataManager';
 import LastPurchasedReport from './pages/LastPurchasedReport/LastPurchasedReport';
 import PriceComparison from './pages/PriceComparison/PriceComparison';
+import AIAssistant from './pages/AIAssistant/AIAssistant';
 
 function App() {
   return (
@@ -37,6 +38,7 @@ function App() {
           <Route path="/manage-masters" element={<MasterDataManager />} />
           <Route path="/last-purchased-report" element={<LastPurchasedReport />} />
           <Route path="/Price-Comparison" element={<PriceComparison />} />
+          <Route path="/ai-assistant" element={<AIAssistant />} />
         </Route>
       </Routes>
     </Router>

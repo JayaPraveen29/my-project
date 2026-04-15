@@ -8,7 +8,7 @@ import "./SingleSectionReport.css";
 export default function SingleSectionReport() {
   const [data, setData] = useState([]);
   const [groupedData, setGroupedData] = useState({});
-  const [financialYear, setFinancialYear] = useState("all");  // ← changed
+  const [financialYear, setFinancialYear] = useState("2026-27");
   const [selectedUnit, setSelectedUnit] = useState("Group");
   const [selectedWorkType, setSelectedWorkType] = useState("Group");
   const [selectedSection, setSelectedSection] = useState("");

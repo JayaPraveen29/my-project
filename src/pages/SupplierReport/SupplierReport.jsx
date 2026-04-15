@@ -15,7 +15,7 @@ export default function SupplierReport() {
   const [data, setData] = useState([]);
   const [filteredData, setFilteredData] = useState([]);
 
-  const [financialYear, setFinancialYear] = useState("All");
+  const [financialYear, setFinancialYear] = useState("2026-27");
   const [units, setUnits] = useState([]);
   const [workTypes, setWorkTypes] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
@@ -23,7 +23,7 @@ export default function SupplierReport() {
   const [sections, setSections] = useState([]);
   const [sizes, setSizes] = useState([]);
 
-  const [selectedFinancialYear, setSelectedFinancialYear] = useState("All");
+  const [selectedFinancialYear, setSelectedFinancialYear] = useState("2026-27");
   const [selectedUnit, setSelectedUnit] = useState("All");
   const [selectedWorkType, setSelectedWorkType] = useState("All");
   const [selectedSupplier, setSelectedSupplier] = useState("All");

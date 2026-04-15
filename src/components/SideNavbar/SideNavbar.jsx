@@ -67,7 +67,7 @@ export default function SideNavbar() {
             )}
           </li>
 
-          </ul>
+        </ul>
 
         <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
           <li>
@@ -75,9 +75,12 @@ export default function SideNavbar() {
               <HiChartBar /> Data Manager
             </Link>
           </li>
+          <li>
+            <Link to="/ai-assistant" className="menu-btn ai-menu-btn" onClick={closeMobileMenu}>
+              ✦ AI Assistant
+            </Link>
+          </li>
         </ul>
-
-  
 
         <div className="sidebar-bottom">
           <Link to="/signin" className="logout-btn" onClick={closeMobileMenu}>LOGOUT</Link>

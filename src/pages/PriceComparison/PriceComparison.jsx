@@ -8,7 +8,7 @@ import "./PriceComparison.css";
 export default function PriceComparison() {
   const [data, setData] = useState([]);
   const [reportRows, setReportRows] = useState([]);
-  const [financialYear, setFinancialYear] = useState("all");  // ← changed
+  const [financialYear, setFinancialYear] = useState("2026-27");
   const [selectedUnit, setSelectedUnit] = useState("Group");
   const [selectedWorkType, setSelectedWorkType] = useState("Group");
   const [workTypes, setWorkTypes] = useState([]);

@@ -266,3 +266,17 @@
     transform: translateX(0) !important;
   }
 }
+/* ========== AI ASSISTANT BUTTON ========== */
+.ai-menu-btn {
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.25), rgba(118, 75, 162, 0.25)) !important;
+  border: 1px solid rgba(102, 126, 234, 0.4) !important;
+  color: #a29bfe !important;
+  margin-top: 6px;
+  font-weight: 600 !important;
+}
+
+.ai-menu-btn:hover {
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.45), rgba(118, 75, 162, 0.45)) !important;
+  color: white !important;
+  transform: translateX(5px);
+}

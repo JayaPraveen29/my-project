@@ -8,7 +8,7 @@ import "./SectionWiseReport.css";
 export default function SectionWiseReport() {
   const [data, setData] = useState([]);
   const [groupedData, setGroupedData] = useState({});
-  const [financialYear, setFinancialYear] = useState("all");  // ← changed from "2026-27"
+  const [financialYear, setFinancialYear] = useState("2026-27");
   const [selectedUnit, setSelectedUnit] = useState("Group");
   const [selectedWorkType, setSelectedWorkType] = useState("Group");
   const [workTypes, setWorkTypes] = useState([]);

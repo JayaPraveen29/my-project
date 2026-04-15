@@ -10,7 +10,7 @@ export default function AbstractReport() {
   const [data, setData] = useState([]);
   const [abstractData, setAbstractData] = useState([]);
   const [pivotData, setPivotData] = useState([]);
-  const [financialYear, setFinancialYear] = useState("all");
+  const [financialYear, setFinancialYear] = useState("2026-27");
   const [selectedUnit, setSelectedUnit] = useState("Group");
   const [selectedWorkType, setSelectedWorkType] = useState("Group");
   const [units, setUnits] = useState([]);
