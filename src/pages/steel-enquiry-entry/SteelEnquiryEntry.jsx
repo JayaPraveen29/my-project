@@ -13,6 +13,7 @@ const createEmptySupplierRate = () => ({
   id: generateId(),
   supplierText: "",
   supplierConfirmed: "",
+  mt: "",
   rate: "",
 });
 
@@ -22,6 +23,10 @@ const createEmptySection = () => ({
   sectionConfirmed: "",
   sizeText: "",
   sizeConfirmed: "",
+  widthText: "",
+  widthConfirmed: "",
+  lengthText: "",
+  lengthConfirmed: "",
   mt: "",
   supplierRates: [createEmptySupplierRate()],
 });
@@ -31,7 +36,8 @@ function Combobox({
   value, onChange, onConfirm,
   onAddNew, onDelete,
   options, deletableIds,
-  placeholder, label
+  placeholder, label,
+  disabled = false,
 }) {
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef(null);
@@ -58,15 +64,16 @@ function Combobox({
     <div className="enq-combobox-wrapper" ref={wrapperRef}>
       <div className="enq-combobox-input-row">
         <input
-          className="enq-input enq-combobox-input"
+          className={`enq-input enq-combobox-input${disabled ? " enq-combobox-disabled" : ""}`}
           type="text"
-          placeholder={placeholder}
+          placeholder={disabled ? `Select ${label} first` : placeholder}
           value={value}
           autoComplete="off"
+          disabled={disabled}
           onChange={e => { onChange(e.target.value); setOpen(true); }}
-          onFocus={() => setOpen(true)}
+          onFocus={() => { if (!disabled) setOpen(true); }}
         />
-        {value && (
+        {value && !disabled && (
           <button
             className="enq-combobox-clear"
             type="button"
@@ -76,7 +83,7 @@ function Combobox({
           </button>
         )}
       </div>
-      {open && (
+      {open && !disabled && (
         <div className="enq-combobox-dropdown">
           {filtered.length > 0 && (
             <ul className="enq-combobox-list">
@@ -159,49 +166,64 @@ export default function SteelEnquiryEntry() {
   const [financialYear, setFinancialYear] = useState("2026-27");
   const [enquiryDate, setEnquiryDate] = useState("");
   const [sections, setSections] = useState([createEmptySection()]);
+
+  // Master data — shared with EntryPage
   const [sectionDocs, setSectionDocs] = useState([]);
   const [supplierDocs, setSupplierDocs] = useState([]);
   const [allSizeDocs, setAllSizeDocs] = useState([]);
-  const [sectionSizeRelations, setSectionSizeRelations] = useState([]);
+  const [allWidthDocs, setAllWidthDocs] = useState([]);
+  const [allLengthDocs, setAllLengthDocs] = useState([]);
 
-  // Derived string arrays for combobox options
+  // Relation tables — shared with EntryPage
+  const [sectionSizeRelations, setSectionSizeRelations] = useState([]);
+  const [sizeWidthRelations, setSizeWidthRelations] = useState([]);
+  const [widthLengthRelations, setWidthLengthRelations] = useState([]);
+
+  // Derived string arrays
   const allSectionValues = sectionDocs.map(d => d.value);
   const allSupplierValues = supplierDocs.map(d => d.value);
   const allSizeValues = allSizeDocs.map(d => d.value);
+  const allWidthValues = allWidthDocs.map(d => d.value);
+  const allLengthValues = allLengthDocs.map(d => d.value);
 
-  // All docs as deletable Maps
+  // Deletable maps
   const allSectionDeletableIds = new Map(sectionDocs.map(d => [d.value, d.id]));
   const allSupplierDeletableIds = new Map(supplierDocs.map(d => [d.value, d.id]));
   const allSizeDeletableIds = new Map(allSizeDocs.map(d => [d.value, d.id]));
+  const allWidthDeletableIds = new Map(allWidthDocs.map(d => [d.value, d.id]));
+  const allLengthDeletableIds = new Map(allLengthDocs.map(d => [d.value, d.id]));
 
   // ── Fetch master data ───────────────────────────────────────────────────────
   const fetchData = async () => {
     try {
-      const [sectSnap, sizeSnap, suppSnap, relSnap] = await Promise.all([
+      const [
+        sectSnap, sizeSnap, widthSnap, lengthSnap, suppSnap,
+        ssRelSnap, swRelSnap, wlRelSnap,
+      ] = await Promise.all([
         getDocs(collection(db, "sections")),
         getDocs(collection(db, "sizes")),
+        getDocs(collection(db, "widths")),
+        getDocs(collection(db, "itemLengths")),
         getDocs(collection(db, "suppliers")),
         getDocs(collection(db, "sectionSizeRelations")),
+        getDocs(collection(db, "sizeWidthRelations")),
+        getDocs(collection(db, "widthLengthRelations")),
       ]);
-      setSectionDocs(
-        sectSnap.docs
+
+      const mapDocs = (snap) =>
+        snap.docs
           .map(d => ({ id: d.id, value: d.data().value?.trim() || "" }))
           .filter(i => i.value)
-          .sort((a, b) => a.value.localeCompare(b.value))
-      );
-      setAllSizeDocs(
-        sizeSnap.docs
-          .map(d => ({ id: d.id, value: d.data().value?.trim() || "" }))
-          .filter(i => i.value)
-          .sort((a, b) => a.value.localeCompare(b.value))
-      );
-      setSupplierDocs(
-        suppSnap.docs
-          .map(d => ({ id: d.id, value: d.data().value?.trim() || "" }))
-          .filter(i => i.value)
-          .sort((a, b) => a.value.localeCompare(b.value))
-      );
-      setSectionSizeRelations(relSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+          .sort((a, b) => a.value.localeCompare(b.value));
+
+      setSectionDocs(mapDocs(sectSnap));
+      setAllSizeDocs(mapDocs(sizeSnap));
+      setAllWidthDocs(mapDocs(widthSnap));
+      setAllLengthDocs(mapDocs(lengthSnap));
+      setSupplierDocs(mapDocs(suppSnap));
+      setSectionSizeRelations(ssRelSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setSizeWidthRelations(swRelSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setWidthLengthRelations(wlRelSnap.docs.map(d => ({ id: d.id, ...d.data() })));
     } catch (e) {
       console.error("Error fetching master data:", e);
     }
@@ -225,11 +247,57 @@ export default function SteelEnquiryEntry() {
     fetchEntryNo();
   }, []);
 
+  // ── Filtered options based on parent selections ─────────────────────────────
+
+  const getAvailableSizeValues = (selectedSection) => {
+    if (!selectedSection) return allSizeValues;
+    const sectionObj = sectionDocs.find(s => s.value === selectedSection);
+    if (!sectionObj) return allSizeValues;
+    const relatedSizeIds = sectionSizeRelations
+      .filter(rel => rel.sectionId === sectionObj.id)
+      .map(rel => rel.sizeId);
+    const filtered = allSizeDocs
+      .filter(size => relatedSizeIds.includes(size.id))
+      .map(d => d.value);
+    return filtered.length > 0 ? filtered : allSizeValues;
+  };
+
+  const getAvailableWidthValues = (selectedSection, selectedSize) => {
+    if (!selectedSection || !selectedSize) return allWidthValues;
+    const sectionObj = sectionDocs.find(s => s.value === selectedSection);
+    const sizeObj = allSizeDocs.find(s => s.value === selectedSize);
+    if (!sectionObj || !sizeObj) return allWidthValues;
+    const relatedWidthIds = sizeWidthRelations
+      .filter(rel => rel.sectionId === sectionObj.id && rel.sizeId === sizeObj.id)
+      .map(rel => rel.widthId);
+    const filtered = allWidthDocs
+      .filter(w => relatedWidthIds.includes(w.id))
+      .map(d => d.value);
+    return filtered.length > 0 ? filtered : allWidthValues;
+  };
+
+  const getAvailableLengthValues = (selectedSection, selectedSize, selectedWidth) => {
+    if (!selectedSection || !selectedSize) return allLengthValues;
+    const sectionObj = sectionDocs.find(s => s.value === selectedSection);
+    const sizeObj = allSizeDocs.find(s => s.value === selectedSize);
+    const widthObj = selectedWidth ? allWidthDocs.find(w => w.value === selectedWidth) : null;
+    if (!sectionObj || !sizeObj) return allLengthValues;
+    const relatedLengthIds = widthLengthRelations
+      .filter(rel =>
+        rel.sectionId === sectionObj.id &&
+        rel.sizeId === sizeObj.id &&
+        (widthObj ? rel.widthId === widthObj.id : rel.widthId === null)
+      )
+      .map(rel => rel.lengthId);
+    const filtered = allLengthDocs
+      .filter(l => relatedLengthIds.includes(l.id))
+      .map(d => d.value);
+    return filtered.length > 0 ? filtered : allLengthValues;
+  };
+
   // ── Add / Delete Section ────────────────────────────────────────────────────
   const handleAddNewSection = async (newVal) => {
-    const exists = allSectionValues.some(
-      s => s.toLowerCase() === newVal.toLowerCase()
-    );
+    const exists = allSectionValues.some(s => s.toLowerCase() === newVal.toLowerCase());
     if (exists) return;
     try {
       await addDoc(collection(db, "sections"), { value: newVal });
@@ -246,7 +314,7 @@ export default function SteelEnquiryEntry() {
       setSections(prev =>
         prev.map(s =>
           s.sectionConfirmed === val
-            ? { ...s, sectionText: "", sectionConfirmed: "", sizeText: "", sizeConfirmed: "" }
+            ? { ...s, sectionText: "", sectionConfirmed: "", sizeText: "", sizeConfirmed: "", widthText: "", widthConfirmed: "", lengthText: "", lengthConfirmed: "" }
             : s
         )
       );
@@ -258,17 +326,40 @@ export default function SteelEnquiryEntry() {
   };
 
   // ── Add / Delete Size ───────────────────────────────────────────────────────
-  const handleAddNewSize = async (newVal) => {
-    const exists = allSizeValues.some(
-      s => s.toLowerCase() === newVal.toLowerCase()
-    );
-    if (exists) return;
-    try {
-      await addDoc(collection(db, "sizes"), { value: newVal });
-      await fetchData();
-    } catch (e) {
-      console.error("Error adding size:", e);
-      alert("Error adding new size.");
+  const handleAddNewSize = async (newVal, sectionConfirmed) => {
+    const exists = allSizeValues.some(s => s.toLowerCase() === newVal.toLowerCase());
+    if (!exists) {
+      try {
+        const docRef = await addDoc(collection(db, "sizes"), { value: newVal });
+        if (sectionConfirmed) {
+          const sectionObj = sectionDocs.find(s => s.value === sectionConfirmed);
+          if (sectionObj) {
+            await addDoc(collection(db, "sectionSizeRelations"), {
+              sectionId: sectionObj.id, sizeId: docRef.id,
+            });
+          }
+        }
+        await fetchData();
+      } catch (e) {
+        console.error("Error adding size:", e);
+        alert("Error adding new size.");
+      }
+    } else {
+      if (sectionConfirmed) {
+        const sectionObj = sectionDocs.find(s => s.value === sectionConfirmed);
+        const sizeObj = allSizeDocs.find(s => s.value.toLowerCase() === newVal.toLowerCase());
+        if (sectionObj && sizeObj) {
+          const alreadyLinked = sectionSizeRelations.some(
+            r => r.sectionId === sectionObj.id && r.sizeId === sizeObj.id
+          );
+          if (!alreadyLinked) {
+            await addDoc(collection(db, "sectionSizeRelations"), {
+              sectionId: sectionObj.id, sizeId: sizeObj.id,
+            });
+            await fetchData();
+          }
+        }
+      }
     }
   };
 
@@ -278,7 +369,7 @@ export default function SteelEnquiryEntry() {
       setSections(prev =>
         prev.map(s =>
           s.sizeConfirmed === val
-            ? { ...s, sizeText: "", sizeConfirmed: "" }
+            ? { ...s, sizeText: "", sizeConfirmed: "", widthText: "", widthConfirmed: "", lengthText: "", lengthConfirmed: "" }
             : s
         )
       );
@@ -289,11 +380,115 @@ export default function SteelEnquiryEntry() {
     }
   };
 
+  // ── Add / Delete Width ──────────────────────────────────────────────────────
+  const handleAddNewWidth = async (newVal, sectionConfirmed, sizeConfirmed) => {
+    const exists = allWidthValues.some(w => w.toLowerCase() === newVal.toLowerCase());
+    try {
+      let widthId;
+      if (!exists) {
+        const docRef = await addDoc(collection(db, "widths"), { value: newVal });
+        widthId = docRef.id;
+      } else {
+        widthId = allWidthDocs.find(w => w.value.toLowerCase() === newVal.toLowerCase())?.id;
+      }
+      if (sectionConfirmed && sizeConfirmed && widthId) {
+        const sectionObj = sectionDocs.find(s => s.value === sectionConfirmed);
+        const sizeObj = allSizeDocs.find(s => s.value === sizeConfirmed);
+        if (sectionObj && sizeObj) {
+          const alreadyLinked = sizeWidthRelations.some(
+            r => r.sectionId === sectionObj.id && r.sizeId === sizeObj.id && r.widthId === widthId
+          );
+          if (!alreadyLinked) {
+            await addDoc(collection(db, "sizeWidthRelations"), {
+              sectionId: sectionObj.id, sizeId: sizeObj.id, widthId,
+            });
+          }
+        }
+      }
+      await fetchData();
+    } catch (e) {
+      console.error("Error adding width:", e);
+      alert("Error adding new width.");
+    }
+  };
+
+  const handleDeleteWidth = async (val, docId) => {
+    try {
+      await deleteDoc(doc(db, "widths", docId));
+      setSections(prev =>
+        prev.map(s =>
+          s.widthConfirmed === val
+            ? { ...s, widthText: "", widthConfirmed: "", lengthText: "", lengthConfirmed: "" }
+            : s
+        )
+      );
+      await fetchData();
+    } catch (e) {
+      console.error("Error deleting width:", e);
+      alert("Error deleting width.");
+    }
+  };
+
+  // ── Add / Delete Length ─────────────────────────────────────────────────────
+  const handleAddNewLength = async (newVal, sectionConfirmed, sizeConfirmed, widthConfirmed) => {
+    const exists = allLengthValues.some(l => l.toLowerCase() === newVal.toLowerCase());
+    try {
+      let lengthId;
+      if (!exists) {
+        const docRef = await addDoc(collection(db, "itemLengths"), { value: newVal });
+        lengthId = docRef.id;
+      } else {
+        lengthId = allLengthDocs.find(l => l.value.toLowerCase() === newVal.toLowerCase())?.id;
+      }
+      if (sectionConfirmed && sizeConfirmed && lengthId) {
+        const sectionObj = sectionDocs.find(s => s.value === sectionConfirmed);
+        const sizeObj = allSizeDocs.find(s => s.value === sizeConfirmed);
+        const widthObj = widthConfirmed ? allWidthDocs.find(w => w.value === widthConfirmed) : null;
+        if (sectionObj && sizeObj) {
+          const alreadyLinked = widthLengthRelations.some(
+            r =>
+              r.sectionId === sectionObj.id &&
+              r.sizeId === sizeObj.id &&
+              (widthObj ? r.widthId === widthObj.id : r.widthId === null) &&
+              r.lengthId === lengthId
+          );
+          if (!alreadyLinked) {
+            await addDoc(collection(db, "widthLengthRelations"), {
+              sectionId: sectionObj.id,
+              sizeId: sizeObj.id,
+              widthId: widthObj ? widthObj.id : null,
+              lengthId,
+            });
+          }
+        }
+      }
+      await fetchData();
+    } catch (e) {
+      console.error("Error adding length:", e);
+      alert("Error adding new length.");
+    }
+  };
+
+  const handleDeleteLength = async (val, docId) => {
+    try {
+      await deleteDoc(doc(db, "itemLengths", docId));
+      setSections(prev =>
+        prev.map(s =>
+          s.lengthConfirmed === val
+            ? { ...s, lengthText: "", lengthConfirmed: "" }
+            : s
+        )
+      );
+      await fetchData();
+    } catch (e) {
+      console.error("Error deleting length:", e);
+      alert("Error deleting length.");
+    }
+  };
+
   // ── Add / Delete Supplier ───────────────────────────────────────────────────
   const handleAddNewSupplier = async (newVal) => {
-    const exists = allSupplierValues.some(
-      s => s.toLowerCase() === newVal.toLowerCase()
-    );
+    const exists = allSupplierValues.some(s => s.toLowerCase() === newVal.toLowerCase());
     if (exists) return;
     try {
       await addDoc(collection(db, "suppliers"), { value: newVal });
@@ -324,20 +519,6 @@ export default function SteelEnquiryEntry() {
     }
   };
 
-  // ── Size options filtered by selected section ───────────────────────────────
-  const getAvailableSizeValues = (selectedSection) => {
-    if (!selectedSection) return allSizeValues;
-    const sectionObj = sectionDocs.find(s => s.value === selectedSection);
-    if (!sectionObj) return allSizeValues;
-    const relatedSizeIds = sectionSizeRelations
-      .filter(rel => rel.sectionId === sectionObj.id)
-      .map(rel => rel.sizeId);
-    const filtered = allSizeDocs
-      .filter(size => relatedSizeIds.includes(size.id))
-      .map(d => d.value);
-    return filtered.length > 0 ? filtered : allSizeValues;
-  };
-
   // ── Section row handlers ────────────────────────────────────────────────────
   const handleSectionField = (sectionId, field, value) => {
     setSections(prev =>
@@ -347,6 +528,20 @@ export default function SteelEnquiryEntry() {
         if (field === "sectionConfirmed") {
           updated.sizeText = "";
           updated.sizeConfirmed = "";
+          updated.widthText = "";
+          updated.widthConfirmed = "";
+          updated.lengthText = "";
+          updated.lengthConfirmed = "";
+        }
+        if (field === "sizeConfirmed") {
+          updated.widthText = "";
+          updated.widthConfirmed = "";
+          updated.lengthText = "";
+          updated.lengthConfirmed = "";
+        }
+        if (field === "widthConfirmed") {
+          updated.lengthText = "";
+          updated.lengthConfirmed = "";
         }
         return updated;
       })
@@ -399,6 +594,7 @@ export default function SteelEnquiryEntry() {
       for (const sr of sec.supplierRates) {
         if (!sr.supplierConfirmed && !sr.supplierText.trim())
           return alert("Please select or add a Supplier for all supplier rows");
+        if (!sr.mt) return alert("Please enter MT for all supplier rows");
       }
     }
     setLoading(true);
@@ -410,9 +606,12 @@ export default function SteelEnquiryEntry() {
         sections: sections.map(s => ({
           section: s.sectionConfirmed || s.sectionText.trim(),
           size: s.sizeConfirmed || s.sizeText.trim(),
+          width: s.widthConfirmed || s.widthText.trim(),
+          length: s.lengthConfirmed || s.lengthText.trim(),
           mt: parseFloat(s.mt) || 0,
           supplierRates: s.supplierRates.map(r => ({
             supplier: r.supplierConfirmed || r.supplierText.trim(),
+            mt: parseFloat(r.mt) || 0,
             rate: parseFloat(r.rate) || 0,
           })),
         })),
@@ -489,10 +688,10 @@ export default function SteelEnquiryEntry() {
                 )}
               </div>
 
-              {/* Section / Size / MT */}
-              <div className="enq-section-fields">
+              {/* Section / Size / Width / Length / MT */}
+              <div className="enq-section-fields enq-section-fields--wide">
 
-                {/* Section Combobox */}
+                {/* Section */}
                 <div className="enq-field">
                   <label className="enq-label">Section</label>
                   <Combobox
@@ -507,13 +706,11 @@ export default function SteelEnquiryEntry() {
                     onDelete={handleDeleteSection}
                   />
                   {sec.sectionConfirmed && (
-                    <span className="enq-confirmed-chip">
-                      ✓ {sec.sectionConfirmed}
-                    </span>
+                    <span className="enq-confirmed-chip">✓ {sec.sectionConfirmed}</span>
                   )}
                 </div>
 
-                {/* Size Combobox */}
+                {/* Size */}
                 <div className="enq-field">
                   <label className="enq-label">Size</label>
                   <Combobox
@@ -524,23 +721,61 @@ export default function SteelEnquiryEntry() {
                     deletableIds={allSizeDeletableIds}
                     onChange={val => handleSectionField(sec.id, "sizeText", val)}
                     onConfirm={val => handleSectionField(sec.id, "sizeConfirmed", val)}
-                    onAddNew={handleAddNewSize}
+                    onAddNew={(val) => handleAddNewSize(val, sec.sectionConfirmed)}
                     onDelete={handleDeleteSize}
                   />
                   {sec.sizeConfirmed && (
-                    <span className="enq-confirmed-chip">
-                      ✓ {sec.sizeConfirmed}
-                    </span>
+                    <span className="enq-confirmed-chip">✓ {sec.sizeConfirmed}</span>
                   )}
                 </div>
 
-                {/* Quantity */}
+                {/* Width */}
+                <div className="enq-field">
+                  <label className="enq-label">Width</label>
+                  <Combobox
+                    label="width"
+                    placeholder="Type or select width..."
+                    value={sec.widthText}
+                    options={getAvailableWidthValues(sec.sectionConfirmed, sec.sizeConfirmed)}
+                    deletableIds={allWidthDeletableIds}
+                    disabled={!sec.sizeConfirmed}
+                    onChange={val => handleSectionField(sec.id, "widthText", val)}
+                    onConfirm={val => handleSectionField(sec.id, "widthConfirmed", val)}
+                    onAddNew={(val) => handleAddNewWidth(val, sec.sectionConfirmed, sec.sizeConfirmed)}
+                    onDelete={handleDeleteWidth}
+                  />
+                  {sec.widthConfirmed && (
+                    <span className="enq-confirmed-chip">✓ {sec.widthConfirmed}</span>
+                  )}
+                </div>
+
+                {/* Length */}
+                <div className="enq-field">
+                  <label className="enq-label">Length</label>
+                  <Combobox
+                    label="length"
+                    placeholder="Type or select length..."
+                    value={sec.lengthText}
+                    options={getAvailableLengthValues(sec.sectionConfirmed, sec.sizeConfirmed, sec.widthConfirmed)}
+                    deletableIds={allLengthDeletableIds}
+                    disabled={!sec.sizeConfirmed}
+                    onChange={val => handleSectionField(sec.id, "lengthText", val)}
+                    onConfirm={val => handleSectionField(sec.id, "lengthConfirmed", val)}
+                    onAddNew={(val) => handleAddNewLength(val, sec.sectionConfirmed, sec.sizeConfirmed, sec.widthConfirmed)}
+                    onDelete={handleDeleteLength}
+                  />
+                  {sec.lengthConfirmed && (
+                    <span className="enq-confirmed-chip">✓ {sec.lengthConfirmed}</span>
+                  )}
+                </div>
+
+                {/* Quantity (MT) — section level */}
                 <div className="enq-field">
                   <label className="enq-label">Quantity (MT)</label>
                   <input
                     className="enq-input"
-                    type="number"
-                    step="0.01"
+                    type="text"
+                    inputMode="decimal"
                     placeholder="0.00"
                     value={sec.mt}
                     onChange={e => handleSectionField(sec.id, "mt", e.target.value)}
@@ -554,15 +789,18 @@ export default function SteelEnquiryEntry() {
                   <span className="enq-supplier-block-title">Supplier Rates</span>
                 </div>
                 <div className="enq-supplier-rates-list">
-                  <div className="enq-supplier-rate-header-row">
+                  <div className="enq-supplier-rate-header-row enq-supplier-rate-header-row--5col">
                     <span>#</span>
                     <span>Supplier Name</span>
+                    <span>MT</span>
                     <span>Rate Quoted</span>
                     <span></span>
                   </div>
                   {sec.supplierRates.map((sr, srIdx) => (
-                    <div key={sr.id} className="enq-supplier-rate-row">
+                    <div key={sr.id} className="enq-supplier-rate-row enq-supplier-rate-row--5col">
                       <span className="enq-sr-index">{srIdx + 1}</span>
+
+                      {/* Supplier Name */}
                       <div className="enq-supplier-combobox-cell">
                         <Combobox
                           label="supplier"
@@ -585,12 +823,28 @@ export default function SteelEnquiryEntry() {
                           </span>
                         )}
                       </div>
+
+                      {/* MT per supplier */}
+                      <div className="enq-supplier-mt-wrapper">
+                        <input
+                          className="enq-input enq-supplier-mt-input"
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="0.00"
+                          value={sr.mt}
+                          onChange={e =>
+                            handleSupplierRateField(sec.id, sr.id, "mt", e.target.value)
+                          }
+                        />
+                      </div>
+
+                      {/* Rate Quoted */}
                       <div className="enq-rate-input-wrapper">
                         <span className="enq-rate-prefix">Rs</span>
                         <input
                           className="enq-input enq-rate-input"
-                          type="number"
-                          step="0.01"
+                          type="text"
+                          inputMode="decimal"
                           placeholder="0.00"
                           value={sr.rate}
                           onChange={e =>
@@ -598,6 +852,7 @@ export default function SteelEnquiryEntry() {
                           }
                         />
                       </div>
+
                       {sec.supplierRates.length > 1 ? (
                         <button
                           className="enq-remove-rate-btn"
