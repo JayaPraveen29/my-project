@@ -15,6 +15,8 @@ import MasterDataManager from './pages/MasterDataManager/MasterDataManager';
 import LastPurchasedReport from './pages/LastPurchasedReport/LastPurchasedReport';
 import PriceComparison from './pages/PriceComparison/PriceComparison';
 import AIAssistant from './pages/AIAssistant/AIAssistant';
+import ComparativeStatement from './pages/comparative-statement/ComparativeStatement';
+import SteelEnquiryEntry from './pages/steel-enquiry-entry/SteelEnquiryEntry';
 
 function App() {
   return (
@@ -38,6 +40,8 @@ function App() {
           <Route path="/manage-masters" element={<MasterDataManager />} />
           <Route path="/last-purchased-report" element={<LastPurchasedReport />} />
           <Route path="/Price-Comparison" element={<PriceComparison />} />
+          <Route path="/comparative-statement" element={<ComparativeStatement />} />
+          <Route path="/steel-enquiry-entry" element={<SteelEnquiryEntry />} />
           <Route path="/ai-assistant" element={<AIAssistant />} />
         </Route>
       </Routes>

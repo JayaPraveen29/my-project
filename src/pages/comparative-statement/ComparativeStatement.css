@@ -1,0 +1,419 @@
+/* ── Page ──────────────────────────────────────────────────────────────────── */
+.cs-page {
+  padding: 28px 32px;
+  max-width: 100%;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  background: #f4f6f9;
+  min-height: 100vh;
+}
+
+/* ── Header ─────────────────────────────────────────────────────────────────── */
+.cs-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.cs-title {
+  font-size: 26px;
+  font-weight: 700;
+  color: #1a2535;
+  margin: 0 0 4px 0;
+  letter-spacing: -0.3px;
+}
+
+.cs-subtitle {
+  font-size: 13px;
+  color: #6b7a8d;
+  margin: 0;
+}
+
+/* ── Filters ─────────────────────────────────────────────────────────────────── */
+.cs-filters {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+  background: white;
+  padding: 16px 20px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+}
+
+.cs-filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.cs-filter-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #4a5568;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.cs-filter-select,
+.cs-filter-input {
+  padding: 8px 12px;
+  border: 1px solid #d1d9e0;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #1a2535;
+  background: white;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  min-width: 160px;
+}
+
+.cs-filter-select:focus,
+.cs-filter-input:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59,130,246,0.12);
+}
+
+.cs-clear-btn {
+  padding: 8px 14px;
+  background: #fee2e2;
+  color: #dc2626;
+  border: 1px solid #fca5a5;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+  white-space: nowrap;
+  align-self: flex-end;
+}
+
+.cs-clear-btn:hover {
+  background: #fecaca;
+}
+
+/* ── Loading / Empty ─────────────────────────────────────────────────────────── */
+.cs-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 0;
+  color: #6b7a8d;
+  gap: 16px;
+}
+
+.cs-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #e2e8f0;
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: cs-spin 0.8s linear infinite;
+}
+
+@keyframes cs-spin {
+  to { transform: rotate(360deg); }
+}
+
+.cs-empty {
+  text-align: center;
+  padding: 80px 0;
+  color: #6b7a8d;
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+}
+
+.cs-empty-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+/* ── Table wrapper ───────────────────────────────────────────────────────────── */
+.cs-table-wrapper {
+  overflow-x: auto;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  background: white;
+}
+
+/* ── Table ───────────────────────────────────────────────────────────────────── */
+.cs-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+
+/* ── Header row ──────────────────────────────────────────────────────────────── */
+.cs-thead-row {
+  background: #1e293b;
+}
+
+.cs-th {
+  padding: 13px 16px;
+  text-align: left;
+  color: #e2e8f0;
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+  border-right: 1px solid rgba(255,255,255,0.07);
+}
+
+.cs-th:last-child {
+  border-right: none;
+}
+
+/* Fixed-width columns */
+.cs-th-sno    { width: 60px;  min-width: 60px;  max-width: 60px; }
+.cs-th-section{ width: 160px; min-width: 160px; max-width: 160px; }
+.cs-th-size   { width: 110px; min-width: 110px; max-width: 110px; }
+.cs-th-mt     { width: 110px; min-width: 110px; max-width: 110px; }
+
+/* Supplier header */
+.cs-th-supplier {
+  min-width: 160px;
+  text-align: center;
+}
+
+.cs-supplier-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: #f8fafc;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+}
+
+.cs-supplier-sub {
+  font-size: 10px;
+  font-weight: 400;
+  color: #94a3b8;
+  margin-top: 2px;
+  letter-spacing: 0.3px;
+}
+
+/* ── Sticky left columns ─────────────────────────────────────────────────────── */
+.cs-th-sticky,
+.cs-td-sticky {
+  position: sticky;
+  z-index: 3;
+}
+
+/* Header sticky cells - dark background */
+.cs-thead-row .cs-th-sticky {
+  background: #1e293b;
+}
+
+/* Body sticky cells - white background */
+.cs-td-sno,
+.cs-td-section,
+.cs-td-size,
+.cs-td-mt {
+  background: #ffffff;
+}
+
+/* Hover state for body sticky cells */
+.cs-tr:hover .cs-td-sno,
+.cs-tr:hover .cs-td-section,
+.cs-tr:hover .cs-td-size,
+.cs-tr:hover .cs-td-mt {
+  background: #f8faff;
+}
+
+.cs-th-sno,    .cs-td-sno    { left: 0px;   }
+.cs-th-section,.cs-td-section { left: 60px;  }
+.cs-th-size,   .cs-td-size   { left: 220px; }
+.cs-th-mt,     .cs-td-mt     { left: 330px; }
+
+/* ── Body rows ───────────────────────────────────────────────────────────────── */
+.cs-tr {
+  border-bottom: 1px solid #f1f5f9;
+  transition: background 0.15s;
+}
+
+.cs-tr:hover {
+  background: #f8faff;
+}
+
+.cs-tr:last-child {
+  border-bottom: none;
+}
+
+.cs-td {
+  padding: 11px 16px;
+  color: #334155;
+  border-right: 1px solid #f1f5f9;
+  vertical-align: middle;
+}
+
+.cs-td:last-child {
+  border-right: none;
+}
+
+.cs-td-sno {
+  font-size: 12px;
+  color: #94a3b8;
+  font-weight: 600;
+  text-align: center;
+}
+
+.cs-td-section {
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.cs-section-tag {
+  display: inline-block;
+  background: #eff6ff;
+  color: #1d4ed8;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.cs-td-size {
+  font-size: 13px;
+  color: #475569;
+}
+
+.cs-td-mt {
+  font-size: 13px;
+  color: #475569;
+  font-variant-numeric: tabular-nums;
+}
+
+.cs-na {
+  color: #cbd5e1;
+}
+
+/* ── Rate cells ──────────────────────────────────────────────────────────────── */
+.cs-td-rate {
+  text-align: center;
+  min-width: 160px;
+}
+
+/* ★ LOWEST RATE HIGHLIGHT ★ */
+.cs-td-lowest {
+  background: #f0fdf4 !important;
+  border-left: 3px solid #16a34a;
+  border-right: 3px solid transparent;
+}
+
+.cs-tr:hover .cs-td-lowest {
+  background: #dcfce7 !important;
+}
+
+.cs-rate-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.cs-rate-value {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1e293b;
+  font-variant-numeric: tabular-nums;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.cs-td-lowest .cs-rate-value {
+  color: #15803d;
+}
+
+.cs-lowest-badge {
+  display: inline-block;
+  background: #16a34a;
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 10px;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.cs-td-empty {
+  background: #fafafa;
+}
+
+.cs-no-quote {
+  color: #cbd5e1;
+  font-size: 12px;
+  font-style: italic;
+}
+
+/* ── Footer row ──────────────────────────────────────────────────────────────── */
+.cs-tfoot-row {
+  background: #f8fafc;
+  border-top: 2px solid #e2e8f0;
+}
+
+.cs-tfoot-label {
+  font-weight: 700;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #64748b;
+  background: #f8fafc;
+}
+
+.cs-tfoot-count {
+  text-align: center;
+  padding: 10px 16px;
+  font-size: 13px;
+}
+
+.cs-tfoot-count--has {
+  background: #f0fdf4;
+}
+
+.cs-tfoot-count-val {
+  color: #15803d;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.cs-tfoot-zero {
+  color: #cbd5e1;
+  font-size: 13px;
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .cs-page {
+    padding: 70px 16px 20px;
+  }
+
+  .cs-title {
+    font-size: 20px;
+  }
+
+  .cs-filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .cs-count-badge {
+    margin-left: 0;
+    text-align: center;
+  }
+
+  .cs-th-section { left: 60px;  min-width: 120px; }
+  .cs-th-size    { left: 180px; }
+  .cs-td-section { left: 60px; }
+  .cs-td-size    { left: 180px; }
+}

@@ -34,7 +34,13 @@ export default function SideNavbar() {
         <ul className="sidebar-list">
           <li>
             <Link to="/EntryPage" className="menu-btn" onClick={closeMobileMenu}>
-              <HiChartBar /> Add Entry
+              <HiChartBar /> Steel Purchase Entry
+            </Link>
+          </li>
+
+          <li>
+            <Link to="/steel-enquiry-entry" className="menu-btn" onClick={closeMobileMenu}>
+              <HiChartBar /> Steel Enquiry Entry
             </Link>
           </li>
 
@@ -63,6 +69,7 @@ export default function SideNavbar() {
                 <li><Link to="/bill-search" className="dropdown-item" onClick={closeMobileMenu}>Bill Number Search</Link></li>
                 <li><Link to="/last-purchased-report" className="dropdown-item" onClick={closeMobileMenu}>Last Purchase Summary</Link></li>
                 <li><Link to="/Price-Comparison" className="dropdown-item" onClick={closeMobileMenu}>Price Comparison</Link></li>
+                <li><Link to="/comparative-statement" className="dropdown-item" onClick={closeMobileMenu}>Comparative Statement</Link></li>
               </ul>
             )}
           </li>

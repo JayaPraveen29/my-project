@@ -694,7 +694,7 @@ export default function EntryPage() {
 
   return (
     <div className="entry-container">
-      <h1 className="entry-heading">Entry Page</h1>
+      <h1 className="entry-heading">Steel Pruchase Entry Page</h1>
 
       <div className="entry-top-inputs">
         <div className="unit-dropdown-wrapper">
