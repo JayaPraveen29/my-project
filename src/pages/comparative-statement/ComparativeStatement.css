@@ -1,4 +1,4 @@
-/* ── Page ──────────────────────────────────────────────────────────────────── */
+/* -- Page -------------------------------------------------------------------- */
 .cs-page {
   padding: 28px 32px;
   max-width: 100%;
@@ -7,7 +7,7 @@
   min-height: 100vh;
 }
 
-/* ── Header ─────────────────────────────────────────────────────────────────── */
+/* -- Header ------------------------------------------------------------------- */
 .cs-header {
   display: flex;
   align-items: flex-start;
@@ -47,7 +47,7 @@
   color: #fff;
 }
 
-/* ── Filters ─────────────────────────────────────────────────────────────────── */
+/* -- Filters ------------------------------------------------------------------- */
 .cs-filters {
   display: flex;
   align-items: flex-end;
@@ -109,7 +109,7 @@
 }
 .cs-clear-btn:hover { background: #fecaca; }
 
-/* ── Loading / Empty ─────────────────────────────────────────────────────────── */
+/* -- Loading / Empty ----------------------------------------------------------- */
 .cs-loading {
   display: flex;
   flex-direction: column;
@@ -141,7 +141,7 @@
 }
 .cs-empty-icon { font-size: 48px; margin-bottom: 16px; }
 
-/* ── Table wrapper ───────────────────────────────────────────────────────────── */
+/* -- Table wrapper ------------------------------------------------------------- */
 .cs-table-wrapper {
   overflow-x: auto;
   border-radius: 12px;
@@ -150,14 +150,14 @@
   background: white;
 }
 
-/* ── Table ───────────────────────────────────────────────────────────────────── */
+/* -- Table --------------------------------------------------------------------- */
 .cs-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 13.5px;
 }
 
-/* ── Header rows ─────────────────────────────────────────────────────────────── */
+/* -- Header rows --------------------------------------------------------------- */
 .cs-thead-row {
   background: #1e293b;
 }
@@ -251,9 +251,31 @@
 .cs-th-pct {
   background: #1a1a2e;
   color: #c4b5fd;
-  min-width: 110px;
+  width: 90px;
+  min-width: 90px;
+  max-width: 90px;
   line-height: 1.5;
   border-left: 2px solid #7c3aed;
+  white-space: normal !important;
+  word-break: break-word;
+  padding: 8px 6px !important;
+  font-size: 10px !important;
+  text-align: center;
+}
+
+.cs-th-pct-last {
+  background: #1c1410;
+  color: #fcd34d;
+  width: 90px;
+  min-width: 90px;
+  max-width: 90px;
+  line-height: 1.5;
+  border-left: 2px solid #f59e0b;
+  white-space: normal !important;
+  word-break: break-word;
+  padding: 8px 6px !important;
+  font-size: 10px !important;
+  text-align: center;
 }
 
 .cs-th-pct-sub {
@@ -263,9 +285,14 @@
   display: block;
   text-transform: none;
   letter-spacing: 0;
+  white-space: normal;
 }
 
-/* ── Sticky left columns ─────────────────────────────────────────────────────── */
+.cs-th-pct-last .cs-th-pct-sub {
+  color: #fbbf24;
+}
+
+/* -- Sticky left columns ------------------------------------------------------- */
 .cs-th-sticky,
 .cs-td-sticky {
   position: sticky;
@@ -294,7 +321,7 @@
 .cs-th-size,   .cs-td-size   { left: 202px; }
 .cs-th-mt,     .cs-td-mt     { left: 302px; }
 
-/* ── Body rows ───────────────────────────────────────────────────────────────── */
+/* -- Body rows ----------------------------------------------------------------- */
 .cs-tr {
   border-bottom: 1px solid #f1f5f9;
   transition: background 0.15s;
@@ -347,12 +374,14 @@
 
 .cs-na { color: #cbd5e1; }
 
-/* ── Purchase rate cells ─────────────────────────────────────────────────────── */
+/* -- Purchase rate cells ------------------------------------------------------- */
 .cs-td-purchase {
   background: #eff6ff;
   border-left: 1px solid #bfdbfe;
   border-right: 1px solid #bfdbfe;
-  min-width: 110px;
+  min-width: 120px;
+  text-align: right;
+  padding-right: 10px !important;
 }
 
 .cs-tr:hover .cs-td-purchase {
@@ -364,23 +393,26 @@
   font-weight: 700;
   color: #1d4ed8;
   font-variant-numeric: tabular-nums;
-  display: block;
+  white-space: nowrap;
 }
 
 .cs-last-purchase-cell {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 2px;
+  justify-content: flex-end;
+  gap: 8px;
+  white-space: nowrap;
 }
 
 .cs-purchase-date {
   font-size: 10px;
   color: #64748b;
   font-style: italic;
+  white-space: nowrap;
 }
 
-/* ── Supplier rate cells ─────────────────────────────────────────────────────── */
+/* -- Supplier rate cells ------------------------------------------------------- */
 .cs-td-rate {
   text-align: center;
   min-width: 110px;
@@ -399,7 +431,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* ★ LOWEST RATE HIGHLIGHT ★ */
+/* LOWEST RATE HIGHLIGHT */
 .cs-td-lowest {
   background: #f0fdf4 !important;
   border-left: 2px solid #16a34a;
@@ -447,37 +479,64 @@
   font-style: italic;
 }
 
-/* ── % Increase column ────────────────────────────────────────────────────────── */
-.cs-td-pct {
-  min-width: 110px;
-  text-align: center;
+/* -- % Increase column ---------------------------------------------------------- */
+.cs-td-pct,
+.cs-td-pct-last {
+  width: 90px;
+  min-width: 90px;
+  max-width: 90px;
+  padding: 0 !important;
   font-variant-numeric: tabular-nums;
+  vertical-align: middle;
+}
+
+.cs-td-pct {
   border-left: 2px solid #ede9fe;
 }
 
-.cs-td-pct--up {
-  background: #fef2f2;
+.cs-td-pct-last {
+  border-left: 2px solid #fde68a;
 }
-.cs-td-pct--down {
-  background: #f0fdf4;
-}
-.cs-td-pct--flat {
-  background: #f8fafc;
-}
+
+.cs-td-pct--up   { background: #fef2f2; }
+.cs-td-pct--down { background: #f0fdf4; }
+.cs-td-pct--flat { background: #f8fafc; }
+
+.cs-td-pct-last--up   { background: #fff7ed; }
+.cs-td-pct-last--down { background: #f0fdf4; }
+.cs-td-pct-last--flat { background: #f8fafc; }
 
 .cs-tr:hover .cs-td-pct--up   { background: #fee2e2; }
 .cs-tr:hover .cs-td-pct--down { background: #dcfce7; }
+.cs-tr:hover .cs-td-pct-last--up   { background: #ffedd5; }
+.cs-tr:hover .cs-td-pct-last--down { background: #dcfce7; }
 
 .cs-pct-value {
+  display: block;
+  width: 100%;
+  text-align: center;
   font-size: 13px;
   font-weight: 700;
+  padding: 0 4px;
+  box-sizing: border-box;
 }
 
 .cs-td-pct--up   .cs-pct-value { color: #dc2626; }
 .cs-td-pct--down .cs-pct-value { color: #16a34a; }
 .cs-td-pct--flat .cs-pct-value { color: #64748b; }
 
-/* ── Responsive ──────────────────────────────────────────────────────────────── */
+.cs-td-pct-last--up   .cs-pct-value { color: #ea580c; }
+.cs-td-pct-last--down .cs-pct-value { color: #16a34a; }
+.cs-td-pct-last--flat .cs-pct-value { color: #64748b; }
+
+.cs-td-pct .cs-no-quote,
+.cs-td-pct-last .cs-no-quote {
+  display: block;
+  width: 100%;
+  text-align: center;
+}
+
+/* -- Responsive ---------------------------------------------------------------- */
 @media (max-width: 768px) {
   .cs-page { padding: 70px 16px 20px; }
   .cs-title { font-size: 20px; }
@@ -486,4 +545,248 @@
   .cs-th-size    { left: 172px; }
   .cs-td-section { left: 52px; }
   .cs-td-size    { left: 172px; }
+}
+/* -- Export Buttons ------------------------------------------------------------ */
+.cs-header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.btn-export {
+  padding: 0.45rem 1rem;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.btn-export:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+.btn-pdf {
+  background-color: #e74c3c;
+}
+
+.btn-pdf:hover:not(:disabled) {
+  background-color: #c0392b;
+  transform: translateY(-2px);
+}
+
+.btn-excel {
+  background-color: #217346;
+}
+
+.btn-excel:hover:not(:disabled) {
+  background-color: #1a5c37;
+  transform: translateY(-2px);
+}
+
+@media (max-width: 768px) {
+  .cs-header-right {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .btn-export {
+    flex: 1;
+    text-align: center;
+  }
+}
+
+/* -- Average Rate footer row ------------------------------------------------- */
+.cs-tr-avg {
+  background: #f1f5f9;
+  border-top: 2px solid #6366f1;
+}
+
+.cs-avg-label {
+  font-weight: 700;
+  color: #1e293b;
+  text-align: right;
+  font-size: 12px;
+  letter-spacing: 0.2px;
+}
+
+.cs-td-avg-rate {
+  background: #eff6ff !important;
+}
+
+.cs-avg-value {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1d4ed8;
+  font-variant-numeric: tabular-nums;
+}
+
+/* -- L1 Summary Section ------------------------------------------------------ */
+.cs-l1-section {
+  margin-top: 32px;
+  background: #fff;
+  border: 1.5px solid #bfdbfe;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 2px 12px rgba(30, 64, 175, 0.07);
+}
+
+.cs-l1-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 24px 14px;
+  background: linear-gradient(90deg, #eff6ff 0%, #fff 100%);
+  border-bottom: 1.5px solid #bfdbfe;
+}
+
+.cs-l1-badge {
+  background: #1d4ed8;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  padding: 3px 10px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.cs-l1-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0;
+  letter-spacing: -0.2px;
+}
+
+.cs-l1-sub {
+  font-size: 12px;
+  color: #64748b;
+  margin: 0;
+}
+
+.cs-l1-table-wrap {
+  overflow-x: auto;
+}
+
+.cs-l1-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+}
+
+.cs-l1-table thead tr {
+  background: #dbeafe;
+}
+
+.cs-l1-table thead th {
+  padding: 10px 14px;
+  text-align: right;
+  font-size: 11px;
+  font-weight: 700;
+  color: #1e40af;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-bottom: 2px solid #bfdbfe;
+  white-space: nowrap;
+}
+
+.cs-l1-table thead th:first-child,
+.cs-l1-table thead th:nth-child(2),
+.cs-l1-table thead th:nth-child(3),
+.cs-l1-table thead th:nth-child(6) {
+  text-align: left;
+}
+
+.cs-l1-table tbody tr {
+  border-bottom: 1px solid #e2e8f0;
+  transition: background 0.1s;
+}
+.cs-l1-table tbody tr:hover { background: #f0f7ff; }
+.cs-l1-table tbody tr:nth-child(even) { background: #f8fbff; }
+.cs-l1-table tbody tr:nth-child(even):hover { background: #e8f2ff; }
+
+.cs-l1-table tbody td {
+  padding: 9px 14px;
+  color: #334155;
+  text-align: right;
+}
+
+.cs-l1-sno {
+  text-align: center !important;
+  color: #94a3b8 !important;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.cs-l1-left { text-align: left !important; }
+
+.cs-l1-supplier {
+  text-align: left !important;
+  font-weight: 600;
+  color: #1e40af !important;
+}
+
+.cs-l1-num {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.cs-l1-rate {
+  color: #0f172a;
+  font-weight: 500;
+}
+
+.cs-l1-amount {
+  font-weight: 700;
+  color: #1d4ed8;
+}
+
+.cs-l1-tr--nodata td {
+  opacity: 0.45;
+}
+
+/* Totals footer */
+.cs-l1-totals {
+  background: #eff6ff !important;
+  border-top: 2px solid #1d4ed8;
+}
+
+.cs-l1-totals td {
+  padding: 11px 14px;
+  font-weight: 700;
+}
+
+.cs-l1-totals-label {
+  text-align: right !important;
+  color: #1e40af;
+  font-size: 12px;
+  letter-spacing: 0.2px;
+}
+
+.cs-l1-totals-val {
+  color: #334155;
+  font-size: 13px;
+}
+
+.cs-l1-totals-avg {
+  color: #1d4ed8;
+  font-size: 14px;
+}
+
+.cs-l1-totals-amt {
+  color: #1d4ed8;
+  font-size: 14px;
+}
+
+@media (max-width: 768px) {
+  .cs-l1-header { flex-wrap: wrap; padding: 14px 16px; }
+  .cs-l1-table thead th,
+  .cs-l1-table tbody td { padding: 8px 10px; }
 }

@@ -697,3 +697,25 @@
 .enq-supplier-rate-row--5col {
   grid-template-columns: 2rem 1fr 8rem 10rem 2.5rem;
 }
+/* ── Enquiry Number Badge & Readonly field ───────────────────── */
+.enq-enquiry-no-badge {
+  background: #6366f1;
+  color: white;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 6px 16px;
+  border-radius: 20px;
+  letter-spacing: 0.5px;
+  margin-right: 8px;
+}
+
+.enq-readonly-no {
+  background: #f1f5f9;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #6366f1;
+  letter-spacing: 0.5px;
+}

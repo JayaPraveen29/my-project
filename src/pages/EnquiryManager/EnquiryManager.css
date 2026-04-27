@@ -567,3 +567,94 @@
   .em-section-fields-grid .em-sec-field:last-child { grid-column: span 2; }
   .em-rates-header, .em-rate-row { grid-template-columns: 24px 1fr 120px 24px; }
 }
+
+/* ── New Section Form (combobox-powered) ─────────────────────────────────── */
+.em-new-section-form {
+  background: #12141e;
+  border: 1px solid rgba(74, 222, 128, 0.25);
+  border-radius: 12px;
+  padding: 18px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.em-new-section-form-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #4ade80;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.em-new-section-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+
+.em-new-section-supplier-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.em-new-section-supplier-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #475569;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+
+.em-new-section-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.em-new-section-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(74, 222, 128, 0.1);
+  border: 1px solid rgba(74, 222, 128, 0.35);
+  color: #4ade80;
+  padding: 9px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.em-new-section-add-btn:hover { background: rgba(74, 222, 128, 0.2); }
+
+.em-new-section-cancel-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(239, 68, 68, 0.07);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  color: #f87171;
+  padding: 9px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: 'DM Sans', sans-serif;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.em-new-section-cancel-btn:hover { background: rgba(239, 68, 68, 0.15); }
+
+.em-rates-header,
+.em-rate-row {
+  grid-template-columns: 28px 1fr 100px 140px 28px;
+}
+
+@media (max-width: 600px) {
+  .em-new-section-fields { grid-template-columns: 1fr 1fr; }
+  .em-rates-header, .em-rate-row { grid-template-columns: 24px 1fr 80px 100px 24px; }
+}

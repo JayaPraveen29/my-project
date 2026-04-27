@@ -635,6 +635,7 @@ export default function SteelEnquiryEntry() {
           <h1 className="enq-title">Steel Enquiry Entry</h1>
         </div>
         <div className="enq-header-right">
+          <span className="enq-enquiry-no-badge">Enquiry #{entryNo}</span>
           <span className="enq-fy-badge">{financialYear}</span>
         </div>
       </div>
@@ -642,6 +643,11 @@ export default function SteelEnquiryEntry() {
       <div className="enq-form-body">
         {/* Meta Row */}
         <div className="enq-meta-grid">
+          <div className="enq-field">
+            <label className="enq-label">Enquiry No</label>
+            <div className="enq-readonly-no">#{entryNo}</div>
+          </div>
+
           <div className="enq-field">
             <label className="enq-label">Financial Year</label>
             <select
