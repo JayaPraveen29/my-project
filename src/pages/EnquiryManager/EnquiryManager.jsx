@@ -8,7 +8,6 @@ import {
 import "./EnquiryManager.css";
 import "../../pages/steel-enquiry-entry/SteelEnquiryEntry.css";
 
-// ── Combobox (same as SteelEnquiryEntry) ─────────────────────────────────────
 function Combobox({
   value, onChange, onConfirm,
   onAddNew, onDelete,
@@ -129,7 +128,6 @@ function Combobox({
   );
 }
 
-// ── Inline Editable Cell ──────────────────────────────────────────────────────
 function EditableCell({ value, type = "text", onSave, prefix }) {
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(value);
@@ -167,7 +165,6 @@ function EditableCell({ value, type = "text", onSave, prefix }) {
   );
 }
 
-// ── New Section Form (with same comboboxes as SteelEnquiryEntry) ──────────────
 function NewSectionForm({ masterData, onAdd, onCancel }) {
   const {
     sectionDocs, allSizeDocs, allWidthDocs, allLengthDocs, supplierDocs,
@@ -175,16 +172,16 @@ function NewSectionForm({ masterData, onAdd, onCancel }) {
     fetchMasterData,
   } = masterData;
 
-  const allSectionValues = sectionDocs.map(d => d.value);
-  const allSizeValues    = allSizeDocs.map(d => d.value);
-  const allWidthValues   = allWidthDocs.map(d => d.value);
-  const allLengthValues  = allLengthDocs.map(d => d.value);
+  const allSectionValues  = sectionDocs.map(d => d.value);
+  const allSizeValues     = allSizeDocs.map(d => d.value);
+  const allWidthValues    = allWidthDocs.map(d => d.value);
+  const allLengthValues   = allLengthDocs.map(d => d.value);
   const allSupplierValues = supplierDocs.map(d => d.value);
 
-  const allSectionDeletableIds = new Map(sectionDocs.map(d => [d.value, d.id]));
-  const allSizeDeletableIds    = new Map(allSizeDocs.map(d => [d.value, d.id]));
-  const allWidthDeletableIds   = new Map(allWidthDocs.map(d => [d.value, d.id]));
-  const allLengthDeletableIds  = new Map(allLengthDocs.map(d => [d.value, d.id]));
+  const allSectionDeletableIds  = new Map(sectionDocs.map(d => [d.value, d.id]));
+  const allSizeDeletableIds     = new Map(allSizeDocs.map(d => [d.value, d.id]));
+  const allWidthDeletableIds    = new Map(allWidthDocs.map(d => [d.value, d.id]));
+  const allLengthDeletableIds   = new Map(allLengthDocs.map(d => [d.value, d.id]));
   const allSupplierDeletableIds = new Map(supplierDocs.map(d => [d.value, d.id]));
 
   const [sec, setSec] = useState({
@@ -193,6 +190,7 @@ function NewSectionForm({ masterData, onAdd, onCancel }) {
     widthText: "", widthConfirmed: "",
     lengthText: "", lengthConfirmed: "",
     mt: "",
+    // ✅ Start with one empty supplier row — all fields optional
     supplierRates: [{ supplierText: "", supplierConfirmed: "", mt: "", rate: "" }],
   });
 
@@ -229,7 +227,6 @@ function NewSectionForm({ masterData, onAdd, onCancel }) {
   const removeSupplierRow = (idx) =>
     setSec(prev => ({ ...prev, supplierRates: prev.supplierRates.filter((_, i) => i !== idx) }));
 
-  // ── Filtered options (same logic as SteelEnquiryEntry) ───────────────────
   const getAvailableSizeValues = (selectedSection) => {
     if (!selectedSection) return allSizeValues;
     const sectionObj = sectionDocs.find(s => s.value === selectedSection);
@@ -268,7 +265,6 @@ function NewSectionForm({ masterData, onAdd, onCancel }) {
     return f.length > 0 ? f : allLengthValues;
   };
 
-  // ── Master data add/delete handlers ──────────────────────────────────────
   const handleAddNewSection = async (newVal) => {
     if (allSectionValues.some(s => s.toLowerCase() === newVal.toLowerCase())) return;
     await addDoc(collection(db, "sections"), { value: newVal });
@@ -367,16 +363,12 @@ function NewSectionForm({ masterData, onAdd, onCancel }) {
     await fetchMasterData();
   };
 
-  // ── Submit new section ────────────────────────────────────────────────────
   const handleAdd = () => {
     const section = sec.sectionConfirmed || sec.sectionText.trim();
     if (!section) return alert("Please select or enter a Section.");
     if (!sec.mt) return alert("Please enter Quantity (MT).");
-    for (const sr of sec.supplierRates) {
-      const supplier = sr.supplierConfirmed || sr.supplierText.trim();
-      if (!supplier) return alert("Please select or enter a Supplier for all rows.");
-      if (!sr.mt) return alert("Please enter MT for all supplier rows.");
-    }
+
+    // ✅ Supplier name and MT are now fully optional — no validation on supplier fields
     onAdd({
       section,
       size: sec.sizeConfirmed || sec.sizeText.trim(),
@@ -395,7 +387,6 @@ function NewSectionForm({ masterData, onAdd, onCancel }) {
     <div className="em-new-section-form">
       <div className="em-new-section-form-title">New Section</div>
 
-      {/* Section / Size / Width / Length / MT row */}
       <div className="em-new-section-fields">
         <div className="enq-field">
           <label className="enq-label">Section</label>
@@ -458,9 +449,11 @@ function NewSectionForm({ masterData, onAdd, onCancel }) {
         </div>
       </div>
 
-      {/* Supplier Rates */}
+      {/* Supplier Rates — all optional */}
       <div className="em-new-section-supplier-block">
-        <div className="em-new-section-supplier-label">Supplier Rates</div>
+        <div className="em-new-section-supplier-label">
+          Supplier Rates <span className="em-optional-tag">(optional)</span>
+        </div>
         <div className="enq-supplier-rate-header-row enq-supplier-rate-header-row--5col">
           <span>#</span><span>Supplier Name</span><span>MT</span><span>Rate Quoted</span><span></span>
         </div>
@@ -504,7 +497,6 @@ function NewSectionForm({ masterData, onAdd, onCancel }) {
         </button>
       </div>
 
-      {/* Form Actions */}
       <div className="em-new-section-actions">
         <button className="em-new-section-add-btn" type="button" onClick={handleAdd}>
           <HiCheck /> Add Section
@@ -517,7 +509,6 @@ function NewSectionForm({ masterData, onAdd, onCancel }) {
   );
 }
 
-// ── Main Component ────────────────────────────────────────────────────────────
 export default function EnquiryManager({ onClose }) {
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -526,11 +517,8 @@ export default function EnquiryManager({ onClose }) {
   const [expandedId, setExpandedId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
   const [saving, setSaving] = useState(false);
-
-  // Which entry is showing the "Add Section" form
   const [addingSectionForEntryId, setAddingSectionForEntryId] = useState(null);
 
-  // ── Master data (for NewSectionForm) ─────────────────────────────────────
   const [sectionDocs, setSectionDocs] = useState([]);
   const [supplierDocs, setSupplierDocs] = useState([]);
   const [allSizeDocs, setAllSizeDocs] = useState([]);
@@ -573,7 +561,6 @@ export default function EnquiryManager({ onClose }) {
     }
   };
 
-  // ── Fetch entries ─────────────────────────────────────────────────────────
   const fetchEntries = async () => {
     setLoading(true);
     try {
@@ -593,7 +580,6 @@ export default function EnquiryManager({ onClose }) {
     fetchMasterData();
   }, []);
 
-  // ── Delete entry ──────────────────────────────────────────────────────────
   const handleDelete = async (entry) => {
     if (!window.confirm(`Delete Enquiry #${entry.No}? This cannot be undone.`)) return;
     setDeletingId(entry.id);
@@ -609,7 +595,6 @@ export default function EnquiryManager({ onClose }) {
     }
   };
 
-  // ── Update top-level field ────────────────────────────────────────────────
   const updateEntryField = async (entryId, field, value) => {
     setSaving(true);
     try {
@@ -623,7 +608,6 @@ export default function EnquiryManager({ onClose }) {
     }
   };
 
-  // ── Update section field ──────────────────────────────────────────────────
   const updateSectionField = async (entryId, sectionIdx, field, value) => {
     const entry = entries.find(e => e.id === entryId);
     if (!entry) return;
@@ -642,7 +626,6 @@ export default function EnquiryManager({ onClose }) {
     }
   };
 
-  // ── Update supplier rate ──────────────────────────────────────────────────
   const updateSupplierRateField = async (entryId, sectionIdx, rateIdx, field, value) => {
     const entry = entries.find(e => e.id === entryId);
     if (!entry) return;
@@ -667,13 +650,12 @@ export default function EnquiryManager({ onClose }) {
     }
   };
 
-  // ── Add supplier row ──────────────────────────────────────────────────────
   const addSupplierRate = async (entryId, sectionIdx) => {
     const entry = entries.find(e => e.id === entryId);
     if (!entry) return;
     const newSections = entry.sections.map((sec, si) =>
       si === sectionIdx
-        ? { ...sec, supplierRates: [...sec.supplierRates, { supplier: "", mt: 0, rate: 0 }] }
+        ? { ...sec, supplierRates: [...(sec.supplierRates || []), { supplier: "", mt: 0, rate: 0 }] }
         : sec
     );
     setSaving(true);
@@ -701,7 +683,6 @@ export default function EnquiryManager({ onClose }) {
     } finally { setSaving(false); }
   };
 
-  // ── Add section (with combobox form) ─────────────────────────────────────
   const handleAddSection = async (entryId, newSection) => {
     const entry = entries.find(e => e.id === entryId);
     if (!entry) return;
@@ -730,7 +711,6 @@ export default function EnquiryManager({ onClose }) {
     } finally { setSaving(false); }
   };
 
-  // ── Filter ────────────────────────────────────────────────────────────────
   const uniqueFYs = [...new Set(entries.map(e => e.FinancialYear).filter(Boolean))].sort();
   const filtered = entries.filter(e => {
     const matchFY = !filterFY || e.FinancialYear === filterFY;
@@ -756,7 +736,6 @@ export default function EnquiryManager({ onClose }) {
   return (
     <div className="em-overlay">
       <div className="em-panel">
-        {/* ── Panel Header ── */}
         <div className="em-panel-header">
           <div className="em-panel-title-group">
             <div className="em-panel-badge">MANAGE</div>
@@ -768,7 +747,6 @@ export default function EnquiryManager({ onClose }) {
           </button>
         </div>
 
-        {/* ── Controls ── */}
         <div className="em-controls">
           <div className="em-search-wrap">
             <HiMagnifyingGlass className="em-search-icon" />
@@ -795,7 +773,6 @@ export default function EnquiryManager({ onClose }) {
           {saving && <span className="em-saving-pill">Saving…</span>}
         </div>
 
-        {/* ── List ── */}
         <div className="em-list">
           {loading ? (
             <div className="em-state-box">
@@ -815,7 +792,6 @@ export default function EnquiryManager({ onClose }) {
 
               return (
                 <div key={entry.id} className={`em-card${isExpanded ? " em-card--open" : ""}`}>
-                  {/* Card Header */}
                   <div className="em-card-header" onClick={() => setExpandedId(isExpanded ? null : entry.id)}>
                     <div className="em-card-meta">
                       <span className="em-entry-no">#{entry.No}</span>
@@ -841,10 +817,8 @@ export default function EnquiryManager({ onClose }) {
                     </div>
                   </div>
 
-                  {/* Expanded Edit Area */}
                   {isExpanded && (
                     <div className="em-card-body">
-                      {/* Top-level fields */}
                       <div className="em-entry-meta-edit">
                         <div className="em-meta-field">
                           <label className="em-meta-label">Financial Year</label>
@@ -870,7 +844,6 @@ export default function EnquiryManager({ onClose }) {
                         </div>
                       </div>
 
-                      {/* Sections */}
                       <div className="em-sections-label">Sections</div>
                       {(entry.sections || []).map((sec, si) => (
                         <div key={si} className="em-section-edit-block">
@@ -924,7 +897,6 @@ export default function EnquiryManager({ onClose }) {
                             </div>
                           </div>
 
-                          {/* Supplier rates */}
                           <div className="em-rates-table">
                             <div className="em-rates-header">
                               <span>#</span>
@@ -973,7 +945,6 @@ export default function EnquiryManager({ onClose }) {
                         </div>
                       ))}
 
-                      {/* Add Section — combobox form or button */}
                       {isAddingSection ? (
                         <NewSectionForm
                           masterData={masterData}
@@ -1004,3 +975,29 @@ export default function EnquiryManager({ onClose }) {
     </div>
   );
 }
+
+const formatNum = (val) => {
+  if (val == null || val === "" || val === 0) return "—";
+  const num = parseFloat(val);
+  if (isNaN(num) || num === 0) return "—";
+  const str = num.toString();
+  const dec = str.includes(".") ? str.split(".")[1].length : 0;
+  return num.toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: dec });
+};
+const formatRate = formatNum;
+
+const formatMT = (val) => {
+  if (val == null || val === "") return "—";
+  const num = parseFloat(val);
+  if (isNaN(num)) return "—";
+  const str = num.toString();
+  const existingDec = str.includes(".") ? str.split(".")[1].length : 0;
+  const decPlaces = Math.max(existingDec, 2);
+  return num.toLocaleString("en-IN", { minimumFractionDigits: decPlaces, maximumFractionDigits: decPlaces });
+};
+
+const formatAmount = (val) => {
+  if (!val) return "—";
+  const n = Math.round(val);
+  return n.toLocaleString("en-IN");
+};

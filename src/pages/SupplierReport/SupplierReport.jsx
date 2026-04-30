@@ -167,17 +167,45 @@ export default function SupplierReport() {
   }, []);
 
   useEffect(() => {
-    const sourceData = selectedSupplier !== "All"
-      ? data.filter(item => item["Name of the Supplier"] === selectedSupplier)
-      : data;
+    // ── Cascade: derive each dropdown's options from upstream selections ──────
 
-    const uniqueBillNumbers = [...new Set(sourceData.map(item => item["Bill Number"]))].sort();
+    // Bill numbers: filtered by FY + unit + workType + supplier
+    const forBills = data.filter(item =>
+      (selectedFinancialYear === "All" || item["Financial Year"] === selectedFinancialYear) &&
+      (selectedUnit === "All" || item.Unit === selectedUnit) &&
+      (selectedWorkType === "All" || item["Work Type"] === selectedWorkType) &&
+      (selectedSupplier === "All" || item["Name of the Supplier"] === selectedSupplier)
+    );
+    const uniqueBillNumbers = [...new Set(forBills.map(item => item["Bill Number"]))].sort();
     setBillNumbers(uniqueBillNumbers);
-
-    if (selectedSupplier !== "All" && selectedBillNumber !== "All" && !uniqueBillNumbers.includes(selectedBillNumber)) {
+    if (selectedBillNumber !== "All" && !uniqueBillNumbers.includes(selectedBillNumber))
       setSelectedBillNumber("All");
-    }
-  }, [selectedSupplier, data]);
+
+    // Sections: filtered by FY + unit + workType + supplier + bill
+    const forSections = forBills.filter(item =>
+      (selectedBillNumber === "All" || item["Bill Number"] === selectedBillNumber)
+    );
+    const uniqueSections = [...new Set(forSections.map(item => {
+      let section = (item.Section || "Unknown").toString().trim();
+      return sectionMap[section.toLowerCase()] || section;
+    }))].sort();
+    setSections(uniqueSections);
+    if (selectedSection !== "All" && !uniqueSections.includes(selectedSection))
+      setSelectedSection("All");
+
+    // Sizes: filtered by everything above + section
+    const forSizes = forSections.filter(item => {
+      if (selectedSection === "All") return true;
+      let section = (item.Section || "Unknown").toString().trim();
+      section = sectionMap[section.toLowerCase()] || section;
+      return section === selectedSection;
+    });
+    const uniqueSizes = [...new Set(forSizes.map(item => item.Size || "Unknown"))].sort();
+    setSizes(uniqueSizes);
+    if (selectedSize !== "All" && !uniqueSizes.includes(selectedSize))
+      setSelectedSize("All");
+
+  }, [selectedFinancialYear, selectedUnit, selectedWorkType, selectedSupplier, selectedBillNumber, selectedSection, data]);
 
   useEffect(() => {
     let filtered = [...data];

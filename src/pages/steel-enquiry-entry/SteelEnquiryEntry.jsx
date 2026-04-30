@@ -1,205 +1,216 @@
-import { useState, useEffect, useRef } from "react";
-import { HiPlus, HiTrash } from "react-icons/hi2";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { db } from "../../firebase";
 import {
-  collection, addDoc, getDocs, deleteDoc,
-  doc, query, orderBy, limit
+  collection, addDoc, getDocs, deleteDoc, doc, query, orderBy, updateDoc
 } from "firebase/firestore";
 import "./SteelEnquiryEntry.css";
 
-const generateId = () => Date.now() + Math.random();
+// ── helpers ──────────────────────────────────────────────────────────────────
+const genId = () => `${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
-const createEmptySupplierRate = () => ({
-  id: generateId(),
-  supplierText: "",
-  supplierConfirmed: "",
-  mt: "",
-  rate: "",
+const emptySupplierRate = (supplier = "") => ({
+  id: genId(), supplier, mt: "", rate: "",
 });
 
-const createEmptySection = () => ({
-  id: generateId(),
-  sectionText: "",
-  sectionConfirmed: "",
-  sizeText: "",
-  sizeConfirmed: "",
-  widthText: "",
-  widthConfirmed: "",
-  lengthText: "",
-  lengthConfirmed: "",
+const emptySection = () => ({
+  id: genId(),
+  sectionText: "", sectionConfirmed: "",
+  sizeText: "",    sizeConfirmed: "",
+  widthText: "",   widthConfirmed: "",
+  lengthText: "",  lengthConfirmed: "",
   mt: "",
-  supplierRates: [createEmptySupplierRate()],
+  supplierRates: [],
 });
 
-// ── Reusable Combobox ─────────────────────────────────────────────────────────
-function Combobox({
-  value, onChange, onConfirm,
-  onAddNew, onDelete,
-  options, deletableIds,
-  placeholder, label,
-  disabled = false,
-}) {
+// ── Number format helpers ─────────────────────────────────────────────────────
+const formatMT = (val) => {
+  if (val === "" || val == null) return "";
+  const num = parseFloat(val);
+  if (isNaN(num)) return "";
+  return num.toLocaleString("en-IN", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+};
+
+const formatRate = (val) => {
+  if (val === "" || val == null) return "";
+  const num = parseFloat(val);
+  if (isNaN(num)) return "";
+  return num.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+
+const formatTotalMT = (val) => {
+  if (!val && val !== 0) return "—";
+  return val.toLocaleString("en-IN", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+};
+
+const formatWeightedRate = (val) => {
+  if (!val && val !== 0) return "—";
+  return `≈${val.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+};
+
+// ── Numeric input that shows formatted value when not focused ─────────────────
+function NumericInput({ value, onChange, placeholder, formatFn, className }) {
+  const [focused, setFocused] = useState(false);
+  return (
+    <input
+      className={className}
+      type="text"
+      inputMode="decimal"
+      placeholder={placeholder}
+      value={focused ? value : (value !== "" ? formatFn(value) : "")}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      onChange={e => onChange(e.target.value)}
+    />
+  );
+}
+
+// ── Portal-based dropdown — renders at document.body to escape table overflow ──
+function CellCombobox({ value, onChange, onConfirm, onAddNew, options, placeholder, disabled }) {
   const [open, setOpen] = useState(false);
-  const wrapperRef = useRef(null);
+  const [dropPos, setDropPos] = useState({ top: 0, left: 0, width: 0 });
+  const inputRef = useRef(null);
+  const dropRef  = useRef(null);
 
   const filtered = value.trim()
     ? options.filter(o => o.toLowerCase().includes(value.toLowerCase()))
     : options;
+  const isMatch = options.some(o => o.toLowerCase() === value.trim().toLowerCase());
 
-  const isExactMatch = options.some(
-    o => o.toLowerCase() === value.trim().toLowerCase()
-  );
-  const showAddNew = value.trim() && !isExactMatch;
-
-  useEffect(() => {
-    const handler = (e) => {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target))
-        setOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+  // Recalculate dropdown position every time it opens or window scrolls/resizes
+  const calcPos = useCallback(() => {
+    if (!inputRef.current) return;
+    const r = inputRef.current.getBoundingClientRect();
+    setDropPos({
+      top:   r.bottom + window.scrollY + 2,
+      left:  r.left   + window.scrollX,
+      width: r.width,
+    });
   }, []);
 
-  return (
-    <div className="enq-combobox-wrapper" ref={wrapperRef}>
-      <div className="enq-combobox-input-row">
-        <input
-          className={`enq-input enq-combobox-input${disabled ? " enq-combobox-disabled" : ""}`}
-          type="text"
-          placeholder={disabled ? `Select ${label} first` : placeholder}
-          value={value}
-          autoComplete="off"
-          disabled={disabled}
-          onChange={e => { onChange(e.target.value); setOpen(true); }}
-          onFocus={() => { if (!disabled) setOpen(true); }}
-        />
-        {value && !disabled && (
-          <button
-            className="enq-combobox-clear"
-            type="button"
-            onClick={() => { onChange(""); onConfirm(""); setOpen(false); }}
-          >
-            ×
-          </button>
-        )}
-      </div>
-      {open && !disabled && (
-        <div className="enq-combobox-dropdown">
-          {filtered.length > 0 && (
-            <ul className="enq-combobox-list">
-              {filtered.map(opt => {
-                const isDeletable = deletableIds && deletableIds.has(opt);
-                return (
-                  <li
-                    key={opt}
-                    className={
-                      "enq-combobox-item" +
-                      (value === opt ? " enq-combobox-item--active" : "")
-                    }
-                  >
-                    <span
-                      className="enq-combobox-item-label"
-                      onMouseDown={() => {
-                        onChange(opt);
-                        onConfirm(opt);
-                        setOpen(false);
-                      }}
-                    >
-                      {opt}
-                    </span>
-                    {isDeletable && (
-                      <button
-                        className="enq-combobox-item-delete"
-                        type="button"
-                        title={"Delete " + opt}
-                        onMouseDown={async (e) => {
-                          e.stopPropagation();
-                          if (
-                            !window.confirm(
-                              'Delete "' + opt + '" from the list? This cannot be undone.'
-                            )
-                          )
-                            return;
-                          await onDelete(opt, deletableIds.get(opt));
-                          if (value === opt) {
-                            onChange("");
-                            onConfirm("");
-                          }
-                          setOpen(false);
-                        }}
-                      >
-                        <HiTrash />
-                      </button>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-          {showAddNew && (
-            <button
-              className="enq-combobox-add-new"
-              type="button"
-              onMouseDown={async () => {
-                const newVal = value.trim();
-                await onAddNew(newVal);
-                onConfirm(newVal);
-                setOpen(false);
-              }}
-            >
-              <HiPlus /> Add "{value.trim()}" as new {label}
-            </button>
-          )}
-          {filtered.length === 0 && !showAddNew && (
-            <div className="enq-combobox-empty">No matches found</div>
-          )}
-        </div>
+  useEffect(() => {
+    if (!open) return;
+    calcPos();
+    window.addEventListener("scroll", calcPos, true);
+    window.addEventListener("resize", calcPos);
+    return () => {
+      window.removeEventListener("scroll", calcPos, true);
+      window.removeEventListener("resize", calcPos);
+    };
+  }, [open, calcPos]);
+
+  // Close on outside click
+  useEffect(() => {
+    const h = (e) => {
+      if (
+        inputRef.current && !inputRef.current.contains(e.target) &&
+        dropRef.current  && !dropRef.current.contains(e.target)
+      ) setOpen(false);
+    };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, []);
+
+  const dropdownEl = open && !disabled ? createPortal(
+    <div
+      ref={dropRef}
+      className="see-cell-dropdown"
+      style={{
+        position: "absolute",
+        top:    dropPos.top,
+        left:   dropPos.left,
+        width:  Math.max(dropPos.width, 180),
+        zIndex: 999999,
+      }}
+    >
+      {filtered.map(opt => (
+        <div
+          key={opt}
+          className={`see-cell-opt${value === opt ? " see-cell-opt--active" : ""}`}
+          onMouseDown={() => { onChange(opt); onConfirm(opt); setOpen(false); }}
+        >{opt}</div>
+      ))}
+      {!isMatch && value.trim() && (
+        <div
+          className="see-cell-opt see-cell-opt--add"
+          onMouseDown={async () => {
+            if (onAddNew) await onAddNew(value.trim());
+            onConfirm(value.trim()); setOpen(false);
+          }}
+        >＋ Add "{value.trim()}"</div>
       )}
+      {filtered.length === 0 && !value.trim() && (
+        <div className="see-cell-empty">No options</div>
+      )}
+    </div>,
+    document.body
+  ) : null;
+
+  return (
+    <div className="see-cell-combo">
+      <input
+        ref={inputRef}
+        className={`see-cell-input${disabled ? " see-cell-input--disabled" : ""}`}
+        value={value}
+        placeholder={disabled ? "—" : placeholder}
+        disabled={disabled}
+        autoComplete="off"
+        onChange={e => { onChange(e.target.value); setOpen(true); }}
+        onFocus={() => { if (!disabled) { calcPos(); setOpen(true); } }}
+        onBlur={() => setTimeout(() => setOpen(false), 180)}
+        onKeyDown={e => {
+          if (e.key === "Enter" && filtered.length > 0) {
+            onChange(filtered[0]); onConfirm(filtered[0]); setOpen(false);
+          }
+          if (e.key === "Escape") setOpen(false);
+        }}
+      />
+      {dropdownEl}
     </div>
   );
 }
-// ─────────────────────────────────────────────────────────────────────────────
 
+// ── Main Component ────────────────────────────────────────────────────────────
 export default function SteelEnquiryEntry() {
-  const [loading, setLoading] = useState(false);
-  const [entryNo, setEntryNo] = useState(1);
+  const [loading, setLoading]   = useState(false);
+  const [saving, setSaving]     = useState(false);
+
+  // Header
   const [financialYear, setFinancialYear] = useState("2026-27");
-  const [enquiryDate, setEnquiryDate] = useState("");
-  const [sections, setSections] = useState([createEmptySection()]);
+  const [enquiryNo, setEnquiryNo]         = useState("");
+  const [enquiryDate, setEnquiryDate]     = useState("");
 
-  // Master data — shared with EntryPage
-  const [sectionDocs, setSectionDocs] = useState([]);
-  const [supplierDocs, setSupplierDocs] = useState([]);
-  const [allSizeDocs, setAllSizeDocs] = useState([]);
-  const [allWidthDocs, setAllWidthDocs] = useState([]);
+  // Sections (rows) and global supplier columns
+  const [sections, setSections]   = useState([emptySection()]);
+  const [suppliers, setSuppliers] = useState([]);
+
+  // Master data
+  const [sectionDocs, setSectionDocs]     = useState([]);
+  const [supplierDocs, setSupplierDocs]   = useState([]);
+  const [allSizeDocs, setAllSizeDocs]     = useState([]);
+  const [allWidthDocs, setAllWidthDocs]   = useState([]);
   const [allLengthDocs, setAllLengthDocs] = useState([]);
+  const [sectionSizeRels, setSectionSizeRels] = useState([]);
+  const [sizeWidthRels, setSizeWidthRels]     = useState([]);
+  const [widthLengthRels, setWidthLengthRels] = useState([]);
 
-  // Relation tables — shared with EntryPage
-  const [sectionSizeRelations, setSectionSizeRelations] = useState([]);
-  const [sizeWidthRelations, setSizeWidthRelations] = useState([]);
-  const [widthLengthRelations, setWidthLengthRelations] = useState([]);
+  // Existing enquiries for "load" dropdown
+  const [existingEnquiries, setExistingEnquiries] = useState([]);
+  const [showLoadDropdown, setShowLoadDropdown]   = useState(false);
+  const [loadedEnquiryId, setLoadedEnquiryId]     = useState(null); // tracks currently-open enquiry
 
-  // Derived string arrays
-  const allSectionValues = sectionDocs.map(d => d.value);
+  const allSectionValues  = sectionDocs.map(d => d.value);
   const allSupplierValues = supplierDocs.map(d => d.value);
-  const allSizeValues = allSizeDocs.map(d => d.value);
-  const allWidthValues = allWidthDocs.map(d => d.value);
-  const allLengthValues = allLengthDocs.map(d => d.value);
+  const allSizeValues     = allSizeDocs.map(d => d.value);
+  const allWidthValues    = allWidthDocs.map(d => d.value);
+  const allLengthValues   = allLengthDocs.map(d => d.value);
 
-  // Deletable maps
-  const allSectionDeletableIds = new Map(sectionDocs.map(d => [d.value, d.id]));
-  const allSupplierDeletableIds = new Map(supplierDocs.map(d => [d.value, d.id]));
-  const allSizeDeletableIds = new Map(allSizeDocs.map(d => [d.value, d.id]));
-  const allWidthDeletableIds = new Map(allWidthDocs.map(d => [d.value, d.id]));
-  const allLengthDeletableIds = new Map(allLengthDocs.map(d => [d.value, d.id]));
-
-  // ── Fetch master data ───────────────────────────────────────────────────────
-  const fetchData = async () => {
+  // ── Fetch master data ────────────────────────────────────────────────────
+  const fetchMaster = useCallback(async () => {
+    setLoading(true);
     try {
-      const [
-        sectSnap, sizeSnap, widthSnap, lengthSnap, suppSnap,
-        ssRelSnap, swRelSnap, wlRelSnap,
-      ] = await Promise.all([
+      const [sectSnap, sizeSnap, widthSnap, lenSnap, suppSnap,
+             ssSnap, swSnap, wlSnap, enqSnap] = await Promise.all([
         getDocs(collection(db, "sections")),
         getDocs(collection(db, "sizes")),
         getDocs(collection(db, "widths")),
@@ -208,698 +219,635 @@ export default function SteelEnquiryEntry() {
         getDocs(collection(db, "sectionSizeRelations")),
         getDocs(collection(db, "sizeWidthRelations")),
         getDocs(collection(db, "widthLengthRelations")),
+        getDocs(query(collection(db, "enquiryEntries"), orderBy("No", "asc"))),
       ]);
-
-      const mapDocs = (snap) =>
-        snap.docs
-          .map(d => ({ id: d.id, value: d.data().value?.trim() || "" }))
-          .filter(i => i.value)
-          .sort((a, b) => a.value.localeCompare(b.value));
-
-      setSectionDocs(mapDocs(sectSnap));
-      setAllSizeDocs(mapDocs(sizeSnap));
-      setAllWidthDocs(mapDocs(widthSnap));
-      setAllLengthDocs(mapDocs(lengthSnap));
-      setSupplierDocs(mapDocs(suppSnap));
-      setSectionSizeRelations(ssRelSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setSizeWidthRelations(swRelSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setWidthLengthRelations(wlRelSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      const mapD = snap => snap.docs
+        .map(d => ({ id: d.id, value: d.data().value?.trim() || "" }))
+        .filter(i => i.value)
+        .sort((a, b) => a.value.localeCompare(b.value));
+      setSectionDocs(mapD(sectSnap));
+      setAllSizeDocs(mapD(sizeSnap));
+      setAllWidthDocs(mapD(widthSnap));
+      setAllLengthDocs(mapD(lenSnap));
+      setSupplierDocs(mapD(suppSnap));
+      setSectionSizeRels(ssSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setSizeWidthRels(swSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setWidthLengthRels(wlSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setExistingEnquiries(enqSnap.docs.map(d => ({ id: d.id, ...d.data() })));
     } catch (e) {
-      console.error("Error fetching master data:", e);
+      console.error(e);
+    } finally {
+      setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchData();
-    const fetchEntryNo = async () => {
-      try {
-        const q = query(
-          collection(db, "enquiryEntries"),
-          orderBy("No", "desc"),
-          limit(1)
-        );
-        const snap = await getDocs(q);
-        if (!snap.empty) setEntryNo(snap.docs[0].data().No + 1);
-      } catch (e) {
-        console.error("Error fetching entry number:", e);
-      }
-    };
-    fetchEntryNo();
   }, []);
 
-  // ── Filtered options based on parent selections ─────────────────────────────
+  useEffect(() => { fetchMaster(); }, [fetchMaster]);
 
-  const getAvailableSizeValues = (selectedSection) => {
-    if (!selectedSection) return allSizeValues;
-    const sectionObj = sectionDocs.find(s => s.value === selectedSection);
-    if (!sectionObj) return allSizeValues;
-    const relatedSizeIds = sectionSizeRelations
-      .filter(rel => rel.sectionId === sectionObj.id)
-      .map(rel => rel.sizeId);
-    const filtered = allSizeDocs
-      .filter(size => relatedSizeIds.includes(size.id))
-      .map(d => d.value);
-    return filtered.length > 0 ? filtered : allSizeValues;
+  // ── Relation helpers ─────────────────────────────────────────────────────
+  const getSizes = (sec) => {
+    if (!sec) return allSizeValues;
+    const sObj = sectionDocs.find(s => s.value === sec);
+    if (!sObj) return allSizeValues;
+    const ids = sectionSizeRels.filter(r => r.sectionId === sObj.id).map(r => r.sizeId);
+    const f = allSizeDocs.filter(s => ids.includes(s.id)).map(d => d.value);
+    return f.length ? f : allSizeValues;
   };
 
-  const getAvailableWidthValues = (selectedSection, selectedSize) => {
-    if (!selectedSection || !selectedSize) return allWidthValues;
-    const sectionObj = sectionDocs.find(s => s.value === selectedSection);
-    const sizeObj = allSizeDocs.find(s => s.value === selectedSize);
-    if (!sectionObj || !sizeObj) return allWidthValues;
-    const relatedWidthIds = sizeWidthRelations
-      .filter(rel => rel.sectionId === sectionObj.id && rel.sizeId === sizeObj.id)
-      .map(rel => rel.widthId);
-    const filtered = allWidthDocs
-      .filter(w => relatedWidthIds.includes(w.id))
-      .map(d => d.value);
-    return filtered.length > 0 ? filtered : allWidthValues;
+  const getWidths = (sec, size) => {
+    if (!sec || !size) return allWidthValues;
+    const sObj  = sectionDocs.find(s => s.value === sec);
+    const szObj = allSizeDocs.find(s => s.value === size);
+    if (!sObj || !szObj) return allWidthValues;
+    const ids = sizeWidthRels
+      .filter(r => r.sectionId === sObj.id && r.sizeId === szObj.id)
+      .map(r => r.widthId);
+    const f = allWidthDocs.filter(w => ids.includes(w.id)).map(d => d.value);
+    return f.length ? f : allWidthValues;
   };
 
-  const getAvailableLengthValues = (selectedSection, selectedSize, selectedWidth) => {
-    if (!selectedSection || !selectedSize) return allLengthValues;
-    const sectionObj = sectionDocs.find(s => s.value === selectedSection);
-    const sizeObj = allSizeDocs.find(s => s.value === selectedSize);
-    const widthObj = selectedWidth ? allWidthDocs.find(w => w.value === selectedWidth) : null;
-    if (!sectionObj || !sizeObj) return allLengthValues;
-    const relatedLengthIds = widthLengthRelations
-      .filter(rel =>
-        rel.sectionId === sectionObj.id &&
-        rel.sizeId === sizeObj.id &&
-        (widthObj ? rel.widthId === widthObj.id : rel.widthId === null)
+  const getLengths = (sec, size, width) => {
+    if (!sec || !size) return allLengthValues;
+    const sObj  = sectionDocs.find(s => s.value === sec);
+    const szObj = allSizeDocs.find(s => s.value === size);
+    const wObj  = width ? allWidthDocs.find(w => w.value === width) : null;
+    if (!sObj || !szObj) return allLengthValues;
+    const ids = widthLengthRels
+      .filter(r =>
+        r.sectionId === sObj.id && r.sizeId === szObj.id &&
+        (wObj ? r.widthId === wObj.id : r.widthId === null)
       )
-      .map(rel => rel.lengthId);
-    const filtered = allLengthDocs
-      .filter(l => relatedLengthIds.includes(l.id))
-      .map(d => d.value);
-    return filtered.length > 0 ? filtered : allLengthValues;
+      .map(r => r.lengthId);
+    const f = allLengthDocs.filter(l => ids.includes(l.id)).map(d => d.value);
+    return f.length ? f : allLengthValues;
   };
 
-  // ── Add / Delete Section ────────────────────────────────────────────────────
-  const handleAddNewSection = async (newVal) => {
-    const exists = allSectionValues.some(s => s.toLowerCase() === newVal.toLowerCase());
-    if (exists) return;
-    try {
-      await addDoc(collection(db, "sections"), { value: newVal });
-      await fetchData();
-    } catch (e) {
-      console.error("Error adding section:", e);
-      alert("Error adding new section.");
-    }
+  // ── Add-to-master helpers ────────────────────────────────────────────────
+  const addSection_master = async (val) => {
+    if (allSectionValues.some(s => s.toLowerCase() === val.toLowerCase())) return;
+    await addDoc(collection(db, "sections"), { value: val });
+    await fetchMaster();
   };
 
-  const handleDeleteSection = async (val, docId) => {
-    try {
-      await deleteDoc(doc(db, "sections", docId));
-      setSections(prev =>
-        prev.map(s =>
-          s.sectionConfirmed === val
-            ? { ...s, sectionText: "", sectionConfirmed: "", sizeText: "", sizeConfirmed: "", widthText: "", widthConfirmed: "", lengthText: "", lengthConfirmed: "" }
-            : s
-        )
-      );
-      await fetchData();
-    } catch (e) {
-      console.error("Error deleting section:", e);
-      alert("Error deleting section.");
-    }
+  const addSupplier_master = async (val) => {
+    if (allSupplierValues.some(s => s.toLowerCase() === val.toLowerCase())) return;
+    await addDoc(collection(db, "suppliers"), { value: val });
+    await fetchMaster();
   };
 
-  // ── Add / Delete Size ───────────────────────────────────────────────────────
-  const handleAddNewSize = async (newVal, sectionConfirmed) => {
-    const exists = allSizeValues.some(s => s.toLowerCase() === newVal.toLowerCase());
+  const addSize_master = async (val, secConfirmed) => {
+    const exists = allSizeValues.some(s => s.toLowerCase() === val.toLowerCase());
+    let docId;
     if (!exists) {
-      try {
-        const docRef = await addDoc(collection(db, "sizes"), { value: newVal });
-        if (sectionConfirmed) {
-          const sectionObj = sectionDocs.find(s => s.value === sectionConfirmed);
-          if (sectionObj) {
-            await addDoc(collection(db, "sectionSizeRelations"), {
-              sectionId: sectionObj.id, sizeId: docRef.id,
-            });
-          }
-        }
-        await fetchData();
-      } catch (e) {
-        console.error("Error adding size:", e);
-        alert("Error adding new size.");
-      }
+      const ref = await addDoc(collection(db, "sizes"), { value: val });
+      docId = ref.id;
     } else {
-      if (sectionConfirmed) {
-        const sectionObj = sectionDocs.find(s => s.value === sectionConfirmed);
-        const sizeObj = allSizeDocs.find(s => s.value.toLowerCase() === newVal.toLowerCase());
-        if (sectionObj && sizeObj) {
-          const alreadyLinked = sectionSizeRelations.some(
-            r => r.sectionId === sectionObj.id && r.sizeId === sizeObj.id
-          );
-          if (!alreadyLinked) {
-            await addDoc(collection(db, "sectionSizeRelations"), {
-              sectionId: sectionObj.id, sizeId: sizeObj.id,
-            });
-            await fetchData();
-          }
-        }
+      docId = allSizeDocs.find(s => s.value.toLowerCase() === val.toLowerCase())?.id;
+    }
+    if (secConfirmed && docId) {
+      const sObj = sectionDocs.find(s => s.value === secConfirmed);
+      if (sObj) {
+        const linked = sectionSizeRels.some(r => r.sectionId === sObj.id && r.sizeId === docId);
+        if (!linked) await addDoc(collection(db, "sectionSizeRelations"), { sectionId: sObj.id, sizeId: docId });
       }
     }
+    await fetchMaster();
   };
 
-  const handleDeleteSize = async (val, docId) => {
-    try {
-      await deleteDoc(doc(db, "sizes", docId));
-      setSections(prev =>
-        prev.map(s =>
-          s.sizeConfirmed === val
-            ? { ...s, sizeText: "", sizeConfirmed: "", widthText: "", widthConfirmed: "", lengthText: "", lengthConfirmed: "" }
-            : s
-        )
-      );
-      await fetchData();
-    } catch (e) {
-      console.error("Error deleting size:", e);
-      alert("Error deleting size.");
+  // ── Section field updater ─────────────────────────────────────────────────
+  const updateSection = (sid, field, value) => {
+    setSections(prev => prev.map(s => {
+      if (s.id !== sid) return s;
+      const u = { ...s, [field]: value };
+      if (field === "sectionConfirmed") { u.sizeText = ""; u.sizeConfirmed = ""; u.widthText = ""; u.widthConfirmed = ""; u.lengthText = ""; u.lengthConfirmed = ""; }
+      if (field === "sizeConfirmed")    { u.widthText = ""; u.widthConfirmed = ""; u.lengthText = ""; u.lengthConfirmed = ""; }
+      if (field === "widthConfirmed")   { u.lengthText = ""; u.lengthConfirmed = ""; }
+      return u;
+    }));
+  };
+
+  // ── Supplier column management ────────────────────────────────────────────
+  const addSupplierColumn = () => {
+    const newSup = { id: genId(), name: "", nameText: "", confirmed: false };
+    setSuppliers(prev => [...prev, newSup]);
+    setSections(prev => prev.map(s => ({
+      ...s,
+      supplierRates: [...s.supplierRates, emptySupplierRate()],
+    })));
+  };
+
+  const updateSupplierName = (supId, text) => {
+    setSuppliers(prev => prev.map(s => s.id === supId ? { ...s, nameText: text, name: text } : s));
+  };
+
+  const confirmSupplierName = (supId, name) => {
+    setSuppliers(prev => prev.map(s => s.id === supId ? { ...s, name, nameText: name, confirmed: true } : s));
+    const colIdx = suppliers.findIndex(s => s.id === supId);
+    if (colIdx >= 0) {
+      setSections(prev => prev.map(sec => {
+        const rates = [...sec.supplierRates];
+        if (rates[colIdx]) rates[colIdx] = { ...rates[colIdx], supplier: name };
+        return { ...sec, supplierRates: rates };
+      }));
     }
   };
 
-  // ── Add / Delete Width ──────────────────────────────────────────────────────
-  const handleAddNewWidth = async (newVal, sectionConfirmed, sizeConfirmed) => {
-    const exists = allWidthValues.some(w => w.toLowerCase() === newVal.toLowerCase());
+  const removeSupplierColumn = (supId) => {
+    const idx = suppliers.findIndex(s => s.id === supId);
+    setSuppliers(prev => prev.filter(s => s.id !== supId));
+    setSections(prev => prev.map(sec => ({
+      ...sec,
+      supplierRates: sec.supplierRates.filter((_, i) => i !== idx),
+    })));
+  };
+
+  // ── Rate cell updater ─────────────────────────────────────────────────────
+  const updateRate = (secId, colIdx, field, value) => {
+    setSections(prev => prev.map(s => {
+      if (s.id !== secId) return s;
+      const rates = s.supplierRates.map((r, i) => i === colIdx ? { ...r, [field]: value } : r);
+      return { ...s, supplierRates: rates };
+    }));
+  };
+
+  // ── Add/Remove section rows ───────────────────────────────────────────────
+  const addSectionRow = () => {
+    const newSec = emptySection();
+    newSec.supplierRates = suppliers.map(s => emptySupplierRate(s.name));
+    setSections(prev => [...prev, newSec]);
+  };
+
+  const removeSectionRow = (id) => {
+    if (sections.length === 1) return;
+    setSections(prev => prev.filter(s => s.id !== id));
+  };
+
+  // ── Clear / New Enquiry ───────────────────────────────────────────────────
+  const clearEnquiry = () => {
+    if (enquiryNo || sections.some(s => s.sectionText || s.mt) || suppliers.length > 0) {
+      if (!window.confirm("Close current enquiry and start a new one? Unsaved changes will be lost.")) return;
+    }
+    setEnquiryNo("");
+    setEnquiryDate("");
+    setFinancialYear("2026-27");
+    setSections([emptySection()]);
+    setSuppliers([]);
+    setLoadedEnquiryId(null);
+  };
+
+  // ── Close loaded enquiry (just clears form, no confirm if nothing changed) ──
+  const closeEnquiry = () => {
+    setEnquiryNo("");
+    setEnquiryDate("");
+    setFinancialYear("2026-27");
+    setSections([emptySection()]);
+    setSuppliers([]);
+    setLoadedEnquiryId(null);
+  };
+
+  // ── Delete enquiry from Firestore ─────────────────────────────────────────
+  const deleteEnquiry = async (e, enqDoc) => {
+    e.stopPropagation(); // don't trigger load
+    if (!window.confirm(`Delete Enquiry #${enqDoc.No} (${enqDoc.FinancialYear})? This cannot be undone.`)) return;
     try {
-      let widthId;
-      if (!exists) {
-        const docRef = await addDoc(collection(db, "widths"), { value: newVal });
-        widthId = docRef.id;
-      } else {
-        widthId = allWidthDocs.find(w => w.value.toLowerCase() === newVal.toLowerCase())?.id;
-      }
-      if (sectionConfirmed && sizeConfirmed && widthId) {
-        const sectionObj = sectionDocs.find(s => s.value === sectionConfirmed);
-        const sizeObj = allSizeDocs.find(s => s.value === sizeConfirmed);
-        if (sectionObj && sizeObj) {
-          const alreadyLinked = sizeWidthRelations.some(
-            r => r.sectionId === sectionObj.id && r.sizeId === sizeObj.id && r.widthId === widthId
-          );
-          if (!alreadyLinked) {
-            await addDoc(collection(db, "sizeWidthRelations"), {
-              sectionId: sectionObj.id, sizeId: sizeObj.id, widthId,
-            });
-          }
-        }
-      }
-      await fetchData();
-    } catch (e) {
-      console.error("Error adding width:", e);
-      alert("Error adding new width.");
+      await deleteDoc(doc(db, "enquiryEntries", enqDoc.id));
+      // If the deleted one is currently open, clear the form
+      if (loadedEnquiryId === enqDoc.id) closeEnquiry();
+      await fetchMaster();
+    } catch (err) {
+      console.error(err);
+      alert("Delete failed. Please try again.");
     }
   };
 
-  const handleDeleteWidth = async (val, docId) => {
-    try {
-      await deleteDoc(doc(db, "widths", docId));
-      setSections(prev =>
-        prev.map(s =>
-          s.widthConfirmed === val
-            ? { ...s, widthText: "", widthConfirmed: "", lengthText: "", lengthConfirmed: "" }
-            : s
-        )
-      );
-      await fetchData();
-    } catch (e) {
-      console.error("Error deleting width:", e);
-      alert("Error deleting width.");
-    }
-  };
+  // ── Load existing enquiry ────────────────────────────────────────────────
+  const loadEnquiry = (enq) => {
+    setEnquiryNo(String(enq.No || ""));
+    setEnquiryDate(enq.EnquiryDate || "");
+    setFinancialYear(enq.FinancialYear || "2026-27");
 
-  // ── Add / Delete Length ─────────────────────────────────────────────────────
-  const handleAddNewLength = async (newVal, sectionConfirmed, sizeConfirmed, widthConfirmed) => {
-    const exists = allLengthValues.some(l => l.toLowerCase() === newVal.toLowerCase());
-    try {
-      let lengthId;
-      if (!exists) {
-        const docRef = await addDoc(collection(db, "itemLengths"), { value: newVal });
-        lengthId = docRef.id;
-      } else {
-        lengthId = allLengthDocs.find(l => l.value.toLowerCase() === newVal.toLowerCase())?.id;
-      }
-      if (sectionConfirmed && sizeConfirmed && lengthId) {
-        const sectionObj = sectionDocs.find(s => s.value === sectionConfirmed);
-        const sizeObj = allSizeDocs.find(s => s.value === sizeConfirmed);
-        const widthObj = widthConfirmed ? allWidthDocs.find(w => w.value === widthConfirmed) : null;
-        if (sectionObj && sizeObj) {
-          const alreadyLinked = widthLengthRelations.some(
-            r =>
-              r.sectionId === sectionObj.id &&
-              r.sizeId === sizeObj.id &&
-              (widthObj ? r.widthId === widthObj.id : r.widthId === null) &&
-              r.lengthId === lengthId
-          );
-          if (!alreadyLinked) {
-            await addDoc(collection(db, "widthLengthRelations"), {
-              sectionId: sectionObj.id,
-              sizeId: sizeObj.id,
-              widthId: widthObj ? widthObj.id : null,
-              lengthId,
-            });
-          }
-        }
-      }
-      await fetchData();
-    } catch (e) {
-      console.error("Error adding length:", e);
-      alert("Error adding new length.");
-    }
-  };
+    const supNames = [];
+    (enq.sections || []).forEach(sec => {
+      (sec.supplierRates || []).forEach(sr => {
+        if (sr.supplier && !supNames.includes(sr.supplier)) supNames.push(sr.supplier);
+      });
+    });
+    const newSuppliers = supNames.map(name => ({ id: genId(), name, nameText: name, confirmed: true }));
+    setSuppliers(newSuppliers);
 
-  const handleDeleteLength = async (val, docId) => {
-    try {
-      await deleteDoc(doc(db, "itemLengths", docId));
-      setSections(prev =>
-        prev.map(s =>
-          s.lengthConfirmed === val
-            ? { ...s, lengthText: "", lengthConfirmed: "" }
-            : s
-        )
-      );
-      await fetchData();
-    } catch (e) {
-      console.error("Error deleting length:", e);
-      alert("Error deleting length.");
-    }
-  };
-
-  // ── Add / Delete Supplier ───────────────────────────────────────────────────
-  const handleAddNewSupplier = async (newVal) => {
-    const exists = allSupplierValues.some(s => s.toLowerCase() === newVal.toLowerCase());
-    if (exists) return;
-    try {
-      await addDoc(collection(db, "suppliers"), { value: newVal });
-      await fetchData();
-    } catch (e) {
-      console.error("Error adding supplier:", e);
-      alert("Error adding new supplier.");
-    }
-  };
-
-  const handleDeleteSupplier = async (val, docId) => {
-    try {
-      await deleteDoc(doc(db, "suppliers", docId));
-      setSections(prev =>
-        prev.map(s => ({
-          ...s,
-          supplierRates: s.supplierRates.map(r =>
-            r.supplierConfirmed === val
-              ? { ...r, supplierText: "", supplierConfirmed: "" }
-              : r
-          ),
-        }))
-      );
-      await fetchData();
-    } catch (e) {
-      console.error("Error deleting supplier:", e);
-      alert("Error deleting supplier.");
-    }
-  };
-
-  // ── Section row handlers ────────────────────────────────────────────────────
-  const handleSectionField = (sectionId, field, value) => {
-    setSections(prev =>
-      prev.map(s => {
-        if (s.id !== sectionId) return s;
-        const updated = { ...s, [field]: value };
-        if (field === "sectionConfirmed") {
-          updated.sizeText = "";
-          updated.sizeConfirmed = "";
-          updated.widthText = "";
-          updated.widthConfirmed = "";
-          updated.lengthText = "";
-          updated.lengthConfirmed = "";
-        }
-        if (field === "sizeConfirmed") {
-          updated.widthText = "";
-          updated.widthConfirmed = "";
-          updated.lengthText = "";
-          updated.lengthConfirmed = "";
-        }
-        if (field === "widthConfirmed") {
-          updated.lengthText = "";
-          updated.lengthConfirmed = "";
-        }
-        return updated;
-      })
-    );
-  };
-
-  const addSection = () => setSections(prev => [...prev, createEmptySection()]);
-  const removeSection = (id) => setSections(prev => prev.filter(s => s.id !== id));
-
-  // ── Supplier rate handlers ──────────────────────────────────────────────────
-  const handleSupplierRateField = (sectionId, rateId, field, value) => {
-    setSections(prev =>
-      prev.map(s => {
-        if (s.id !== sectionId) return s;
+    const newSections = (enq.sections || []).map(sec => ({
+      id: genId(),
+      sectionText: sec.section || "", sectionConfirmed: sec.section || "",
+      sizeText: sec.size || "",       sizeConfirmed: sec.size || "",
+      widthText: sec.width || "",     widthConfirmed: sec.width || "",
+      lengthText: sec.length || "",   lengthConfirmed: sec.length || "",
+      mt: String(sec.mt || ""),
+      supplierRates: newSuppliers.map(sup => {
+        const found = (sec.supplierRates || []).find(r => r.supplier === sup.name);
         return {
-          ...s,
-          supplierRates: s.supplierRates.map(r =>
-            r.id === rateId ? { ...r, [field]: value } : r
-          ),
+          id: genId(),
+          supplier: sup.name,
+          mt:   found ? String(found.mt   || "") : "",
+          rate: found ? String(found.rate || "") : "",
         };
-      })
-    );
+      }),
+    }));
+    setSections(newSections);
+    setShowLoadDropdown(false);
+    setLoadedEnquiryId(enq.id);
   };
 
-  const addSupplierRate = (sectionId) => {
-    setSections(prev =>
-      prev.map(s => {
-        if (s.id !== sectionId) return s;
-        return { ...s, supplierRates: [...s.supplierRates, createEmptySupplierRate()] };
-      })
-    );
-  };
-
-  const removeSupplierRate = (sectionId, rateId) => {
-    setSections(prev =>
-      prev.map(s => {
-        if (s.id !== sectionId) return s;
-        return { ...s, supplierRates: s.supplierRates.filter(r => r.id !== rateId) };
-      })
-    );
-  };
-
-  // ── Submit ──────────────────────────────────────────────────────────────────
-  const handleSubmit = async () => {
-    if (!financialYear) return alert("Please select Financial Year");
+  // ── Submit ────────────────────────────────────────────────────────────────
+  const handleSave = async () => {
+    if (!enquiryNo.trim()) return alert("Please enter an Enquiry No.");
+    if (!enquiryDate)      return alert("Please select an Enquiry Date.");
     for (const sec of sections) {
-      if (!sec.sectionConfirmed && !sec.sectionText.trim())
-        return alert("Please select or add a Section for all rows");
-      if (!sec.mt) return alert("Please enter MT for all section rows");
-      for (const sr of sec.supplierRates) {
-        if (!sr.supplierConfirmed && !sr.supplierText.trim())
-          return alert("Please select or add a Supplier for all supplier rows");
-        if (!sr.mt) return alert("Please enter MT for all supplier rows");
-      }
+      if (!sec.sectionConfirmed && !sec.sectionText.trim()) return alert("Please fill Section for all rows.");
+      if (!sec.mt) return alert("Please enter MT for all section rows.");
     }
-    setLoading(true);
+    setSaving(true);
     try {
-      await addDoc(collection(db, "enquiryEntries"), {
-        No: entryNo,
+      const payload = {
+        No: enquiryNo.trim(),
         FinancialYear: financialYear,
         EnquiryDate: enquiryDate,
         sections: sections.map(s => ({
           section: s.sectionConfirmed || s.sectionText.trim(),
-          size: s.sizeConfirmed || s.sizeText.trim(),
-          width: s.widthConfirmed || s.widthText.trim(),
-          length: s.lengthConfirmed || s.lengthText.trim(),
-          mt: parseFloat(s.mt) || 0,
-          supplierRates: s.supplierRates.map(r => ({
-            supplier: r.supplierConfirmed || r.supplierText.trim(),
-            mt: parseFloat(r.mt) || 0,
-            rate: parseFloat(r.rate) || 0,
-          })),
+          size:    s.sizeConfirmed    || s.sizeText.trim(),
+          width:   s.widthConfirmed   || s.widthText.trim(),
+          length:  s.lengthConfirmed  || s.lengthText.trim(),
+          mt:      parseFloat(s.mt) || 0,
+          supplierRates: s.supplierRates
+            .map((r, i) => ({
+              supplier: suppliers[i]?.name || r.supplier || "",
+              mt:       parseFloat(r.mt)   || 0,
+              rate:     parseFloat(r.rate) || 0,
+            }))
+            .filter(r => r.supplier),
         })),
         createdAt: new Date(),
-      });
-      alert("Enquiry Saved Successfully!");
-      window.location.reload();
+      };
+      const existing = existingEnquiries.find(
+        e => String(e.No).trim().toLowerCase() === enquiryNo.trim().toLowerCase()
+          && e.FinancialYear === financialYear
+      );
+      if (existing) {
+        await updateDoc(doc(db, "enquiryEntries", existing.id), payload);
+        alert("Enquiry Updated Successfully!");
+      } else {
+        await addDoc(collection(db, "enquiryEntries"), payload);
+        alert("Enquiry Saved Successfully!");
+      }
+      setEnquiryNo(""); setEnquiryDate("");
+      setSections([emptySection()]); setSuppliers([]);
+      setLoadedEnquiryId(null);
+      await fetchMaster();
     } catch (e) {
       console.error(e);
-      alert("Save Error. Please try again.");
+      alert("Save failed. Please try again.");
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
+  // ── Totals ────────────────────────────────────────────────────────────────
+  const totalSectionMt = sections.reduce((s, r) => s + (parseFloat(r.mt) || 0), 0);
+
+  const getSupplierTotals = (colIdx) => {
+    let totalMt = 0, num = 0, den = 0;
+    sections.forEach(r => {
+      const m = parseFloat(r.supplierRates[colIdx]?.mt)   || 0;
+      const v = parseFloat(r.supplierRates[colIdx]?.rate) || 0;
+      totalMt += m;
+      num += m * v;
+      den += m;
+    });
+    return { totalMt, weightedRate: den > 0 ? num / den : null };
+  };
+
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="enq-container">
-      {/* Header */}
-      <div className="enq-header-band">
-        <div className="enq-header-left">
-          <h1 className="enq-title">Steel Enquiry Entry</h1>
+    <div className="see-root">
+
+      {/* ── Top Header Band ── */}
+      <div className="see-header">
+        <div className="see-header-left">
+          <div className="see-header-icon">📋</div>
+          <div>
+            <div className="see-header-title">Steel Enquiry Entry</div>
+            <div className="see-header-sub">Enter enquiry details section-wise with supplier rates</div>
+          </div>
         </div>
-        <div className="enq-header-right">
-          <span className="enq-enquiry-no-badge">Enquiry #{entryNo}</span>
-          <span className="enq-fy-badge">{financialYear}</span>
+        <div className="see-header-right">
+          <span className="see-fy-chip">{financialYear}</span>
         </div>
       </div>
 
-      <div className="enq-form-body">
-        {/* Meta Row */}
-        <div className="enq-meta-grid">
-          <div className="enq-field">
-            <label className="enq-label">Enquiry No</label>
-            <div className="enq-readonly-no">#{entryNo}</div>
-          </div>
-
-          <div className="enq-field">
-            <label className="enq-label">Financial Year</label>
-            <select
-              className="enq-select"
-              value={financialYear}
-              onChange={e => setFinancialYear(e.target.value)}
-            >
-              <option value="2024-25">2024-25</option>
-              <option value="2025-26">2025-26</option>
-              <option value="2026-27">2026-27</option>
-              <option value="2027-28">2027-28</option>
-            </select>
-          </div>
-
-          <div className="enq-field">
-            <label className="enq-label">Enquiry Date</label>
+      {/* ── Meta Row ── */}
+      <div className="see-meta-bar">
+        <div className="see-meta-field">
+          <label className="see-meta-label">Enquiry No</label>
+          <div className="see-enq-no-wrap" style={{ position: "relative" }}>
             <input
-              className="enq-input"
-              type="date"
-              value={enquiryDate}
-              onChange={e => setEnquiryDate(e.target.value)}
+              className="see-meta-input"
+              placeholder="e.g. 1a, 2b …"
+              value={enquiryNo}
+              onChange={e => setEnquiryNo(e.target.value)}
             />
-          </div>
-        </div>
-
-        {/* Section Cards */}
-        <div className="enq-sections-header">
-          <h2 className="enq-sections-title">Section / Item Details</h2>
-        </div>
-
-        <div className="enq-sections-list">
-          {sections.map((sec, idx) => (
-            <div key={sec.id} className="enq-section-card">
-              <div className="enq-card-topbar">
-                <span className="enq-card-index">Section #{idx + 1}</span>
-                {sections.length > 1 && (
-                  <button
-                    className="enq-remove-section-btn"
-                    onClick={() => removeSection(sec.id)}
-                    type="button"
-                  >
-                    <HiTrash /> Remove Section
-                  </button>
-                )}
-              </div>
-
-              {/* Section / Size / Width / Length / MT */}
-              <div className="enq-section-fields enq-section-fields--wide">
-
-                {/* Section */}
-                <div className="enq-field">
-                  <label className="enq-label">Section</label>
-                  <Combobox
-                    label="section"
-                    placeholder="Type or select section..."
-                    value={sec.sectionText}
-                    options={allSectionValues}
-                    deletableIds={allSectionDeletableIds}
-                    onChange={val => handleSectionField(sec.id, "sectionText", val)}
-                    onConfirm={val => handleSectionField(sec.id, "sectionConfirmed", val)}
-                    onAddNew={handleAddNewSection}
-                    onDelete={handleDeleteSection}
-                  />
-                  {sec.sectionConfirmed && (
-                    <span className="enq-confirmed-chip">✓ {sec.sectionConfirmed}</span>
-                  )}
-                </div>
-
-                {/* Size */}
-                <div className="enq-field">
-                  <label className="enq-label">Size</label>
-                  <Combobox
-                    label="size"
-                    placeholder="Type or select size..."
-                    value={sec.sizeText}
-                    options={getAvailableSizeValues(sec.sectionConfirmed)}
-                    deletableIds={allSizeDeletableIds}
-                    onChange={val => handleSectionField(sec.id, "sizeText", val)}
-                    onConfirm={val => handleSectionField(sec.id, "sizeConfirmed", val)}
-                    onAddNew={(val) => handleAddNewSize(val, sec.sectionConfirmed)}
-                    onDelete={handleDeleteSize}
-                  />
-                  {sec.sizeConfirmed && (
-                    <span className="enq-confirmed-chip">✓ {sec.sizeConfirmed}</span>
-                  )}
-                </div>
-
-                {/* Width */}
-                <div className="enq-field">
-                  <label className="enq-label">Width</label>
-                  <Combobox
-                    label="width"
-                    placeholder="Type or select width..."
-                    value={sec.widthText}
-                    options={getAvailableWidthValues(sec.sectionConfirmed, sec.sizeConfirmed)}
-                    deletableIds={allWidthDeletableIds}
-                    disabled={!sec.sizeConfirmed}
-                    onChange={val => handleSectionField(sec.id, "widthText", val)}
-                    onConfirm={val => handleSectionField(sec.id, "widthConfirmed", val)}
-                    onAddNew={(val) => handleAddNewWidth(val, sec.sectionConfirmed, sec.sizeConfirmed)}
-                    onDelete={handleDeleteWidth}
-                  />
-                  {sec.widthConfirmed && (
-                    <span className="enq-confirmed-chip">✓ {sec.widthConfirmed}</span>
-                  )}
-                </div>
-
-                {/* Length */}
-                <div className="enq-field">
-                  <label className="enq-label">Length</label>
-                  <Combobox
-                    label="length"
-                    placeholder="Type or select length..."
-                    value={sec.lengthText}
-                    options={getAvailableLengthValues(sec.sectionConfirmed, sec.sizeConfirmed, sec.widthConfirmed)}
-                    deletableIds={allLengthDeletableIds}
-                    disabled={!sec.sizeConfirmed}
-                    onChange={val => handleSectionField(sec.id, "lengthText", val)}
-                    onConfirm={val => handleSectionField(sec.id, "lengthConfirmed", val)}
-                    onAddNew={(val) => handleAddNewLength(val, sec.sectionConfirmed, sec.sizeConfirmed, sec.widthConfirmed)}
-                    onDelete={handleDeleteLength}
-                  />
-                  {sec.lengthConfirmed && (
-                    <span className="enq-confirmed-chip">✓ {sec.lengthConfirmed}</span>
-                  )}
-                </div>
-
-                {/* Quantity (MT) — section level */}
-                <div className="enq-field">
-                  <label className="enq-label">Quantity (MT)</label>
-                  <input
-                    className="enq-input"
-                    type="text"
-                    inputMode="decimal"
-                    placeholder="0.00"
-                    value={sec.mt}
-                    onChange={e => handleSectionField(sec.id, "mt", e.target.value)}
-                  />
-                </div>
-              </div>
-
-              {/* Supplier Rates */}
-              <div className="enq-supplier-block">
-                <div className="enq-supplier-block-header">
-                  <span className="enq-supplier-block-title">Supplier Rates</span>
-                </div>
-                <div className="enq-supplier-rates-list">
-                  <div className="enq-supplier-rate-header-row enq-supplier-rate-header-row--5col">
-                    <span>#</span>
-                    <span>Supplier Name</span>
-                    <span>MT</span>
-                    <span>Rate Quoted</span>
-                    <span></span>
-                  </div>
-                  {sec.supplierRates.map((sr, srIdx) => (
-                    <div key={sr.id} className="enq-supplier-rate-row enq-supplier-rate-row--5col">
-                      <span className="enq-sr-index">{srIdx + 1}</span>
-
-                      {/* Supplier Name */}
-                      <div className="enq-supplier-combobox-cell">
-                        <Combobox
-                          label="supplier"
-                          placeholder="Type or select supplier..."
-                          value={sr.supplierText}
-                          options={allSupplierValues}
-                          deletableIds={allSupplierDeletableIds}
-                          onChange={val =>
-                            handleSupplierRateField(sec.id, sr.id, "supplierText", val)
-                          }
-                          onConfirm={val =>
-                            handleSupplierRateField(sec.id, sr.id, "supplierConfirmed", val)
-                          }
-                          onAddNew={handleAddNewSupplier}
-                          onDelete={handleDeleteSupplier}
-                        />
-                        {sr.supplierConfirmed && (
-                          <span className="enq-confirmed-chip enq-confirmed-chip--sm">
-                            ✓ {sr.supplierConfirmed}
-                          </span>
-                        )}
+            <button
+              className="see-load-btn"
+              title="Load existing enquiry"
+              onClick={() => setShowLoadDropdown(v => !v)}
+              type="button"
+            >▾ Load</button>
+            {showLoadDropdown && existingEnquiries.length > 0 && (
+              <div className="see-load-dropdown">
+                <div className="see-load-dropdown-title">Select Enquiry to Load</div>
+                <div className="see-load-list">
+                  {existingEnquiries.map(e => (
+                    <div key={e.id} className={`see-load-opt${loadedEnquiryId === e.id ? " see-load-opt--active" : ""}`}>
+                      <div className="see-load-opt-info" onClick={() => loadEnquiry(e)}>
+                        <span className="see-load-no">#{e.No}</span>
+                        <span className="see-load-date">{e.EnquiryDate || "—"}</span>
+                        <span className="see-load-fy">{e.FinancialYear}</span>
+                        {loadedEnquiryId === e.id && <span className="see-load-open-badge">Open</span>}
                       </div>
-
-                      {/* MT per supplier */}
-                      <div className="enq-supplier-mt-wrapper">
-                        <input
-                          className="enq-input enq-supplier-mt-input"
-                          type="text"
-                          inputMode="decimal"
-                          placeholder="0.00"
-                          value={sr.mt}
-                          onChange={e =>
-                            handleSupplierRateField(sec.id, sr.id, "mt", e.target.value)
-                          }
-                        />
-                      </div>
-
-                      {/* Rate Quoted */}
-                      <div className="enq-rate-input-wrapper">
-                        <span className="enq-rate-prefix">Rs</span>
-                        <input
-                          className="enq-input enq-rate-input"
-                          type="text"
-                          inputMode="decimal"
-                          placeholder="0.00"
-                          value={sr.rate}
-                          onChange={e =>
-                            handleSupplierRateField(sec.id, sr.id, "rate", e.target.value)
-                          }
-                        />
-                      </div>
-
-                      {sec.supplierRates.length > 1 ? (
-                        <button
-                          className="enq-remove-rate-btn"
-                          onClick={() => removeSupplierRate(sec.id, sr.id)}
-                          type="button"
-                          title="Remove this supplier row"
-                        >
-                          <HiTrash />
-                        </button>
-                      ) : (
-                        <span />
-                      )}
+                      <button
+                        className="see-load-delete-btn"
+                        title={`Delete Enquiry #${e.No}`}
+                        onMouseDown={(ev) => deleteEnquiry(ev, e)}
+                        type="button"
+                      >🗑</button>
                     </div>
                   ))}
                 </div>
-                <button
-                  className="enq-add-supplier-btn"
-                  onClick={() => addSupplierRate(sec.id)}
-                  type="button"
-                >
-                  <HiPlus /> Add Another Supplier
-                </button>
               </div>
-            </div>
-          ))}
+            )}
+          </div>
         </div>
 
-        <button className="enq-add-section-btn" onClick={addSection} type="button">
-          <HiPlus /> Add Another Section
-        </button>
+        <div className="see-meta-field">
+          <label className="see-meta-label">Enquiry Date</label>
+          <input
+            className="see-meta-input"
+            type="date"
+            value={enquiryDate}
+            onChange={e => setEnquiryDate(e.target.value)}
+          />
+        </div>
 
-        <div className="enq-submit-row">
-          <button
-            className="enq-submit-btn"
-            onClick={handleSubmit}
-            disabled={loading}
+        <div className="see-meta-field">
+          <label className="see-meta-label">Financial Year</label>
+          <select
+            className="see-meta-input see-meta-select"
+            value={financialYear}
+            onChange={e => setFinancialYear(e.target.value)}
           >
-            {loading ? "Saving..." : "Save Enquiry"}
+            {["2024-25","2025-26","2026-27","2027-28"].map(y => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* New Enquiry button + Close button (only when one is open) */}
+        <div className="see-meta-field see-meta-field--btn">
+          <label className="see-meta-label">&nbsp;</label>
+          <div className="see-meta-actions">
+            {loadedEnquiryId && (
+              <button
+                className="see-close-enquiry-btn"
+                onClick={closeEnquiry}
+                type="button"
+                title={`Close Enquiry #${enquiryNo}`}
+              >
+                ✕ Close #{enquiryNo}
+              </button>
+            )}
+            <button
+              className="see-new-enquiry-btn"
+              onClick={clearEnquiry}
+              type="button"
+              title="Close current enquiry and open a new one"
+            >
+              ✦ New Enquiry
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Spreadsheet Area ── */}
+      <div className="see-sheet-outer">
+        {loading ? (
+          <div className="see-loading">Loading master data…</div>
+        ) : (
+          <div className="see-sheet-scroll">
+            <table className="see-table">
+              <thead>
+                <tr className="see-thead-group">
+                  <th className="see-th see-th-sno" rowSpan={2}>#</th>
+                  <th className="see-th see-th-section" rowSpan={2}>Section</th>
+                  <th className="see-th see-th-size" rowSpan={2}>Size</th>
+                  <th className="see-th see-th-width" rowSpan={2}>Width</th>
+                  <th className="see-th see-th-length" rowSpan={2}>Length</th>
+                  <th className="see-th see-th-mt see-th-required" rowSpan={2}>
+                    Qty (MT) <span className="see-req-star">*</span>
+                  </th>
+                  {suppliers.length > 0 && (
+                    <th className="see-th see-th-sup-group" colSpan={suppliers.length * 2}>
+                      Supplier Rates
+                    </th>
+                  )}
+                  <th className="see-th see-th-actions" rowSpan={2}></th>
+                </tr>
+                <tr className="see-thead-subs">
+                  {suppliers.map((sup, i) => (
+                    <th key={sup.id} className="see-th-sup-pair" colSpan={2}>
+                      <div className="see-sup-header">
+                        {sup.confirmed ? (
+                          <span className="see-sup-name">{sup.name}</span>
+                        ) : (
+                          <CellCombobox
+                            value={sup.nameText}
+                            options={allSupplierValues}
+                            placeholder="Supplier name…"
+                            onChange={t => updateSupplierName(sup.id, t)}
+                            onConfirm={n => confirmSupplierName(sup.id, n)}
+                            onAddNew={addSupplier_master}
+                          />
+                        )}
+                        <button
+                          className="see-sup-remove"
+                          onClick={() => removeSupplierColumn(sup.id)}
+                          title="Remove supplier column"
+                          type="button"
+                        >✕</button>
+                      </div>
+                      <div className="see-sup-subheads">
+                        <span>Rate (Rs)</span>
+                        <span>MT</span>
+                      </div>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+
+              <tbody>
+                {sections.map((sec, rowIdx) => (
+                  <tr key={sec.id} className={`see-row${rowIdx % 2 === 0 ? "" : " see-row--alt"}`}>
+
+                    <td className="see-td see-td-sno">{rowIdx + 1}</td>
+
+                    <td className="see-td see-td-section">
+                      <CellCombobox
+                        value={sec.sectionText}
+                        options={allSectionValues}
+                        placeholder="Section…"
+                        onChange={v => updateSection(sec.id, "sectionText", v)}
+                        onConfirm={v => updateSection(sec.id, "sectionConfirmed", v)}
+                        onAddNew={addSection_master}
+                      />
+                    </td>
+
+                    <td className="see-td see-td-size">
+                      <CellCombobox
+                        value={sec.sizeText}
+                        options={getSizes(sec.sectionConfirmed)}
+                        placeholder="Size…"
+                        disabled={!sec.sectionConfirmed}
+                        onChange={v => updateSection(sec.id, "sizeText", v)}
+                        onConfirm={v => updateSection(sec.id, "sizeConfirmed", v)}
+                        onAddNew={(v) => addSize_master(v, sec.sectionConfirmed)}
+                      />
+                    </td>
+
+                    <td className="see-td see-td-width">
+                      <CellCombobox
+                        value={sec.widthText}
+                        options={getWidths(sec.sectionConfirmed, sec.sizeConfirmed)}
+                        placeholder="Width…"
+                        disabled={!sec.sizeConfirmed}
+                        onChange={v => updateSection(sec.id, "widthText", v)}
+                        onConfirm={v => updateSection(sec.id, "widthConfirmed", v)}
+                        onAddNew={async (v) => { await addDoc(collection(db, "widths"), { value: v }); await fetchMaster(); }}
+                      />
+                    </td>
+
+                    <td className="see-td see-td-length">
+                      <CellCombobox
+                        value={sec.lengthText}
+                        options={getLengths(sec.sectionConfirmed, sec.sizeConfirmed, sec.widthConfirmed)}
+                        placeholder="Length…"
+                        disabled={!sec.sizeConfirmed}
+                        onChange={v => updateSection(sec.id, "lengthText", v)}
+                        onConfirm={v => updateSection(sec.id, "lengthConfirmed", v)}
+                        onAddNew={async (v) => { await addDoc(collection(db, "itemLengths"), { value: v }); await fetchMaster(); }}
+                      />
+                    </td>
+
+                    {/* Section MT — formatted when blurred */}
+                    <td className="see-td see-td-mt">
+                      <NumericInput
+                        className="see-cell-input see-cell-input--num"
+                        value={sec.mt}
+                        onChange={v => updateSection(sec.id, "mt", v)}
+                        placeholder="0.000"
+                        formatFn={formatMT}
+                      />
+                    </td>
+
+                    {/* Per-supplier Rate + MT — Rate first, then MT */}
+                    {suppliers.map((sup, colIdx) => {
+                      const rateRow = sec.supplierRates[colIdx] || { mt: "", rate: "" };
+                      return (
+                        <>
+                          <td key={`rate-${sup.id}`} className="see-td see-td-sup-rate">
+                            <NumericInput
+                              className="see-cell-input see-cell-input--num"
+                              value={rateRow.rate}
+                              onChange={v => updateRate(sec.id, colIdx, "rate", v)}
+                              placeholder="0.00"
+                              formatFn={formatRate}
+                            />
+                          </td>
+                          <td key={`mt-${sup.id}`} className="see-td see-td-sup-mt">
+                            <NumericInput
+                              className="see-cell-input see-cell-input--num"
+                              value={rateRow.mt}
+                              onChange={v => updateRate(sec.id, colIdx, "mt", v)}
+                              placeholder="0.000"
+                              formatFn={formatMT}
+                            />
+                          </td>
+                        </>
+                      );
+                    })}
+
+                    <td className="see-td see-td-row-actions">
+                      {sections.length > 1 && (
+                        <button
+                          className="see-row-del-btn"
+                          onClick={() => removeSectionRow(sec.id)}
+                          title="Remove row"
+                          type="button"
+                        >✕</button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+
+                {/* ── Totals row ── */}
+                {sections.length > 0 && (
+                  <tr className="see-totals-row">
+                    <td className="see-td see-td-total-label" colSpan={5}>
+                      <strong>Total</strong>
+                    </td>
+                    {/* Section MT total */}
+                    <td className="see-td see-td-total-num">
+                      {formatTotalMT(totalSectionMt)}
+                    </td>
+                    {/* Per-supplier totals — Rate first, then MT */}
+                    {suppliers.map((sup, ci) => {
+                      const { totalMt, weightedRate } = getSupplierTotals(ci);
+                      return (
+                        <>
+                          <td key={`trate-${sup.id}`} className="see-td see-td-total-rate">
+                            {weightedRate !== null
+                              ? formatWeightedRate(weightedRate)
+                              : "—"}
+                          </td>
+                          <td key={`tmt-${sup.id}`} className="see-td see-td-total-num">
+                            {formatTotalMT(totalMt)}
+                          </td>
+                        </>
+                      );
+                    })}
+                    <td className="see-td"></td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* ── Bottom toolbar ── */}
+        <div className="see-sheet-footer">
+          <button className="see-add-row-btn" onClick={addSectionRow} type="button">
+            + Add Section Row
+          </button>
+          <button className="see-add-sup-btn" onClick={addSupplierColumn} type="button">
+            + Add Supplier Column
+          </button>
+          <div className="see-footer-spacer" />
+          <button
+            className="see-save-btn"
+            onClick={handleSave}
+            disabled={saving}
+            type="button"
+          >
+            {saving ? "Saving…" : `💾 Save Enquiry${enquiryNo ? " #" + enquiryNo : ""}`}
           </button>
         </div>
       </div>
+
     </div>
   );
 }

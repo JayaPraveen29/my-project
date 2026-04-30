@@ -31,21 +31,6 @@
   margin: 0;
 }
 
-.cs-manage-btn {
-  background: #fff;
-  border: 1.5px solid #6366f1;
-  color: #6366f1;
-  border-radius: 8px;
-  padding: 0.45rem 1rem;
-  font-size: 0.875rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-}
-.cs-manage-btn:hover {
-  background: #6366f1;
-  color: #fff;
-}
 
 /* -- Filters ------------------------------------------------------------------- */
 .cs-filters {
@@ -183,7 +168,7 @@
 /* Fixed-width columns */
 .cs-th-sno     { width: 52px;  min-width: 52px; }
 .cs-th-section { width: 150px; min-width: 150px; text-align: left; }
-.cs-th-size    { width: 100px; min-width: 100px; }
+.cs-th-size    { width: 120px; min-width: 120px; white-space: nowrap; }
 .cs-th-mt      { width: 95px;  min-width: 95px; }
 
 /* Purchase reference group header */
@@ -364,6 +349,7 @@
 .cs-td-size {
   font-size: 13px;
   color: #475569;
+  white-space: nowrap;
 }
 
 .cs-td-mt {
@@ -546,7 +532,6 @@
   .cs-td-section { left: 52px; }
   .cs-td-size    { left: 172px; }
 }
-
 /* -- Export Buttons ------------------------------------------------------------ */
 .cs-header-right {
   display: flex;
@@ -602,23 +587,18 @@
   }
 }
 
-/* -- Single summary footer row ----------------------------------------------- */
-.cs-tr-summary {
+/* -- Average Rate footer row ------------------------------------------------- */
+.cs-tr-avg {
   background: #f1f5f9;
   border-top: 2px solid #6366f1;
 }
 
-.cs-summary-label {
+.cs-avg-label {
   font-weight: 700;
   color: #1e293b;
-  text-align: left !important;
+  text-align: right;
   font-size: 12px;
   letter-spacing: 0.2px;
-  white-space: nowrap;
-}
-
-.cs-summary-total-mt {
-  text-align: center !important;
 }
 
 .cs-td-avg-rate {
@@ -632,10 +612,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* ============================================================================
-   L1 RATE SUMMARY TABLE — fully corrected alignment
-   ============================================================================ */
-
+/* -- L1 Summary Section ------------------------------------------------------ */
 .cs-l1-section {
   margin-top: 32px;
   background: #fff;
@@ -673,11 +650,16 @@
   letter-spacing: -0.2px;
 }
 
+.cs-l1-sub {
+  font-size: 12px;
+  color: #64748b;
+  margin: 0;
+}
+
 .cs-l1-table-wrap {
   overflow-x: auto;
 }
 
-/* Base table */
 .cs-l1-table {
   width: 100%;
   border-collapse: collapse;
@@ -685,182 +667,176 @@
   font-family: 'Segoe UI', system-ui, sans-serif;
 }
 
-/* ── thead ── */
 .cs-l1-table thead tr {
   background: #dbeafe;
 }
 
-/* All header cells default */
 .cs-l1-table thead th {
-  padding: 10px 16px;
+  padding: 10px 14px;
+  text-align: center;
   font-size: 11px;
   font-weight: 700;
   color: #1e40af;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   border-bottom: 2px solid #bfdbfe;
-  border-right: 1px solid #bfdbfe;
   white-space: nowrap;
   vertical-align: middle;
 }
-.cs-l1-table thead th:last-child {
-  border-right: none;
+
+.cs-l1-table thead th:first-child,
+.cs-l1-table thead th:nth-child(2),
+.cs-l1-table thead th:nth-child(3) {
+  text-align: left;
 }
 
-/* Row-1 specific header cells */
+/* ── L1 specific header classes ─────────────────────────────────────────────── */
+
+/* Fixed info columns */
 .cs-l1-th-no {
-  text-align: center;
+  text-align: center !important;
   width: 52px;
   min-width: 52px;
-  border-right: 1px solid #bfdbfe;
+  background: #dbeafe;
+  color: #1e40af;
 }
 
 .cs-l1-th-desc {
-  text-align: left;
-  min-width: 200px;
-  border-right: 1px solid #bfdbfe;
+  text-align: left !important;
+  min-width: 180px;
+  background: #dbeafe;
+  color: #1e40af;
 }
 
 .cs-l1-th-mt {
-  text-align: center;
-  width: 70px;
-  min-width: 70px;
-  border-right: 2px solid #93c5fd;   /* stronger divider before supplier groups */
+  text-align: right !important;
+  width: 80px;
+  min-width: 80px;
+  background: #dbeafe;
+  color: #1e40af;
 }
 
-/* Supplier group header (spans 3 cols) */
+/* Supplier group header — spans 3 sub-columns (Mt / Rate / Amount) */
 .cs-l1-th-supplier {
   text-align: center !important;
+  vertical-align: middle !important;
+  background: #dbeafe;
+  color: #1e40af;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 11px 14px;
   border-left: 2px solid #93c5fd;
   border-right: 2px solid #93c5fd;
-  min-width: 240px;
-  background: #bfdbfe;
-  color: #1e3a8a;
-  font-size: 12px;
-  letter-spacing: 0.06em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 280px;
+  text-transform: uppercase;
 }
 
-/* Row-2 sub-headers: Mt | Rate | Amount */
+.cs-l1-table thead tr th.cs-l1-th-supplier {
+  text-align: center !important;
+}
+
+/* Sub-column headers under each supplier (Mt / Rate / Amount) */
 .cs-l1-th-sub {
-  text-align: right;
-  min-width: 80px;
-  font-size: 10.5px;
+  text-align: right !important;
+  background: #eff6ff;
   color: #1e40af;
-  border-top: 1px solid #bfdbfe;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 7px 12px;
+  border-left: 1px solid #bfdbfe;
   border-right: 1px solid #bfdbfe;
-}
-/* The first sub-header of each supplier group (Mt) */
-.cs-l1-th-sub:nth-child(3n+1) {
-  border-left: 2px solid #93c5fd;
-  text-align: right;
+  border-bottom: 2px solid #93c5fd;
+  white-space: nowrap;
+  min-width: 72px;
+  vertical-align: middle;
 }
 
-/* ── tbody ── */
 .cs-l1-table tbody tr {
   border-bottom: 1px solid #e2e8f0;
   transition: background 0.1s;
 }
-.cs-l1-table tbody tr:hover {
-  background: #f0f7ff;
-}
-.cs-l1-table tbody tr:nth-child(even) {
-  background: #f8fbff;
-}
-.cs-l1-table tbody tr:nth-child(even):hover {
-  background: #e8f2ff;
-}
+.cs-l1-table tbody tr:hover { background: #f0f7ff; }
+.cs-l1-table tbody tr:nth-child(even) { background: #f8fbff; }
+.cs-l1-table tbody tr:nth-child(even):hover { background: #e8f2ff; }
 
-/* All body cells default to right-aligned numbers */
 .cs-l1-table tbody td {
-  padding: 9px 16px;
+  padding: 9px 14px;
   color: #334155;
   text-align: right;
-  border-right: 1px solid #e2e8f0;
-  vertical-align: middle;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-.cs-l1-table tbody td:last-child {
-  border-right: none;
 }
 
-/* No. column */
 .cs-l1-sno {
   text-align: center !important;
   color: #94a3b8 !important;
   font-size: 12px;
-  width: 52px;
-  border-right: 1px solid #e2e8f0;
+  font-variant-numeric: tabular-nums;
 }
 
-/* Description column */
+.cs-l1-left { text-align: left !important; }
+
+/* Description of Item cell — left-aligned, readable */
 .cs-l1-desc {
   text-align: left !important;
-  color: #1e293b !important;
+  font-size: 13px;
   font-weight: 500;
-  min-width: 200px;
-  border-right: 1px solid #e2e8f0;
+  color: #1e293b;
+  min-width: 180px;
+  white-space: nowrap;
 }
 
-/* Mt. (total qty) column */
+.cs-l1-supplier {
+  text-align: left !important;
+  font-weight: 600;
+  color: #1e40af !important;
+}
+
+/* Active (L1 winner) cells vs empty cells */
+.cs-l1-cell-active {
+  background: #f0fdf4 !important;
+  border-left: 1.5px solid #bbf7d0;
+}
+.cs-l1-cell-empty {
+  background: #fafafa;
+  color: #cbd5e1 !important;
+}
+.cs-l1-cell-bold {
+  font-weight: 700;
+  color: #15803d !important;
+}
+
 .cs-l1-num {
-  text-align: right;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-/* Divider before each supplier group */
-.cs-l1-table tbody td:nth-child(3) {
-  border-right: 2px solid #bfdbfe;
-}
-
-/* Active (L1 winner) cells */
-.cs-l1-cell-active {
-  background: #f0fdf4;
-  color: #15803d !important;
-}
-.cs-l1-table tbody tr:hover .cs-l1-cell-active {
-  background: #dcfce7;
-}
-
-.cs-l1-cell-bold {
-  font-weight: 700;
-}
-
-/* Empty (non-L1) cells */
-.cs-l1-cell-empty {
-  background: transparent;
-  color: transparent;
-}
-
-/* Rate column emphasis */
-.cs-l1-rate-col {
+.cs-l1-rate {
   color: #0f172a;
+  font-weight: 500;
 }
 
-/* Amount column emphasis */
-.cs-l1-amount-col {
+.cs-l1-amount {
+  font-weight: 700;
   color: #1d4ed8;
-  font-weight: 600;
 }
 
-/* ── tfoot totals row ── */
+.cs-l1-tr--nodata td {
+  opacity: 0.45;
+}
+
+/* Totals footer */
 .cs-l1-totals {
   background: #eff6ff !important;
   border-top: 2px solid #1d4ed8;
 }
 
 .cs-l1-totals td {
-  padding: 11px 16px;
+  padding: 11px 14px;
   font-weight: 700;
-  border-right: 1px solid #bfdbfe;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  vertical-align: middle;
-}
-.cs-l1-totals td:last-child {
-  border-right: none;
 }
 
 .cs-l1-totals-label {
@@ -870,34 +846,19 @@
   letter-spacing: 0.2px;
 }
 
-.cs-l1-totals-grand-mt {
-  text-align: right !important;
-  color: #334155;
-  border-right: 2px solid #bfdbfe !important;
-}
-
 .cs-l1-totals-val {
   color: #334155;
   font-size: 13px;
-  text-align: right !important;
 }
 
 .cs-l1-totals-avg {
   color: #1d4ed8;
   font-size: 14px;
-  text-align: right !important;
 }
 
 .cs-l1-totals-amt {
   color: #1d4ed8;
   font-size: 14px;
-  text-align: right !important;
-}
-
-/* -- Qty MT purchase cells --------------------------------------------------- */
-.cs-qty-mt-purchase {
-  text-align: right !important;
-  background: #e0f2fe !important;
 }
 
 @media (max-width: 768px) {

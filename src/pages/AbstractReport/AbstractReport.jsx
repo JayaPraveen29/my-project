@@ -60,17 +60,6 @@ export default function AbstractReport() {
     return isNaN(dt) ? null : dt;
   };
 
-  const compareDatesDayMonthYear = (a, b) => {
-    const da = parseDateSafe(a);
-    const db2 = parseDateSafe(b);
-    if (!da && !db2) return 0;
-    if (!da) return 1;
-    if (!db2) return -1;
-    if (da.getDate() !== db2.getDate()) return da.getDate() - db2.getDate();
-    if (da.getMonth() !== db2.getMonth()) return da.getMonth() - db2.getMonth();
-    return da.getFullYear() - db2.getFullYear();
-  };
-
   const filterByDateRange = (items, from, to) => {
     if (!from && !to) return items;
     return items.filter(item => {
@@ -107,7 +96,6 @@ export default function AbstractReport() {
       const itemsArray = entry.items && Array.isArray(entry.items) ? entry.items : [entry];
       const entryTotalBasic = itemsArray.reduce((sum, i) => sum + (Number(i["Bill Basic Amount"]) || 0), 0);
       const others = Number(entry.charges?.Others || 0);
-
       itemsArray.forEach(item => {
         const section = (item["Section"] || "Unknown").toString().trim();
         const size = (item["Size"] || "").toString().trim();
@@ -165,7 +153,6 @@ export default function AbstractReport() {
       const itemsArray = entry.items && Array.isArray(entry.items) ? entry.items : [entry];
       const entryTotalBasic = itemsArray.reduce((sum, i) => sum + (Number(i["Bill Basic Amount"]) || 0), 0);
       const others = Number(entry.charges?.Others || 0);
-
       itemsArray.forEach(item => {
         const section = (item["Section"] || "Unknown").toString().trim();
         const size = (item["Size"] || "").toString().trim();
@@ -196,6 +183,7 @@ export default function AbstractReport() {
       const row = {
         section: item.section, size: item.size, width: item.width, itemLength: item.itemLength,
       };
+      let totalQtyAll = 0, totalInvAll = 0, totalAmountAll = 0;
       GroupUnits.forEach(unit => {
         if (item.units[unit]) {
           const u = item.units[unit];
@@ -204,6 +192,9 @@ export default function AbstractReport() {
           row[`${unit}_invoiceValue`] = u.totalBasic;
           row[`${unit}_freight`] = u.totalFreight;
           row[`${unit}_ratePerMT`] = u.totalQty > 0 ? unitTotal / u.totalQty : 0;
+          totalQtyAll += u.totalQty;
+          totalInvAll += u.totalBasic;
+          totalAmountAll += unitTotal;
         } else {
           row[`${unit}_qty`] = 0;
           row[`${unit}_invoiceValue`] = 0;
@@ -211,6 +202,11 @@ export default function AbstractReport() {
           row[`${unit}_ratePerMT`] = 0;
         }
       });
+      // Totals: sum of all units
+      row._totalQty = totalQtyAll;
+      row._totalInv = totalInvAll;
+      row._totalAmount = totalAmountAll;
+      row._avgRate = totalQtyAll > 0 ? totalAmountAll / totalQtyAll : 0;
       return row;
     });
 
@@ -240,7 +236,7 @@ export default function AbstractReport() {
   const grandRatePerMT = grandTotalQty > 0 ? grandTotalAmount / grandTotalQty : 0;
 
   const exportPDF = () => {
-    const doc = new jsPDF("l", "pt", "a4");
+    const doc = new jsPDF("P", "pt", "a4");
     doc.setFontSize(12);
     let heading = "Abstract of Raw Material Purchased";
     if (selectedUnit !== "Group") heading += ` - ${selectedUnit}`;
@@ -252,6 +248,7 @@ export default function AbstractReport() {
     }
 
     if (selectedUnit === "Group" && pivotData.length > 0) {
+      // Header row 1: S.No, Section, Size, Width, Length | unit cols | Totals (3 cols)
       const headRow1 = [
         { content: "S.No.", rowSpan: 2 },
         { content: "Section", rowSpan: 2 },
@@ -262,8 +259,11 @@ export default function AbstractReport() {
       const headRow2 = [];
       units.forEach(unit => {
         headRow1.push({ content: unit, colSpan: 4 });
-        headRow2.push({ content: "MT" }, { content: "Invoice Value" }, { content: "Freight" }, { content: "Rate/MT" });
+        headRow2.push({ content: "MT" }, { content: "Inv.Val" }, { content: "Freight" }, { content: "Rate/MT" });
       });
+      // Totals group: 3 columns only
+      headRow1.push({ content: "Totals", colSpan: 3 });
+      headRow2.push({ content: "Total MT" }, { content: "Total Inv.Val" }, { content: "Avg Rate" });
 
       const body = pivotData.map((item, index) => {
         const row = [
@@ -281,21 +281,30 @@ export default function AbstractReport() {
             { content: formatRate(item[`${unit}_ratePerMT`] || 0), styles: { halign: "right" } }
           );
         });
+        // 3 totals columns
+        row.push(
+          { content: formatMT(item._totalQty || 0), styles: { halign: "right" } },
+          { content: formatAmount(item._totalInv || 0), styles: { halign: "right" } },
+          { content: formatRate(item._avgRate || 0), styles: { halign: "right" } }
+        );
         return row;
       });
 
+      // Grand total row
       const totalRow = [
         "",
         { content: "TOTAL", styles: { halign: "left" } },
-        { content: "", styles: { halign: "left" } },
-        { content: "", styles: { halign: "right" } },
-        { content: "", styles: { halign: "right" } },
+        "", "", "",
       ];
+      let grandTotalQtyPDF = 0, grandTotalInvPDF = 0, grandTotalAmtPDF = 0;
       units.forEach(unit => {
         const tQty = pivotData.reduce((s, x) => s + (x[`${unit}_qty`] || 0), 0);
         const tInv = pivotData.reduce((s, x) => s + (x[`${unit}_invoiceValue`] || 0), 0);
         const tFrt = pivotData.reduce((s, x) => s + (x[`${unit}_freight`] || 0), 0);
         const tTot = tInv + tFrt;
+        grandTotalQtyPDF += tQty;
+        grandTotalInvPDF += tInv;
+        grandTotalAmtPDF += tTot;
         totalRow.push(
           { content: formatMT(tQty), styles: { halign: "right" } },
           { content: formatAmount(tInv), styles: { halign: "right" } },
@@ -303,6 +312,12 @@ export default function AbstractReport() {
           { content: formatRate(tQty ? tTot / tQty : 0), styles: { halign: "right" } }
         );
       });
+      // 3 grand totals
+      totalRow.push(
+        { content: formatMT(grandTotalQtyPDF), styles: { halign: "right" } },
+        { content: formatAmount(grandTotalInvPDF), styles: { halign: "right" } },
+        { content: formatRate(grandTotalQtyPDF ? grandTotalAmtPDF / grandTotalQtyPDF : 0), styles: { halign: "right" } }
+      );
       body.push(totalRow);
 
       autoTable(doc, {
@@ -310,8 +325,8 @@ export default function AbstractReport() {
         head: [headRow1, headRow2],
         body,
         theme: "grid",
-        styles: { fontSize: 6, halign: "center", valign: "middle", cellPadding: 1 },
-        headStyles: { fillColor: [230, 240, 255], textColor: [0, 0, 0], fontStyle: "bold" },
+        styles: { fontSize: 5, halign: "center", valign: "middle", cellPadding: 1 },
+        headStyles: { fillColor: [230, 240, 255], textColor: [0, 0, 0], fontStyle: "bold", fontSize: 5 },
         columnStyles: {
           1: { halign: "left" },
           2: { halign: "left" },
@@ -321,7 +336,6 @@ export default function AbstractReport() {
       });
     } else {
       const headers = ["No.", "Section", "Size", "Width", "Length", "MT", "Invoice Value", "Freight", "Rate/MT"];
-
       const body = abstractData.map((item, i) => [
         i + 1,
         { content: item.section, styles: { halign: "left" } },
@@ -333,24 +347,20 @@ export default function AbstractReport() {
         { content: formatAmount(item.totalFreight), styles: { halign: "right" } },
         { content: formatRate(item.ratePerMT), styles: { halign: "right" } },
       ]);
-
       body.push([
         "",
         { content: "TOTAL", styles: { halign: "left" } },
-        { content: "", styles: { halign: "left" } },
-        { content: "", styles: { halign: "right" } },
-        { content: "", styles: { halign: "right" } },
+        "", "", "",
         { content: formatMT(grandTotalQty), styles: { halign: "right" } },
         { content: formatAmount(grandInvoiceValue), styles: { halign: "right" } },
         { content: formatAmount(grandTotalFreight), styles: { halign: "right" } },
         { content: formatRate(grandRatePerMT), styles: { halign: "right" } },
       ]);
-
       autoTable(doc, {
         head: [headers],
         body,
         startY: fromDate || toDate ? 55 : 45,
-        styles: { fontSize: 8, cellPadding: 2 },
+        styles: { fontSize: 6, cellPadding: 1.5 },
         theme: "grid",
         columnStyles: {
           1: { halign: "left" },
@@ -378,6 +388,9 @@ export default function AbstractReport() {
         header1.push(u, "", "", "");
         header2.push("MT", "Invoice Value", "Freight", "Rate/MT");
       });
+      // Totals: 3 columns only
+      header1.push("Totals", "", "");
+      header2.push("Total MT", "Total Inv. Value", "Avg Rate");
 
       const rows = pivotData.map((item, i) => {
         const r = [i + 1, item.section, item.size, item.width, item.itemLength];
@@ -389,17 +402,21 @@ export default function AbstractReport() {
             item[`${u}_ratePerMT`] || 0
           );
         });
+        r.push(item._totalQty || 0, item._totalInv || 0, item._avgRate || 0);
         return r;
       });
 
       const totalRow = ["", "TOTAL", "", "", ""];
+      let grandTQty = 0, grandTInv = 0, grandTAmt = 0;
       units.forEach(u => {
         const tq = pivotData.reduce((s, x) => s + (x[`${u}_qty`] || 0), 0);
         const tinv = pivotData.reduce((s, x) => s + (x[`${u}_invoiceValue`] || 0), 0);
         const tf = pivotData.reduce((s, x) => s + (x[`${u}_freight`] || 0), 0);
         const tt = tinv + tf;
+        grandTQty += tq; grandTInv += tinv; grandTAmt += tt;
         totalRow.push(tq, tinv, tf, tq ? tt / tq : 0);
       });
+      totalRow.push(grandTQty, grandTInv, grandTQty ? grandTAmt / grandTQty : 0);
 
       const ws = XLSX.utils.aoa_to_sheet([header1, header2, ...rows, totalRow]);
 
@@ -412,6 +429,8 @@ export default function AbstractReport() {
       ];
       let c = 5;
       units.forEach(() => { merges.push({ s: { r: 0, c }, e: { r: 0, c: c + 3 } }); c += 4; });
+      // Merge "Totals" across 3 columns
+      merges.push({ s: { r: 0, c }, e: { r: 0, c: c + 2 } });
       ws["!merges"] = merges;
 
       const range = XLSX.utils.decode_range(ws["!ref"]);
@@ -426,7 +445,12 @@ export default function AbstractReport() {
           }
           if (R >= 2 && C >= 5 && typeof ws[addr].v !== "string") {
             ws[addr].t = "n";
-            ws[addr].z = (C - 5) % 4 === 0 ? fmt3 : fmt0;
+            // MT columns: every 4th starting at 5 (index 0 of each unit group), and Total MT
+            const unitDataStart = 5;
+            const unitColCount = units.length * 4;
+            const totalMTCol = unitDataStart + unitColCount;
+            const isQtyCol = C === totalMTCol || (C >= unitDataStart && C < totalMTCol && (C - unitDataStart) % 4 === 0);
+            ws[addr].z = isQtyCol ? fmt3 : fmt0;
           }
         }
       }
@@ -520,6 +544,8 @@ export default function AbstractReport() {
                 <th rowSpan={2}>Width</th>
                 <th rowSpan={2}>Length</th>
                 {units.map((unit, i) => <th key={i} colSpan={4}>{unit}</th>)}
+                {/* Totals: exactly 3 columns */}
+                <th colSpan={3}>Totals</th>
               </tr>
               <tr>
                 {units.map((unit, i) => (
@@ -527,6 +553,9 @@ export default function AbstractReport() {
                     <th>MT</th><th>Invoice Value</th><th>Freight</th><th>Rate/MT</th>
                   </React.Fragment>
                 ))}
+                <th>Total MT</th>
+                <th>Total Inv. Value</th>
+                <th>Avg Rate</th>
               </tr>
             </thead>
             <tbody>
@@ -545,8 +574,13 @@ export default function AbstractReport() {
                       <td>{formatRate(item[`${unit}_ratePerMT`] || 0)}</td>
                     </React.Fragment>
                   ))}
+                  {/* 3 totals columns */}
+                  <td>{formatMT(item._totalQty || 0)}</td>
+                  <td>{formatAmount(item._totalInv || 0)}</td>
+                  <td>{formatRate(item._avgRate || 0)}</td>
                 </tr>
               ))}
+              {/* Grand Total row */}
               <tr className="total-row">
                 <td colSpan={5}>Total</td>
                 {units.map((unit, i) => {
@@ -563,6 +597,24 @@ export default function AbstractReport() {
                     </React.Fragment>
                   );
                 })}
+                {/* Grand totals: Total MT, Total Inv.Value, Avg Rate */}
+                {(() => {
+                  let gQty = 0, gInv = 0, gAmt = 0;
+                  units.forEach(unit => {
+                    gQty += pivotData.reduce((s, x) => s + (x[`${unit}_qty`] || 0), 0);
+                    gInv += pivotData.reduce((s, x) => s + (x[`${unit}_invoiceValue`] || 0), 0);
+                    const tInv = pivotData.reduce((s, x) => s + (x[`${unit}_invoiceValue`] || 0), 0);
+                    const tFrt = pivotData.reduce((s, x) => s + (x[`${unit}_freight`] || 0), 0);
+                    gAmt += tInv + tFrt;
+                  });
+                  return (
+                    <>
+                      <td>{formatMT(gQty)}</td>
+                      <td>{formatAmount(gInv)}</td>
+                      <td>{formatRate(gQty > 0 ? gAmt / gQty : 0)}</td>
+                    </>
+                  );
+                })()}
               </tr>
             </tbody>
           </table>

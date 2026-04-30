@@ -39,12 +39,6 @@ export default function SideNavbar() {
           </li>
 
           <li>
-            <Link to="/steel-enquiry-entry" className="menu-btn" onClick={closeMobileMenu}>
-              <HiChartBar /> Steel Enquiry Entry
-            </Link>
-          </li>
-
-          <li>
             <Link to="/view-data" className="menu-btn" onClick={closeMobileMenu}>
               <HiChartBar /> View Data
             </Link>
@@ -69,19 +63,32 @@ export default function SideNavbar() {
                 <li><Link to="/bill-search" className="dropdown-item" onClick={closeMobileMenu}>Bill Number Search</Link></li>
                 <li><Link to="/last-purchased-report" className="dropdown-item" onClick={closeMobileMenu}>Last Purchase Summary</Link></li>
                 <li><Link to="/Price-Comparison" className="dropdown-item" onClick={closeMobileMenu}>Price Comparison</Link></li>
-                <li><Link to="/comparative-statement" className="dropdown-item" onClick={closeMobileMenu}>Comparative Statement</Link></li>
               </ul>
             )}
+          </li>
+
+          {/* ✅ Data Manager moved here — directly below Generate Reports */}
+          <li>
+            <Link to="/manage-masters" className="menu-btn" onClick={closeMobileMenu}>
+              <HiChartBar /> Data Manager
+            </Link>
           </li>
 
         </ul>
 
         <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
           <li>
-            <Link to="/manage-masters" className="menu-btn" onClick={closeMobileMenu}>
-              <HiChartBar /> Data Manager
+            <Link to="/steel-enquiry-entry" className="menu-btn" onClick={closeMobileMenu}>
+              <HiChartBar /> Steel Enquiry Entry
             </Link>
           </li>
+
+          <li>
+            <Link to="/comparative-statement" className="dropdown-item" onClick={closeMobileMenu}>
+              Comparative Statement
+            </Link>
+          </li>
+
           <li>
             <Link to="/ai-assistant" className="menu-btn ai-menu-btn" onClick={closeMobileMenu}>
               ✦ AI Assistant
