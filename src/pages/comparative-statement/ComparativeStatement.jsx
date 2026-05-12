@@ -53,18 +53,25 @@ export default function ComparativeStatement() {
 
   // ── Build purchase rate lookup ─────────────────────────────────────────────
   const buildPurchaseLookup = () => {
+    // sectionSet tracks which sections exist at all (for the "section exists but dims don't match → 0" rule)
     const lookup = new Map();
+    const sectionSet = new Set();
     purchaseEntries.forEach(entry => {
       const billDate = entry["Bill Date"] || entry["Received On"] || "";
       if (filterEndDate && billDate && billDate > filterEndDate) return;
       (entry.items || []).forEach(item => {
-        const section = item.Section || "";
-        const size = item.Size || "";
+        const section = item.Section       || "";
+        const size    = item.Size          || "";
+        const width   = item.Width         || "";
+        const length  = item["Item Length"] || "";  // purchase entries use "Item Length", not "Length"
         const mt = parseFloat(item["Quantity in Metric Tons"]) || 0;
         const sectionSubtotal = parseFloat(item["Section Subtotal"]) || 0;
         const rate = mt > 0 ? sectionSubtotal / mt : 0;
         if (!section || !rate) return;
-        const key = `${section}||${size}`;
+        // Track that this section exists in purchases
+        sectionSet.add(section);
+        // Full key — section + size + width + length must all match
+        const key = `${section}||${size}||${width}||${length}`;
         if (!lookup.has(key)) {
           lookup.set(key, { lowestRate: rate, lowestDate: billDate, lastRate: rate, lastDate: billDate, lastNo: entry.No });
         } else {
@@ -74,7 +81,7 @@ export default function ComparativeStatement() {
         }
       });
     });
-    return lookup;
+    return { lookup, sectionSet };
   };
 
   // ── Build pivot table data ─────────────────────────────────────────────────
@@ -89,7 +96,7 @@ export default function ComparativeStatement() {
       });
     });
     const suppliers = Array.from(supplierSet).sort();
-    const purchaseLookup = buildPurchaseLookup();
+    const { lookup: purchaseLookup, sectionSet } = buildPurchaseLookup();
     const rowMap = new Map();
     filteredEntries.forEach(entry => {
       (entry.sections || []).forEach(sec => {
@@ -99,15 +106,16 @@ export default function ComparativeStatement() {
         const length = sec.length || "";
         const sectionMt = sec.mt || 0;
         const key = `${section}||${size}||${width}||${length}`;
-        const purchaseKey = `${section}||${size}`;
         if (!rowMap.has(key)) {
-          const purchaseData = purchaseLookup.get(purchaseKey) || null;
+          const purchaseData = purchaseLookup.get(key) || null;
+          // If section exists in purchases but this exact size/width/length doesn't match → show 0
+          const sectionExists = sectionSet.has(section);
           rowMap.set(key, {
             section, size, width, length, sectionMt,
-            lowestPurchaseRate: purchaseData ? purchaseData.lowestRate : null,
+            lowestPurchaseRate: purchaseData ? purchaseData.lowestRate : (sectionExists ? 0 : null),
             lowestPurchaseDate: purchaseData ? purchaseData.lowestDate : null,
-            lastPurchaseRate: purchaseData ? purchaseData.lastRate : null,
-            lastPurchaseDate: purchaseData ? purchaseData.lastDate : null,
+            lastPurchaseRate:   purchaseData ? purchaseData.lastRate   : (sectionExists ? 0 : null),
+            lastPurchaseDate:   purchaseData ? purchaseData.lastDate   : null,
             rates: {},
           });
         }
@@ -334,14 +342,18 @@ export default function ComparativeStatement() {
         { content: cleanText(row.length) || "-",     styles: { halign: "center" } },
         { content: formatMT(row.sectionMt),          styles: { halign: "center" } },
         {
-          content: row.lowestPurchaseRate
-            ? `${row.lowestPurchaseDate ? row.lowestPurchaseDate + "\n" : ""}${formatRate(Math.round(row.lowestPurchaseRate))}`
+          content: row.lowestPurchaseRate != null
+            ? (row.lowestPurchaseRate === 0
+                ? "0"
+                : `${row.lowestPurchaseDate ? row.lowestPurchaseDate + "\n" : ""}${formatRate(Math.round(row.lowestPurchaseRate))}`)
             : "",
           styles: { halign: "center" },
         },
         {
-          content: row.lastPurchaseRate
-            ? `${row.lastPurchaseDate ? row.lastPurchaseDate + "\n" : ""}${formatRate(Math.round(row.lastPurchaseRate))}`
+          content: row.lastPurchaseRate != null
+            ? (row.lastPurchaseRate === 0
+                ? "0"
+                : `${row.lastPurchaseDate ? row.lastPurchaseDate + "\n" : ""}${formatRate(Math.round(row.lastPurchaseRate))}`)
             : "",
           styles: { halign: "center" },
         },
@@ -553,8 +565,12 @@ export default function ComparativeStatement() {
       const dr = [
         idx + 1, row.section || "", row.size || "", row.width || "", row.length || "",
         row.sectionMt ? formatMT(row.sectionMt) : "",
-        row.lowestPurchaseRate ? `${row.lowestPurchaseDate ? row.lowestPurchaseDate + "  " : ""}${formatRate(Math.round(row.lowestPurchaseRate))}` : "",
-        row.lastPurchaseRate   ? `${row.lastPurchaseDate   ? row.lastPurchaseDate   + "  " : ""}${formatRate(Math.round(row.lastPurchaseRate))}`   : "",
+        row.lowestPurchaseRate != null
+          ? (row.lowestPurchaseRate === 0 ? "0" : `${row.lowestPurchaseDate ? row.lowestPurchaseDate + "  " : ""}${formatRate(Math.round(row.lowestPurchaseRate))}`)
+          : "",
+        row.lastPurchaseRate != null
+          ? (row.lastPurchaseRate === 0 ? "0" : `${row.lastPurchaseDate ? row.lastPurchaseDate + "  " : ""}${formatRate(Math.round(row.lastPurchaseRate))}`)
+          : "",
       ];
       suppliers.forEach(sup => {
         const rateObj = row.rates[sup];
@@ -757,19 +773,27 @@ export default function ComparativeStatement() {
                     <td className="cs-td cs-td-sticky cs-td-size">{row.length || <span className="cs-na">—</span>}</td>
                     <td className="cs-td cs-td-sticky cs-td-mt">{formatMT(row.sectionMt)}</td>
                     <td className="cs-td cs-td-purchase">
-                      {row.lowestPurchaseRate ? (
-                        <div className="cs-last-purchase-cell">
-                          {row.lowestPurchaseDate && <span className="cs-purchase-date">{row.lowestPurchaseDate}</span>}
-                          <span className="cs-purchase-rate">₹ {formatRate(Math.round(row.lowestPurchaseRate))}</span>
-                        </div>
+                      {row.lowestPurchaseRate != null ? (
+                        row.lowestPurchaseRate === 0 ? (
+                          <span className="cs-purchase-rate">0</span>
+                        ) : (
+                          <div className="cs-last-purchase-cell">
+                            {row.lowestPurchaseDate && <span className="cs-purchase-date">{row.lowestPurchaseDate}</span>}
+                            <span className="cs-purchase-rate">₹ {formatRate(Math.round(row.lowestPurchaseRate))}</span>
+                          </div>
+                        )
                       ) : null}
                     </td>
                     <td className="cs-td cs-td-purchase">
-                      {row.lastPurchaseRate ? (
-                        <div className="cs-last-purchase-cell">
-                          {row.lastPurchaseDate && <span className="cs-purchase-date">{row.lastPurchaseDate}</span>}
-                          <span className="cs-purchase-rate">₹ {formatRate(Math.round(row.lastPurchaseRate))}</span>
-                        </div>
+                      {row.lastPurchaseRate != null ? (
+                        row.lastPurchaseRate === 0 ? (
+                          <span className="cs-purchase-rate">0</span>
+                        ) : (
+                          <div className="cs-last-purchase-cell">
+                            {row.lastPurchaseDate && <span className="cs-purchase-date">{row.lastPurchaseDate}</span>}
+                            <span className="cs-purchase-rate">₹ {formatRate(Math.round(row.lastPurchaseRate))}</span>
+                          </div>
+                        )
                       ) : null}
                     </td>
                     {suppliers.map(sup => {
