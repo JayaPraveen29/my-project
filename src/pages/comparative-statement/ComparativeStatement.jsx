@@ -54,33 +54,58 @@ export default function ComparativeStatement() {
   // ── Build purchase rate lookup ─────────────────────────────────────────────
   const buildPurchaseLookup = () => {
     // sectionSet tracks which sections exist at all (for the "section exists but dims don't match → 0" rule)
-    const lookup = new Map();
     const sectionSet = new Set();
+
+    // Step 1: for each key+date combination, keep only the HIGHEST rate
+    // dateMap: key → Map<date, { rate, entryNo }>
+    const dateMap = new Map();
+
     purchaseEntries.forEach(entry => {
       const billDate = entry["Bill Date"] || entry["Received On"] || "";
       if (filterEndDate && billDate && billDate > filterEndDate) return;
       (entry.items || []).forEach(item => {
-        const section = item.Section       || "";
-        const size    = item.Size          || "";
-        const width   = item.Width         || "";
-        const length  = item["Item Length"] || "";  // purchase entries use "Item Length", not "Length"
+        const section = item.Section        || "";
+        const size    = item.Size           || "";
+        const width   = item.Width          || "";
+        const length  = item["Item Length"] || "";
         const mt = parseFloat(item["Quantity in Metric Tons"]) || 0;
         const sectionSubtotal = parseFloat(item["Section Subtotal"]) || 0;
         const rate = mt > 0 ? sectionSubtotal / mt : 0;
         if (!section || !rate) return;
-        // Track that this section exists in purchases
         sectionSet.add(section);
-        // Full key — section + size + width + length must all match
+
         const key = `${section}||${size}||${width}||${length}`;
-        if (!lookup.has(key)) {
-          lookup.set(key, { lowestRate: rate, lowestDate: billDate, lastRate: rate, lastDate: billDate, lastNo: entry.No });
+        if (!dateMap.has(key)) dateMap.set(key, new Map());
+        const byDate = dateMap.get(key);
+
+        if (!byDate.has(billDate)) {
+          byDate.set(billDate, { rate, entryNo: entry.No });
         } else {
-          const existing = lookup.get(key);
-          if (rate < existing.lowestRate) { existing.lowestRate = rate; existing.lowestDate = billDate; }
-          if (entry.No > existing.lastNo) { existing.lastRate = rate; existing.lastDate = billDate; existing.lastNo = entry.No; }
+          const existing = byDate.get(billDate);
+          // Same section+size+width+length on the same date → keep the HIGHEST rate
+          if (rate > existing.rate) {
+            existing.rate = rate;
+            existing.entryNo = entry.No;
+          }
         }
       });
     });
+
+    // Step 2: from the per-date-highest values, build the final lookup
+    // (lowest rate across all dates, last rate by entry No)
+    const lookup = new Map();
+    dateMap.forEach((byDate, key) => {
+      byDate.forEach(({ rate, entryNo }, billDate) => {
+        if (!lookup.has(key)) {
+          lookup.set(key, { lowestRate: rate, lowestDate: billDate, lastRate: rate, lastDate: billDate, lastNo: entryNo });
+        } else {
+          const existing = lookup.get(key);
+          if (rate < existing.lowestRate) { existing.lowestRate = rate; existing.lowestDate = billDate; }
+          if (entryNo > existing.lastNo)  { existing.lastRate = rate;   existing.lastDate = billDate; existing.lastNo = entryNo; }
+        }
+      });
+    });
+
     return { lookup, sectionSet };
   };
 
@@ -393,7 +418,7 @@ export default function ComparativeStatement() {
     const summaryRow = [
       { content: "", styles: { halign: "center" } },
       { content: "Total MT / Avg Rate", colSpan: 4, styles: { fontStyle: "bold", halign: "left" } },
-      { content: qtyMtSummary.totalSectionMt > 0 ? formatMT(qtyMtSummary.totalSectionMt) : "", styles: { fontStyle: "bold", halign: "center" } },
+      { content: qtyMtSummary.totalSectionMt > 0 ? parseFloat(qtyMtSummary.totalSectionMt).toFixed(2) : "", styles: { fontStyle: "bold", halign: "center" } },
       { content: qtyMtSummary.lowestPurchaseWeightedAvg !== null ? formatRate(Math.round(qtyMtSummary.lowestPurchaseWeightedAvg)) : "", styles: { fontStyle: "bold", halign: "center" } },
       { content: qtyMtSummary.lastPurchaseWeightedAvg   !== null ? formatRate(Math.round(qtyMtSummary.lastPurchaseWeightedAvg))   : "", styles: { fontStyle: "bold", halign: "center" } },
       ...suppliers.flatMap(sup => {
@@ -403,8 +428,8 @@ export default function ComparativeStatement() {
           if (o && o.rate > 0 && o.mt > 0) { amt += o.rate * o.mt; mt += o.mt; }
         });
         return [
-          { content: mt > 0 ? formatMT(mt)                        : "", styles: { fontStyle: "bold", halign: "center" } },
-          { content: mt > 0 ? formatRate(Math.round(amt / mt))    : "", styles: { fontStyle: "bold", halign: "center" } },
+          { content: mt > 0 ? parseFloat(mt).toFixed(2)           : "", styles: { fontStyle: "bold", halign: "center" } },
+          { content: mt > 0 ? formatRate(Math.round(amt / mt))     : "", styles: { fontStyle: "bold", halign: "center" } },
         ];
       }),
       { content: "", styles: { halign: "center" } },
@@ -443,7 +468,8 @@ export default function ComparativeStatement() {
     });
 
     // ── L1 Summary PDF ─────────────────────────────────────────────────────────
-    const l1Y = doc.lastAutoTable.finalY + 18;
+    doc.addPage();
+    const l1Y = 30;
     doc.setFontSize(9);
     doc.setFont(undefined, "bold");
     doc.setTextColor(0, 0, 0);
@@ -454,6 +480,7 @@ export default function ComparativeStatement() {
       { content: "No.",                 rowSpan: 2, styles: { halign: "center", valign: "middle" } },
       { content: "Description of Item", rowSpan: 2, styles: { halign: "left",   valign: "middle" } },
       { content: "Mt.",                 rowSpan: 2, styles: { halign: "center", valign: "middle" } },
+      { content: "Purchase Reference",  colSpan: 2, styles: { halign: "center", valign: "middle" } },
       ...suppliers.map(sup => ({
         content: sup,
         colSpan: 3,
@@ -462,6 +489,8 @@ export default function ComparativeStatement() {
     ];
 
     const l1Head2 = [
+      { content: "Lowest\nPurchase", styles: { halign: "center", valign: "middle" } },
+      { content: "Last\nPurchase",   styles: { halign: "center", valign: "middle" } },
       ...suppliers.flatMap(() => [
         { content: "Mt",     styles: { halign: "center", valign: "middle" } },
         { content: "Rate",   styles: { halign: "center", valign: "middle" } },
@@ -469,45 +498,66 @@ export default function ComparativeStatement() {
       ]),
     ];
 
-    const l1Body = l1Summary.rowDetails.map((r, i) => [
-      { content: i + 1,                                        styles: { halign: "center" } },
-      { content: cleanText(r.description) || "-",              styles: { halign: "left"   } },
-      { content: r.totalMt > 0 ? formatMT(r.totalMt) : "-",   styles: { halign: "center" } },
-      ...suppliers.flatMap(sup => {
-        const d = r.supplierData[sup];
-        const hasData = d && d.rate;
-        return [
-          { content: hasData ? formatMT(d.mt)        : "", styles: { halign: "center" } },
-          { content: hasData ? formatRate(d.rate)     : "", styles: { halign: "center", fontStyle: hasData ? "bold" : "normal" } },
-          { content: hasData ? formatAmount(d.amount) : "", styles: { halign: "center" } },
-        ];
-      }),
-    ]);
+    const l1Body = l1Summary.rowDetails.map((r, i) => {
+      // Find purchase data for this row via the original rows array
+      const origRow = rows[r.idx] || rows[i];
+      const lowestPurchaseContent = origRow && origRow.lowestPurchaseRate != null
+        ? (origRow.lowestPurchaseRate === 0
+            ? "0"
+            : `${origRow.lowestPurchaseDate ? origRow.lowestPurchaseDate + "\n" : ""}${formatRate(Math.round(origRow.lowestPurchaseRate))}`)
+        : "";
+      const lastPurchaseContent = origRow && origRow.lastPurchaseRate != null
+        ? (origRow.lastPurchaseRate === 0
+            ? "0"
+            : `${origRow.lastPurchaseDate ? origRow.lastPurchaseDate + "\n" : ""}${formatRate(Math.round(origRow.lastPurchaseRate))}`)
+        : "";
+
+      return [
+        { content: i + 1,                                        styles: { halign: "center" } },
+        { content: cleanText(r.description) || "-",              styles: { halign: "left"   } },
+        { content: r.totalMt > 0 ? parseFloat(r.totalMt).toFixed(2) : "-", styles: { halign: "center" } },
+        { content: lowestPurchaseContent,                        styles: { halign: "center" } },
+        { content: lastPurchaseContent,                          styles: { halign: "center" } },
+        ...suppliers.flatMap(sup => {
+          const d = r.supplierData[sup];
+          const hasData = d && d.rate;
+          return [
+            { content: hasData ? parseFloat(d.mt).toFixed(2) : "", styles: { halign: "center" } },
+            { content: hasData ? formatRate(d.rate)           : "", styles: { halign: "center", fontStyle: hasData ? "bold" : "normal" } },
+            { content: hasData ? formatAmount(d.amount)       : "", styles: { halign: "center" } },
+          ];
+        }),
+      ];
+    });
 
     l1Body.push([
       { content: "",                    styles: { fontStyle: "bold", halign: "center" } },
       { content: "Total MT / Avg Rate", styles: { fontStyle: "bold", halign: "left"   } },
       {
-        content: l1Summary.grandTotalMt > 0 ? formatMT(l1Summary.grandTotalMt) : "",
+        content: l1Summary.grandTotalMt > 0 ? parseFloat(l1Summary.grandTotalMt).toFixed(2) : "",
         styles: { fontStyle: "bold", halign: "center" },
       },
+      { content: qtyMtSummary.lowestPurchaseWeightedAvg !== null ? formatRate(Math.round(qtyMtSummary.lowestPurchaseWeightedAvg)) : "", styles: { fontStyle: "bold", halign: "center" } },
+      { content: qtyMtSummary.lastPurchaseWeightedAvg   !== null ? formatRate(Math.round(qtyMtSummary.lastPurchaseWeightedAvg))   : "", styles: { fontStyle: "bold", halign: "center" } },
       ...suppliers.flatMap(sup => {
         const t = l1Summary.supplierTotals[sup];
         return [
-          { content: t.totalMt > 0           ? formatMT(t.totalMt)                          : "", styles: { fontStyle: "bold", halign: "center" } },
-          { content: t.weightedAvgRate != null ? formatRate(Math.round(t.weightedAvgRate))   : "", styles: { fontStyle: "bold", halign: "center" } },
-          { content: t.totalAmount > 0        ? formatAmount(t.totalAmount)                  : "", styles: { fontStyle: "bold", halign: "center" } },
+          { content: t.totalMt > 0            ? parseFloat(t.totalMt).toFixed(2)              : "", styles: { fontStyle: "bold", halign: "center" } },
+          { content: t.weightedAvgRate != null ? formatRate(Math.round(t.weightedAvgRate))     : "", styles: { fontStyle: "bold", halign: "center" } },
+          { content: t.totalAmount > 0         ? formatAmount(t.totalAmount)                   : "", styles: { fontStyle: "bold", halign: "center" } },
         ];
       }),
     ]);
 
     const l1ColStyles = {
       0: { halign: "center", cellWidth: 16 },
-      1: { halign: "left",   cellWidth: 90 },
-      2: { halign: "center", cellWidth: 24 },
+      1: { halign: "left",   cellWidth: 80 },
+      2: { halign: "center", cellWidth: 22 },
+      3: { halign: "center", cellWidth: 52 },
+      4: { halign: "center", cellWidth: 52 },
     };
     suppliers.forEach((_, i) => {
-      const base = 3 + i * 3;
+      const base = 5 + i * 3;
       l1ColStyles[base]     = { halign: "center", cellWidth: 22 };
       l1ColStyles[base + 1] = { halign: "center", cellWidth: 30 };
       l1ColStyles[base + 2] = { halign: "center", cellWidth: 38 };
@@ -840,7 +890,7 @@ export default function ComparativeStatement() {
                   Total MT / Avg Rate
                 </td>
                 <td className="cs-td cs-td-sticky cs-td-mt cs-summary-total-mt">
-                  <span className="cs-avg-value">{qtyMtSummary.totalSectionMt > 0 ? formatMT(qtyMtSummary.totalSectionMt) : "—"}</span>
+                  <span className="cs-avg-value">{qtyMtSummary.totalSectionMt > 0 ? parseFloat(qtyMtSummary.totalSectionMt).toFixed(2) : "—"}</span>
                 </td>
                 <td className="cs-td cs-td-purchase cs-qty-mt-purchase">
                   {qtyMtSummary.lowestPurchaseWeightedAvg !== null
@@ -858,7 +908,7 @@ export default function ComparativeStatement() {
                   return (
                     <>
                       <td key={`${sup}-sum-mt`} className="cs-td cs-td-supplier-mt">
-                        {mt > 0 ? <span className="cs-rate-mt">{formatMT(mt)}</span> : null}
+                        {mt > 0 ? <span className="cs-rate-mt">{parseFloat(mt).toFixed(2)}</span> : null}
                       </td>
                       <td key={`${sup}-sum-rate`} className="cs-td cs-td-rate cs-td-avg-rate">
                         {mt > 0 ? <span className="cs-avg-value">₹ {formatRate(Math.round(amt / mt))}</span> : null}
@@ -888,11 +938,14 @@ export default function ComparativeStatement() {
                   <th className="cs-l1-th cs-l1-th-no"   rowSpan={2}>No.</th>
                   <th className="cs-l1-th cs-l1-th-desc" rowSpan={2}>Description of Item</th>
                   <th className="cs-l1-th cs-l1-th-mt"   rowSpan={2}>Mt.</th>
+                  <th className="cs-l1-th cs-l1-th-supplier" colSpan={2} style={{ textAlign: "center" }}>Purchase Reference</th>
                   {suppliers.map(sup => (
                     <th key={sup} className="cs-l1-th cs-l1-th-supplier" colSpan={3} style={{ textAlign: "center" }}>{sup}</th>
                   ))}
                 </tr>
                 <tr>
+                  <th className="cs-l1-th cs-l1-th-sub">Lowest Purchase</th>
+                  <th className="cs-l1-th cs-l1-th-sub">Last Purchase</th>
                   {suppliers.map(sup => (
                     <>
                       <th key={`${sup}-mt`}  className="cs-l1-th cs-l1-th-sub">Mt</th>
@@ -903,47 +956,76 @@ export default function ComparativeStatement() {
                 </tr>
               </thead>
               <tbody>
-                {l1Summary.rowDetails.map((r, i) => (
-                  <tr key={i} className="cs-l1-tr">
-                    <td className="cs-l1-sno">{i + 1}</td>
-                    <td className="cs-l1-desc">{r.description || "—"}</td>
-                    <td className="cs-l1-num">{r.totalMt > 0 ? formatMT(r.totalMt) : "—"}</td>
-                    {suppliers.map(sup => {
-                      const d = r.supplierData[sup];
-                      const hasData = d && d.rate;
-                      return (
-                        <>
-                          <td key={`${sup}-mt`}
-                            className={`cs-l1-num${hasData ? " cs-l1-cell-active" : " cs-l1-cell-empty"}`}>
-                            {hasData ? formatMT(d.mt) : ""}
-                          </td>
-                          <td key={`${sup}-rate`}
-                            className={`cs-l1-num cs-l1-rate-col${hasData ? " cs-l1-cell-active cs-l1-cell-bold" : " cs-l1-cell-empty"}`}>
-                            {hasData ? formatRate(d.rate) : ""}
-                          </td>
-                          <td key={`${sup}-amt`}
-                            className={`cs-l1-num cs-l1-amount-col${hasData ? " cs-l1-cell-active" : " cs-l1-cell-empty"}`}>
-                            {hasData ? formatAmount(d.amount) : ""}
-                          </td>
-                        </>
-                      );
-                    })}
-                  </tr>
-                ))}
+                {l1Summary.rowDetails.map((r, i) => {
+                  const origRow = rows[r.idx] !== undefined ? rows[r.idx] : rows[i];
+                  const renderPurchaseCell = (rate, date) => {
+                    if (rate == null) return null;
+                    if (rate === 0) return <span className="cs-purchase-rate">0</span>;
+                    return (
+                      <div className="cs-last-purchase-cell">
+                        {date && <span className="cs-purchase-date">{date}</span>}
+                        <span className="cs-purchase-rate">₹ {formatRate(Math.round(rate))}</span>
+                      </div>
+                    );
+                  };
+                  return (
+                    <tr key={i} className="cs-l1-tr">
+                      <td className="cs-l1-sno">{i + 1}</td>
+                      <td className="cs-l1-desc">{r.description || "—"}</td>
+                      <td className="cs-l1-num">{r.totalMt > 0 ? parseFloat(r.totalMt).toFixed(2) : "—"}</td>
+                      <td className="cs-l1-num cs-td-purchase">
+                        {origRow ? renderPurchaseCell(origRow.lowestPurchaseRate, origRow.lowestPurchaseDate) : null}
+                      </td>
+                      <td className="cs-l1-num cs-td-purchase">
+                        {origRow ? renderPurchaseCell(origRow.lastPurchaseRate, origRow.lastPurchaseDate) : null}
+                      </td>
+                      {suppliers.map(sup => {
+                        const d = r.supplierData[sup];
+                        const hasData = d && d.rate;
+                        return (
+                          <>
+                            <td key={`${sup}-mt`}
+                              className={`cs-l1-num${hasData ? " cs-l1-cell-active" : " cs-l1-cell-empty"}`}>
+                              {hasData ? parseFloat(d.mt).toFixed(2) : ""}
+                            </td>
+                            <td key={`${sup}-rate`}
+                              className={`cs-l1-num cs-l1-rate-col${hasData ? " cs-l1-cell-active cs-l1-cell-bold" : " cs-l1-cell-empty"}`}>
+                              {hasData ? formatRate(d.rate) : ""}
+                            </td>
+                            <td key={`${sup}-amt`}
+                              className={`cs-l1-num cs-l1-amount-col${hasData ? " cs-l1-cell-active" : " cs-l1-cell-empty"}`}>
+                              {hasData ? formatAmount(d.amount) : ""}
+                            </td>
+                          </>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
               </tbody>
               <tfoot>
                 <tr className="cs-l1-totals">
                   <td className="cs-l1-sno" />
                   <td className="cs-l1-totals-label">Total MT / Avg Rate</td>
                   <td className="cs-l1-num cs-l1-totals-grand-mt">
-                    {l1Summary.grandTotalMt > 0 ? formatMT(l1Summary.grandTotalMt) : "—"}
+                    {l1Summary.grandTotalMt > 0 ? parseFloat(l1Summary.grandTotalMt).toFixed(2) : "—"}
+                  </td>
+                  <td className="cs-l1-num cs-l1-totals-val">
+                    {qtyMtSummary.lowestPurchaseWeightedAvg !== null
+                      ? <span className="cs-avg-value">₹ {formatRate(Math.round(qtyMtSummary.lowestPurchaseWeightedAvg))}</span>
+                      : "—"}
+                  </td>
+                  <td className="cs-l1-num cs-l1-totals-val">
+                    {qtyMtSummary.lastPurchaseWeightedAvg !== null
+                      ? <span className="cs-avg-value">₹ {formatRate(Math.round(qtyMtSummary.lastPurchaseWeightedAvg))}</span>
+                      : "—"}
                   </td>
                   {suppliers.map(sup => {
                     const t = l1Summary.supplierTotals[sup];
                     return (
                       <>
                         <td key={`${sup}-tot-mt`}   className="cs-l1-num cs-l1-totals-val">
-                          {t.totalMt > 0 ? formatMT(t.totalMt) : "—"}
+                          {t.totalMt > 0 ? parseFloat(t.totalMt).toFixed(2) : "—"}
                         </td>
                         <td key={`${sup}-tot-rate`} className="cs-l1-num cs-l1-totals-avg">
                           {t.weightedAvgRate != null ? formatRate(Math.round(t.weightedAvgRate)) : "—"}
