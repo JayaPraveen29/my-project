@@ -282,12 +282,24 @@ export default function ComparativeStatement() {
     return (((newRate - baseRate) / baseRate) * 100).toFixed(2);
   };
 
+  // Format date from YYYY-MM-DD or DD-MM-YYYY to DD-MM-YY (2-digit year)
+  const formatDate = (dateStr) => {
+    if (!dateStr) return "";
+    // Handle YYYY-MM-DD
+    const isoMatch = String(dateStr).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (isoMatch) return `${isoMatch[3]}-${isoMatch[2]}-${isoMatch[1].slice(2)}`;
+    // Handle DD-MM-YYYY
+    const dmyMatch = String(dateStr).match(/^(\d{2})-(\d{2})-(\d{4})$/);
+    if (dmyMatch) return `${dmyMatch[1]}-${dmyMatch[2]}-${dmyMatch[3].slice(2)}`;
+    return dateStr;
+  };
+
   const uniqueFYs = [...new Set(allEntries.map(e => e.FinancialYear).filter(Boolean))].sort();
   const uniqueEnquiryNos = [...new Set(allEntries.map(e => e.No).filter(v => v != null))].sort((a, b) => a - b);
 
   // ── Export PDF ─────────────────────────────────────────────────────────────
   const exportPDF = () => {
-    const doc = new jsPDF("P", "pt", "a4");
+    const doc = new jsPDF("l", "pt", "a4");
     doc.setFontSize(13);
     doc.setFont(undefined, "bold");
     doc.text("Comparative Statement", 40, 30);
@@ -306,44 +318,62 @@ export default function ComparativeStatement() {
       { content: "Width",   rowSpan: 2, styles: { halign: "center", valign: "middle" } },
       { content: "Length",  rowSpan: 2, styles: { halign: "center", valign: "middle" } },
       { content: "Qty\n(MT)", rowSpan: 2, styles: { halign: "center", valign: "middle" } },
-      { content: "Purchase Reference", colSpan: 2, styles: { halign: "center", valign: "middle" } },
+      { content: "Lowest Purchase", colSpan: 2, styles: { halign: "center", valign: "middle" } },
+      { content: "Last Purchase",   colSpan: 2, styles: { halign: "center", valign: "middle" } },
       ...suppliers.map(sup => ({
         content: sup,
         colSpan: 2,
         styles: { halign: "center", valign: "middle", fontStyle: "bold" },
       })),
-      { content: "% vs\nLowest\nPurchase", rowSpan: 2, styles: { halign: "center", valign: "middle" } },
-      { content: "% vs\nLast\nPurchase",   rowSpan: 2, styles: { halign: "center", valign: "middle" } },
+      { content: "% vs\nLowest Purchase", rowSpan: 2, styles: { halign: "center", valign: "middle" } },
+      { content: "% vs\nLast Purchase",   rowSpan: 2, styles: { halign: "center", valign: "middle" } },
     ];
 
     const headRow2 = [
-      { content: "Lowest\nPurchase", styles: { halign: "center", valign: "middle" } },
-      { content: "Last\nPurchase",   styles: { halign: "center", valign: "middle" } },
+      { content: "Date",   styles: { halign: "center", valign: "middle" } },
+      { content: "Amount", styles: { halign: "center", valign: "middle" } },
+      { content: "Date",   styles: { halign: "center", valign: "middle" } },
+      { content: "Amount", styles: { halign: "center", valign: "middle" } },
       ...suppliers.flatMap(() => [
         { content: "MT",      styles: { halign: "center", valign: "middle" } },
         { content: "Rate/MT", styles: { halign: "center", valign: "middle" } },
       ]),
     ];
 
-    const fixedCols = 8;
+    // col indices: 0=SNo,1=Sec,2=Size,3=Width,4=Length,5=Qty,
+    //              6=LowestDate,7=LowestAmt,8=LastDate,9=LastAmt,
+    //              10..=suppliers, lastCol/lastCol2=% cols
+    const fixedCols = 10;
     const lastCol  = fixedCols + suppliers.length * 2;
     const lastCol2 = lastCol + 1;
 
+    // A4 landscape usable width ~762pt. Distribute remaining space across supplier cols.
+    const usableWidth = 762;
+    const fixedColsW  = 20 + 46 + 58 + 40 + 40 + 26 + 36 + 40 + 36 + 40; // 382
+    const pctColsW    = 36 + 36;                                             // 72
+    const remaining   = usableWidth - fixedColsW - pctColsW;
+    const nSup        = suppliers.length || 1;
+    const supTotal    = Math.max(Math.floor(remaining / nSup), 60);
+    const supMtW      = Math.round(supTotal * 0.38);
+    const supRateW    = supTotal - supMtW;
+
     const columnStyles = {
-      0: { halign: "center", cellWidth: 18 },
-      1: { halign: "left",   cellWidth: 34 },
-      2: { halign: "center", cellWidth: 42 },
-      3: { halign: "center", cellWidth: 26 },
-      4: { halign: "center", cellWidth: 26 },
-      5: { halign: "center", cellWidth: 22 },
-      6: { halign: "center", cellWidth: 54 },
-      7: { halign: "center", cellWidth: 54 },
-      [lastCol]:  { halign: "center", cellWidth: 30 },
-      [lastCol2]: { halign: "center", cellWidth: 30 },
+      0: { halign: "center", cellWidth: 20 },
+      1: { halign: "left",   cellWidth: 46 },
+      2: { halign: "center", cellWidth: 58 },
+      3: { halign: "center", cellWidth: 40 },
+      4: { halign: "center", cellWidth: 40 },
+      5: { halign: "center", cellWidth: 26 },
+      6: { halign: "center", cellWidth: 36 },
+      7: { halign: "center", cellWidth: 40 },
+      8: { halign: "center", cellWidth: 36 },
+      9: { halign: "center", cellWidth: 40 },
+      [lastCol]:  { halign: "center", cellWidth: 36 },
+      [lastCol2]: { halign: "center", cellWidth: 36 },
     };
     for (let i = 0; i < suppliers.length; i++) {
-      columnStyles[fixedCols + i * 2]     = { halign: "center", cellWidth: 22 };
-      columnStyles[fixedCols + i * 2 + 1] = { halign: "center", cellWidth: 32 };
+      columnStyles[fixedCols + i * 2]     = { halign: "center", cellWidth: supMtW };
+      columnStyles[fixedCols + i * 2 + 1] = { halign: "center", cellWidth: supRateW };
     }
 
     const cleanText = (text) => {
@@ -362,24 +392,32 @@ export default function ComparativeStatement() {
       return [
         { content: idx + 1,                          styles: { halign: "center" } },
         { content: cleanText(row.section) || "-",    styles: { halign: "left"   } },
-        { content: cleanText(row.size) || "-",       styles: { halign: "center", overflow: "visible", cellWidth: 42 } },
+        { content: cleanText(row.size) || "-",       styles: { halign: "center" } },
         { content: cleanText(row.width)  || "-",     styles: { halign: "center" } },
         { content: cleanText(row.length) || "-",     styles: { halign: "center" } },
         { content: formatMT(row.sectionMt),          styles: { halign: "center" } },
+        // Lowest Purchase — Date
         {
-          content: row.lowestPurchaseRate != null
-            ? (row.lowestPurchaseRate === 0
-                ? "0"
-                : `${row.lowestPurchaseDate ? row.lowestPurchaseDate + "\n" : ""}${formatRate(Math.round(row.lowestPurchaseRate))}`)
-            : "",
+          content: row.lowestPurchaseRate != null && row.lowestPurchaseRate !== 0 && row.lowestPurchaseDate
+            ? formatDate(row.lowestPurchaseDate) : (row.lowestPurchaseRate === 0 ? "0" : ""),
+          styles: { halign: "center", textColor: [80, 80, 80] },
+        },
+        // Lowest Purchase — Amount
+        {
+          content: row.lowestPurchaseRate != null && row.lowestPurchaseRate !== 0
+            ? formatRate(Math.round(row.lowestPurchaseRate)) : "",
           styles: { halign: "center" },
         },
+        // Last Purchase — Date
         {
-          content: row.lastPurchaseRate != null
-            ? (row.lastPurchaseRate === 0
-                ? "0"
-                : `${row.lastPurchaseDate ? row.lastPurchaseDate + "\n" : ""}${formatRate(Math.round(row.lastPurchaseRate))}`)
-            : "",
+          content: row.lastPurchaseRate != null && row.lastPurchaseRate !== 0 && row.lastPurchaseDate
+            ? formatDate(row.lastPurchaseDate) : (row.lastPurchaseRate === 0 ? "0" : ""),
+          styles: { halign: "center", textColor: [80, 80, 80] },
+        },
+        // Last Purchase — Amount
+        {
+          content: row.lastPurchaseRate != null && row.lastPurchaseRate !== 0
+            ? formatRate(Math.round(row.lastPurchaseRate)) : "",
           styles: { halign: "center" },
         },
         ...suppliers.flatMap(sup => {
@@ -395,7 +433,7 @@ export default function ComparativeStatement() {
           ];
         }),
         {
-          content: pctNum !== null ? `${pctNum > 0 ? "+" : ""}${Math.abs(pctNum)}%` : "",
+          content: pctNum !== null ? `${pctNum > 0 ? "+" : pctNum < 0 ? "-" : ""}${Math.abs(pctNum)}%` : "",
           styles: {
             halign: "center",
             textColor: pctNum !== null
@@ -404,7 +442,7 @@ export default function ComparativeStatement() {
           },
         },
         {
-          content: pctLastNum !== null ? `${pctLastNum > 0 ? "+" : ""}${Math.abs(pctLastNum)}%` : "",
+          content: pctLastNum !== null ? `${pctLastNum > 0 ? "+" : pctLastNum < 0 ? "-" : ""}${Math.abs(pctLastNum)}%` : "",
           styles: {
             halign: "center",
             textColor: pctLastNum !== null
@@ -419,7 +457,9 @@ export default function ComparativeStatement() {
       { content: "", styles: { halign: "center" } },
       { content: "Total MT / Avg Rate", colSpan: 4, styles: { fontStyle: "bold", halign: "left" } },
       { content: qtyMtSummary.totalSectionMt > 0 ? parseFloat(qtyMtSummary.totalSectionMt).toFixed(2) : "", styles: { fontStyle: "bold", halign: "center" } },
+      { content: "", styles: { halign: "center" } },
       { content: qtyMtSummary.lowestPurchaseWeightedAvg !== null ? formatRate(Math.round(qtyMtSummary.lowestPurchaseWeightedAvg)) : "", styles: { fontStyle: "bold", halign: "center" } },
+      { content: "", styles: { halign: "center" } },
       { content: qtyMtSummary.lastPurchaseWeightedAvg   !== null ? formatRate(Math.round(qtyMtSummary.lastPurchaseWeightedAvg))   : "", styles: { fontStyle: "bold", halign: "center" } },
       ...suppliers.flatMap(sup => {
         let amt = 0, mt = 0;
@@ -442,10 +482,10 @@ export default function ComparativeStatement() {
       body: [...body, summaryRow],
       theme: "grid",
       styles: {
-        fontSize: 6,
+        fontSize: 6.5,
         halign: "center",
         valign: "middle",
-        cellPadding: 1.5,
+        cellPadding: 2,
         lineColor: [0, 0, 0],
         lineWidth: 0.3,
         fillColor: [255, 255, 255],
@@ -456,7 +496,7 @@ export default function ComparativeStatement() {
         fillColor: [255, 255, 255],
         textColor: [0, 0, 0],
         fontStyle: "bold",
-        fontSize: 6.5,
+        fontSize: 7,
         lineColor: [0, 0, 0],
         lineWidth: 0.3,
         halign: "center",
@@ -465,6 +505,8 @@ export default function ComparativeStatement() {
       },
       alternateRowStyles: { fillColor: [255, 255, 255] },
       columnStyles,
+      margin: { left: 40, right: 40 },
+      tableWidth: "wrap",
     });
 
     // ── L1 Summary PDF ─────────────────────────────────────────────────────────
@@ -480,44 +522,66 @@ export default function ComparativeStatement() {
       { content: "No.",                 rowSpan: 2, styles: { halign: "center", valign: "middle" } },
       { content: "Description of Item", rowSpan: 2, styles: { halign: "left",   valign: "middle" } },
       { content: "Mt.",                 rowSpan: 2, styles: { halign: "center", valign: "middle" } },
-      { content: "Purchase Reference",  colSpan: 2, styles: { halign: "center", valign: "middle" } },
+      { content: "Lowest Purchase", colSpan: 2, styles: { halign: "center", valign: "middle" } },
+      { content: "Last Purchase",   colSpan: 2, styles: { halign: "center", valign: "middle" } },
       ...suppliers.map(sup => ({
         content: sup,
         colSpan: 3,
         styles: { halign: "center", valign: "middle", fontStyle: "bold" },
       })),
+      { content: "% Increase", colSpan: 2, styles: { halign: "center", valign: "middle" } },
     ];
 
     const l1Head2 = [
-      { content: "Lowest\nPurchase", styles: { halign: "center", valign: "middle" } },
-      { content: "Last\nPurchase",   styles: { halign: "center", valign: "middle" } },
+      { content: "Date",   styles: { halign: "center", valign: "middle" } },
+      { content: "Amount", styles: { halign: "center", valign: "middle" } },
+      { content: "Date",   styles: { halign: "center", valign: "middle" } },
+      { content: "Amount", styles: { halign: "center", valign: "middle" } },
       ...suppliers.flatMap(() => [
         { content: "Mt",     styles: { halign: "center", valign: "middle" } },
         { content: "Rate",   styles: { halign: "center", valign: "middle" } },
         { content: "Amount", styles: { halign: "center", valign: "middle" } },
       ]),
+      { content: "vs Lowest\nPurchase", styles: { halign: "center", valign: "middle" } },
+      { content: "vs Last\nPurchase",   styles: { halign: "center", valign: "middle" } },
     ];
 
     const l1Body = l1Summary.rowDetails.map((r, i) => {
-      // Find purchase data for this row via the original rows array
       const origRow = rows[r.idx] || rows[i];
-      const lowestPurchaseContent = origRow && origRow.lowestPurchaseRate != null
-        ? (origRow.lowestPurchaseRate === 0
-            ? "0"
-            : `${origRow.lowestPurchaseDate ? origRow.lowestPurchaseDate + "\n" : ""}${formatRate(Math.round(origRow.lowestPurchaseRate))}`)
-        : "";
-      const lastPurchaseContent = origRow && origRow.lastPurchaseRate != null
-        ? (origRow.lastPurchaseRate === 0
-            ? "0"
-            : `${origRow.lastPurchaseDate ? origRow.lastPurchaseDate + "\n" : ""}${formatRate(Math.round(origRow.lastPurchaseRate))}`)
-        : "";
+      const l1Rate       = r.l1Rate;
+      const pctLowest    = origRow ? formatPercent(l1Rate, origRow.lowestPurchaseRate) : null;
+      const pctLowestNum = pctLowest !== null ? parseFloat(pctLowest) : null;
+      const pctLast      = origRow ? formatPercent(l1Rate, origRow.lastPurchaseRate)   : null;
+      const pctLastNum   = pctLast  !== null ? parseFloat(pctLast)  : null;
 
       return [
-        { content: i + 1,                                        styles: { halign: "center" } },
-        { content: cleanText(r.description) || "-",              styles: { halign: "left"   } },
-        { content: r.totalMt > 0 ? parseFloat(r.totalMt).toFixed(2) : "-", styles: { halign: "center" } },
-        { content: lowestPurchaseContent,                        styles: { halign: "center" } },
-        { content: lastPurchaseContent,                          styles: { halign: "center" } },
+        { content: i + 1,                                                    styles: { halign: "center" } },
+        { content: cleanText(r.description) || "-",                          styles: { halign: "left"   } },
+        { content: r.totalMt > 0 ? parseFloat(r.totalMt).toFixed(2) : "-",  styles: { halign: "center" } },
+        // Lowest Purchase Date
+        {
+          content: origRow && origRow.lowestPurchaseRate != null && origRow.lowestPurchaseRate !== 0 && origRow.lowestPurchaseDate
+            ? formatDate(origRow.lowestPurchaseDate) : (origRow && origRow.lowestPurchaseRate === 0 ? "0" : ""),
+          styles: { halign: "center", textColor: [80, 80, 80] },
+        },
+        // Lowest Purchase Amount
+        {
+          content: origRow && origRow.lowestPurchaseRate != null && origRow.lowestPurchaseRate !== 0
+            ? formatRate(Math.round(origRow.lowestPurchaseRate)) : "",
+          styles: { halign: "center" },
+        },
+        // Last Purchase Date
+        {
+          content: origRow && origRow.lastPurchaseRate != null && origRow.lastPurchaseRate !== 0 && origRow.lastPurchaseDate
+            ? formatDate(origRow.lastPurchaseDate) : (origRow && origRow.lastPurchaseRate === 0 ? "0" : ""),
+          styles: { halign: "center", textColor: [80, 80, 80] },
+        },
+        // Last Purchase Amount
+        {
+          content: origRow && origRow.lastPurchaseRate != null && origRow.lastPurchaseRate !== 0
+            ? formatRate(Math.round(origRow.lastPurchaseRate)) : "",
+          styles: { halign: "center" },
+        },
         ...suppliers.flatMap(sup => {
           const d = r.supplierData[sup];
           const hasData = d && d.rate;
@@ -527,41 +591,65 @@ export default function ComparativeStatement() {
             { content: hasData ? formatAmount(d.amount)       : "", styles: { halign: "center" } },
           ];
         }),
+        {
+          content: pctLowestNum !== null ? `${pctLowestNum > 0 ? "+" : pctLowestNum < 0 ? "-" : ""}${Math.abs(pctLowestNum)}%` : "",
+          styles: { halign: "center", textColor: pctLowestNum !== null ? pctLowestNum > 0 ? [220, 38, 38] : pctLowestNum < 0 ? [22, 163, 74] : [100, 100, 100] : [150, 150, 150] },
+        },
+        {
+          content: pctLastNum !== null ? `${pctLastNum > 0 ? "+" : pctLastNum < 0 ? "-" : ""}${Math.abs(pctLastNum)}%` : "",
+          styles: { halign: "center", textColor: pctLastNum !== null ? pctLastNum > 0 ? [234, 88, 12] : pctLastNum < 0 ? [22, 163, 74] : [100, 100, 100] : [150, 150, 150] },
+        },
       ];
     });
 
     l1Body.push([
       { content: "",                    styles: { fontStyle: "bold", halign: "center" } },
       { content: "Total MT / Avg Rate", styles: { fontStyle: "bold", halign: "left"   } },
-      {
-        content: l1Summary.grandTotalMt > 0 ? parseFloat(l1Summary.grandTotalMt).toFixed(2) : "",
-        styles: { fontStyle: "bold", halign: "center" },
-      },
+      { content: l1Summary.grandTotalMt > 0 ? parseFloat(l1Summary.grandTotalMt).toFixed(2) : "", styles: { fontStyle: "bold", halign: "center" } },
+      { content: "", styles: { fontStyle: "bold", halign: "center" } },
       { content: qtyMtSummary.lowestPurchaseWeightedAvg !== null ? formatRate(Math.round(qtyMtSummary.lowestPurchaseWeightedAvg)) : "", styles: { fontStyle: "bold", halign: "center" } },
+      { content: "", styles: { fontStyle: "bold", halign: "center" } },
       { content: qtyMtSummary.lastPurchaseWeightedAvg   !== null ? formatRate(Math.round(qtyMtSummary.lastPurchaseWeightedAvg))   : "", styles: { fontStyle: "bold", halign: "center" } },
       ...suppliers.flatMap(sup => {
         const t = l1Summary.supplierTotals[sup];
         return [
-          { content: t.totalMt > 0            ? parseFloat(t.totalMt).toFixed(2)              : "", styles: { fontStyle: "bold", halign: "center" } },
-          { content: t.weightedAvgRate != null ? formatRate(Math.round(t.weightedAvgRate))     : "", styles: { fontStyle: "bold", halign: "center" } },
-          { content: t.totalAmount > 0         ? formatAmount(t.totalAmount)                   : "", styles: { fontStyle: "bold", halign: "center" } },
+          { content: t.totalMt > 0            ? parseFloat(t.totalMt).toFixed(2)            : "", styles: { fontStyle: "bold", halign: "center" } },
+          { content: t.weightedAvgRate != null ? formatRate(Math.round(t.weightedAvgRate))   : "", styles: { fontStyle: "bold", halign: "center" } },
+          { content: t.totalAmount > 0         ? formatAmount(t.totalAmount)                 : "", styles: { fontStyle: "bold", halign: "center" } },
         ];
       }),
+      { content: "", styles: { fontStyle: "bold", halign: "center" } },
+      { content: "", styles: { fontStyle: "bold", halign: "center" } },
     ]);
+
+    // L1 col layout: No(16)+Desc(88)+Mt(22)+LowDate(34)+LowAmt(38)+LastDate(34)+LastAmt(38) = 270
+    // % cols: 30+30 = 60 => remaining for suppliers: 762-270-60 = 432
+    const l1FixedW    = 16 + 88 + 22 + 34 + 38 + 34 + 38; // 270
+    const l1PctW      = 30 + 30;                            // 60
+    const l1Remaining = usableWidth - l1FixedW - l1PctW;
+    const l1SupTotal  = Math.max(Math.floor(l1Remaining / nSup), 70);
+    const l1MtW       = Math.round(l1SupTotal * 0.28);
+    const l1RateW     = Math.round(l1SupTotal * 0.33);
+    const l1AmtW      = l1SupTotal - l1MtW - l1RateW;
 
     const l1ColStyles = {
       0: { halign: "center", cellWidth: 16 },
-      1: { halign: "left",   cellWidth: 80 },
+      1: { halign: "left",   cellWidth: 88 },
       2: { halign: "center", cellWidth: 22 },
-      3: { halign: "center", cellWidth: 52 },
-      4: { halign: "center", cellWidth: 52 },
+      3: { halign: "center", cellWidth: 34, textColor: [80, 80, 80] },
+      4: { halign: "center", cellWidth: 38 },
+      5: { halign: "center", cellWidth: 34, textColor: [80, 80, 80] },
+      6: { halign: "center", cellWidth: 38 },
     };
     suppliers.forEach((_, i) => {
-      const base = 5 + i * 3;
-      l1ColStyles[base]     = { halign: "center", cellWidth: 22 };
-      l1ColStyles[base + 1] = { halign: "center", cellWidth: 30 };
-      l1ColStyles[base + 2] = { halign: "center", cellWidth: 38 };
+      const base = 7 + i * 3;
+      l1ColStyles[base]     = { halign: "center", cellWidth: l1MtW };
+      l1ColStyles[base + 1] = { halign: "center", cellWidth: l1RateW };
+      l1ColStyles[base + 2] = { halign: "center", cellWidth: l1AmtW };
     });
+    const pctBase = 7 + suppliers.length * 3;
+    l1ColStyles[pctBase]     = { halign: "center", cellWidth: 30 };
+    l1ColStyles[pctBase + 1] = { halign: "center", cellWidth: 30 };
 
     autoTable(doc, {
       startY: l1Y + 6,
@@ -592,6 +680,8 @@ export default function ComparativeStatement() {
       },
       alternateRowStyles: { fillColor: [255, 255, 255] },
       columnStyles: l1ColStyles,
+      margin: { left: 40, right: 40 },
+      tableWidth: "wrap",
     });
 
     const filterSuffix = filterFY ? `_${filterFY}` : filterDate ? `_${filterDate}` : "";
@@ -616,10 +706,10 @@ export default function ComparativeStatement() {
         idx + 1, row.section || "", row.size || "", row.width || "", row.length || "",
         row.sectionMt ? formatMT(row.sectionMt) : "",
         row.lowestPurchaseRate != null
-          ? (row.lowestPurchaseRate === 0 ? "0" : `${row.lowestPurchaseDate ? row.lowestPurchaseDate + "  " : ""}${formatRate(Math.round(row.lowestPurchaseRate))}`)
+          ? (row.lowestPurchaseRate === 0 ? "0" : `${row.lowestPurchaseDate ? formatDate(row.lowestPurchaseDate) + "  " : ""}${formatRate(Math.round(row.lowestPurchaseRate))}`)
           : "",
         row.lastPurchaseRate != null
-          ? (row.lastPurchaseRate === 0 ? "0" : `${row.lastPurchaseDate ? row.lastPurchaseDate + "  " : ""}${formatRate(Math.round(row.lastPurchaseRate))}`)
+          ? (row.lastPurchaseRate === 0 ? "0" : `${row.lastPurchaseDate ? formatDate(row.lastPurchaseDate) + "  " : ""}${formatRate(Math.round(row.lastPurchaseRate))}`)
           : "",
       ];
       suppliers.forEach(sup => {
@@ -631,8 +721,8 @@ export default function ComparativeStatement() {
         );
       });
       dr.push(
-        pctNum     !== null ? `${pctNum     > 0 ? "+" : ""}${Math.abs(pctNum)}%`     : "",
-        pctLastNum !== null ? `${pctLastNum > 0 ? "+" : ""}${Math.abs(pctLastNum)}%` : ""
+        pctNum     !== null ? `${pctNum     > 0 ? "+" : pctNum     < 0 ? "-" : ""}${Math.abs(pctNum)}%`     : "",
+        pctLastNum !== null ? `${pctLastNum > 0 ? "+" : pctLastNum < 0 ? "-" : ""}${Math.abs(pctLastNum)}%` : ""
       );
       return dr;
     });
@@ -670,42 +760,77 @@ export default function ComparativeStatement() {
     XLSX.utils.book_append_sheet(wb, ws, "Comparative Statement");
 
     // ── L1 Summary Excel sheet ─────────────────────────────────────────────────
-    const l1H1 = ["No.", "Description of Item", "Mt."];
-    const l1H2 = ["", "", ""];
+    const l1H1 = ["No.", "Description of Item", "Mt.", "Lowest Purchase", "", "Last Purchase", ""];
+    const l1H2 = ["", "", "", "Date", "Amount", "Date", "Amount"];
     suppliers.forEach(sup => { l1H1.push(sup, "", ""); l1H2.push("Mt", "Rate", "Amount"); });
+    l1H1.push("% Increase", "");
+    l1H2.push("vs Lowest Purchase", "vs Last Purchase");
 
     const l1DataRows = l1Summary.rowDetails.map((r, i) => {
-      const dr = [i + 1, r.description || "", r.totalMt > 0 ? formatMT(r.totalMt) : ""];
+      const origRow = rows[r.idx] !== undefined ? rows[r.idx] : rows[i];
+      const l1Rate       = r.l1Rate;
+      const pctLowest    = origRow ? formatPercent(l1Rate, origRow.lowestPurchaseRate) : null;
+      const pctLowestNum = pctLowest !== null ? parseFloat(pctLowest) : null;
+      const pctLast      = origRow ? formatPercent(l1Rate, origRow.lastPurchaseRate)   : null;
+      const pctLastNum   = pctLast  !== null ? parseFloat(pctLast)  : null;
+      const dr = [
+        i + 1,
+        r.description || "",
+        r.totalMt > 0 ? parseFloat(r.totalMt).toFixed(2) : "",
+        origRow && origRow.lowestPurchaseRate != null
+          ? (origRow.lowestPurchaseRate === 0 ? "0" : `${origRow.lowestPurchaseDate ? formatDate(origRow.lowestPurchaseDate) + "  " : ""}${formatRate(Math.round(origRow.lowestPurchaseRate))}`)
+          : "",
+        origRow && origRow.lastPurchaseRate != null
+          ? (origRow.lastPurchaseRate === 0 ? "0" : `${origRow.lastPurchaseDate ? formatDate(origRow.lastPurchaseDate) + "  " : ""}${formatRate(Math.round(origRow.lastPurchaseRate))}`)
+          : "",
+      ];
       suppliers.forEach(sup => {
         const d = r.supplierData[sup];
         const hasData = d && d.rate;
-        dr.push(hasData ? formatMT(d.mt) : "", hasData ? formatRate(d.rate) : "", hasData ? formatAmount(d.amount) : "");
+        dr.push(
+          hasData ? parseFloat(d.mt).toFixed(2) : "",
+          hasData ? formatRate(d.rate)           : "",
+          hasData ? formatAmount(d.amount)       : ""
+        );
       });
+      dr.push(
+        pctLowestNum !== null ? `${pctLowestNum > 0 ? "+" : pctLowestNum < 0 ? "-" : ""}${Math.abs(pctLowestNum)}%` : "",
+        pctLastNum   !== null ? `${pctLastNum   > 0 ? "+" : pctLastNum   < 0 ? "-" : ""}${Math.abs(pctLastNum)}%`   : ""
+      );
       return dr;
     });
 
-    const l1TotRow = ["", "Total MT / Avg Rate", l1Summary.grandTotalMt > 0 ? formatMT(l1Summary.grandTotalMt) : ""];
+    const l1TotRow = ["", "Total MT / Avg Rate", l1Summary.grandTotalMt > 0 ? parseFloat(l1Summary.grandTotalMt).toFixed(2) : ""];
+    l1TotRow.push(
+      qtyMtSummary.lowestPurchaseWeightedAvg !== null ? formatRate(Math.round(qtyMtSummary.lowestPurchaseWeightedAvg)) : "",
+      qtyMtSummary.lastPurchaseWeightedAvg   !== null ? formatRate(Math.round(qtyMtSummary.lastPurchaseWeightedAvg))   : ""
+    );
     suppliers.forEach(sup => {
       const t = l1Summary.supplierTotals[sup];
       l1TotRow.push(
-        t.totalMt > 0           ? formatMT(t.totalMt)                          : "",
+        t.totalMt > 0            ? parseFloat(t.totalMt).toFixed(2)            : "",
         t.weightedAvgRate != null ? formatRate(Math.round(t.weightedAvgRate))   : "",
-        t.totalAmount > 0        ? formatAmount(t.totalAmount)                  : ""
+        t.totalAmount > 0         ? formatAmount(t.totalAmount)                 : ""
       );
     });
+    l1TotRow.push("", "");
 
     const wsL1 = XLSX.utils.aoa_to_sheet([l1H1, l1H2, ...l1DataRows, l1TotRow]);
     const l1Merges = [
       { s: { r: 0, c: 0 }, e: { r: 1, c: 0 } },
       { s: { r: 0, c: 1 }, e: { r: 1, c: 1 } },
       { s: { r: 0, c: 2 }, e: { r: 1, c: 2 } },
+      { s: { r: 0, c: 3 }, e: { r: 0, c: 4 } },  // Lowest Purchase
+      { s: { r: 0, c: 5 }, e: { r: 0, c: 6 } },  // Last Purchase
     ];
-    let lc = 3;
+    let lc = 5;
     suppliers.forEach(() => { l1Merges.push({ s: { r: 0, c: lc }, e: { r: 0, c: lc + 2 } }); lc += 3; });
+    l1Merges.push({ s: { r: 0, c: lc }, e: { r: 0, c: lc + 1 } }); // % Increase
     wsL1["!merges"] = l1Merges;
     wsL1["!freeze"] = { ySplit: 2 };
-    const l1ColW = [6, 32, 10];
+    const l1ColW = [6, 32, 10, 20, 20];
     suppliers.forEach(() => { l1ColW.push(10, 14, 16); });
+    l1ColW.push(18, 18);
     wsL1["!cols"] = l1ColW.map(w => ({ wch: w }));
     XLSX.utils.book_append_sheet(wb, wsL1, "L1 Summary");
 
@@ -786,7 +911,8 @@ export default function ComparativeStatement() {
                 <th className="cs-th cs-th-sticky cs-th-size"    rowSpan={2}>Width</th>
                 <th className="cs-th cs-th-sticky cs-th-size"    rowSpan={2}>Length</th>
                 <th className="cs-th cs-th-sticky cs-th-mt"      rowSpan={2}>Qty (MT)</th>
-                <th className="cs-th cs-th-purchase" colSpan={2}>Purchase Reference</th>
+                <th className="cs-th cs-th-purchase" colSpan={2}>Lowest Purchase</th>
+                <th className="cs-th cs-th-purchase" colSpan={2}>Last Purchase</th>
                 {suppliers.map(sup => (
                   <th key={sup} className="cs-th cs-th-supplier" colSpan={2}>
                     <div className="cs-supplier-name">{sup}</div>
@@ -796,8 +922,10 @@ export default function ComparativeStatement() {
                 <th className="cs-th cs-th-pct-last" rowSpan={2}>% Increase<br /><span className="cs-th-pct-sub">vs Last Purchase</span></th>
               </tr>
               <tr className="cs-thead-subrow">
-                <th className="cs-th cs-th-purchase-sub">Lowest Purchase<br /><span className="cs-th-sub-label">(₹/MT)</span></th>
-                <th className="cs-th cs-th-purchase-sub">Last Purchase<br /><span className="cs-th-sub-label">(₹/MT)</span></th>
+                <th className="cs-th cs-th-purchase-sub">Date</th>
+                <th className="cs-th cs-th-purchase-sub">Amount</th>
+                <th className="cs-th cs-th-purchase-sub">Date</th>
+                <th className="cs-th cs-th-purchase-sub">Amount</th>
                 {suppliers.map(sup => (
                   <>
                     <th key={`${sup}-mt`}   className="cs-th cs-th-supplier-sub">MT</th>
@@ -823,28 +951,24 @@ export default function ComparativeStatement() {
                     <td className="cs-td cs-td-sticky cs-td-size">{row.length || <span className="cs-na">—</span>}</td>
                     <td className="cs-td cs-td-sticky cs-td-mt">{formatMT(row.sectionMt)}</td>
                     <td className="cs-td cs-td-purchase">
-                      {row.lowestPurchaseRate != null ? (
-                        row.lowestPurchaseRate === 0 ? (
-                          <span className="cs-purchase-rate">0</span>
-                        ) : (
-                          <div className="cs-last-purchase-cell">
-                            {row.lowestPurchaseDate && <span className="cs-purchase-date">{row.lowestPurchaseDate}</span>}
-                            <span className="cs-purchase-rate">₹ {formatRate(Math.round(row.lowestPurchaseRate))}</span>
-                          </div>
-                        )
-                      ) : null}
+                      {row.lowestPurchaseRate != null && row.lowestPurchaseRate !== 0
+                        ? (row.lowestPurchaseDate ? formatDate(row.lowestPurchaseDate) : "")
+                        : (row.lowestPurchaseRate === 0 ? "0" : null)}
                     </td>
                     <td className="cs-td cs-td-purchase">
-                      {row.lastPurchaseRate != null ? (
-                        row.lastPurchaseRate === 0 ? (
-                          <span className="cs-purchase-rate">0</span>
-                        ) : (
-                          <div className="cs-last-purchase-cell">
-                            {row.lastPurchaseDate && <span className="cs-purchase-date">{row.lastPurchaseDate}</span>}
-                            <span className="cs-purchase-rate">₹ {formatRate(Math.round(row.lastPurchaseRate))}</span>
-                          </div>
-                        )
-                      ) : null}
+                      {row.lowestPurchaseRate != null && row.lowestPurchaseRate !== 0
+                        ? <span className="cs-purchase-rate">₹ {formatRate(Math.round(row.lowestPurchaseRate))}</span>
+                        : null}
+                    </td>
+                    <td className="cs-td cs-td-purchase">
+                      {row.lastPurchaseRate != null && row.lastPurchaseRate !== 0
+                        ? (row.lastPurchaseDate ? formatDate(row.lastPurchaseDate) : "")
+                        : (row.lastPurchaseRate === 0 ? "0" : null)}
+                    </td>
+                    <td className="cs-td cs-td-purchase">
+                      {row.lastPurchaseRate != null && row.lastPurchaseRate !== 0
+                        ? <span className="cs-purchase-rate">₹ {formatRate(Math.round(row.lastPurchaseRate))}</span>
+                        : null}
                     </td>
                     {suppliers.map(sup => {
                       const rateObj    = row.rates[sup];
@@ -871,12 +995,12 @@ export default function ComparativeStatement() {
                     })}
                     <td className={`cs-td cs-td-pct${pctNum !== null ? (pctNum > 0 ? " cs-td-pct--up" : pctNum < 0 ? " cs-td-pct--down" : " cs-td-pct--flat") : ""}`}>
                       {pctNum !== null
-                        ? <span className="cs-pct-value">{pctNum > 0 ? "+" : ""}{Math.abs(pctNum)}%</span>
+                        ? <span className="cs-pct-value">{pctNum > 0 ? "+" : pctNum < 0 ? "-" : ""}{Math.abs(pctNum)}%</span>
                         : <span className="cs-no-quote">—</span>}
                     </td>
                     <td className={`cs-td cs-td-pct-last${pctLastNum !== null ? (pctLastNum > 0 ? " cs-td-pct-last--up" : pctLastNum < 0 ? " cs-td-pct-last--down" : " cs-td-pct-last--flat") : ""}`}>
                       {pctLastNum !== null
-                        ? <span className="cs-pct-value">{pctLastNum > 0 ? "+" : ""}{Math.abs(pctLastNum)}%</span>
+                        ? <span className="cs-pct-value">{pctLastNum > 0 ? "+" : pctLastNum < 0 ? "-" : ""}{Math.abs(pctLastNum)}%</span>
                         : <span className="cs-no-quote">—</span>}
                     </td>
                   </tr>
@@ -893,9 +1017,13 @@ export default function ComparativeStatement() {
                   <span className="cs-avg-value">{qtyMtSummary.totalSectionMt > 0 ? parseFloat(qtyMtSummary.totalSectionMt).toFixed(2) : "—"}</span>
                 </td>
                 <td className="cs-td cs-td-purchase cs-qty-mt-purchase">
+                </td>
+                <td className="cs-td cs-td-purchase cs-qty-mt-purchase">
                   {qtyMtSummary.lowestPurchaseWeightedAvg !== null
                     ? <span className="cs-avg-value">₹ {formatRate(Math.round(qtyMtSummary.lowestPurchaseWeightedAvg))}</span>
                     : null}
+                </td>
+                <td className="cs-td cs-td-purchase cs-qty-mt-purchase">
                 </td>
                 <td className="cs-td cs-td-purchase cs-qty-mt-purchase">
                   {qtyMtSummary.lastPurchaseWeightedAvg !== null
@@ -938,21 +1066,27 @@ export default function ComparativeStatement() {
                   <th className="cs-l1-th cs-l1-th-no"   rowSpan={2}>No.</th>
                   <th className="cs-l1-th cs-l1-th-desc" rowSpan={2}>Description of Item</th>
                   <th className="cs-l1-th cs-l1-th-mt"   rowSpan={2}>Mt.</th>
-                  <th className="cs-l1-th cs-l1-th-supplier" colSpan={2} style={{ textAlign: "center" }}>Purchase Reference</th>
+                  <th className="cs-l1-th cs-l1-th-supplier" colSpan={2} style={{ textAlign: "center" }}>Lowest Purchase</th>
+                  <th className="cs-l1-th cs-l1-th-supplier" colSpan={2} style={{ textAlign: "center" }}>Last Purchase</th>
                   {suppliers.map(sup => (
                     <th key={sup} className="cs-l1-th cs-l1-th-supplier" colSpan={3} style={{ textAlign: "center" }}>{sup}</th>
                   ))}
+                  <th className="cs-l1-th cs-l1-th-pct" colSpan={2} style={{ textAlign: "center" }}>% Increase</th>
                 </tr>
                 <tr>
-                  <th className="cs-l1-th cs-l1-th-sub">Lowest Purchase</th>
-                  <th className="cs-l1-th cs-l1-th-sub">Last Purchase</th>
+                  <th className="cs-l1-th cs-l1-th-sub">Date</th>
+                  <th className="cs-l1-th cs-l1-th-sub">Amount</th>
+                  <th className="cs-l1-th cs-l1-th-sub">Date</th>
+                  <th className="cs-l1-th cs-l1-th-sub">Amount</th>
                   {suppliers.map(sup => (
                     <>
-                      <th key={`${sup}-mt`}  className="cs-l1-th cs-l1-th-sub">Mt</th>
+                      <th key={`${sup}-mt`}   className="cs-l1-th cs-l1-th-sub">Mt</th>
                       <th key={`${sup}-rate`} className="cs-l1-th cs-l1-th-sub">Rate</th>
                       <th key={`${sup}-amt`}  className="cs-l1-th cs-l1-th-sub">Amount</th>
                     </>
                   ))}
+                  <th className="cs-l1-th cs-l1-th-sub">vs Lowest Purchase</th>
+                  <th className="cs-l1-th cs-l1-th-sub">vs Last Purchase</th>
                 </tr>
               </thead>
               <tbody>
@@ -962,22 +1096,41 @@ export default function ComparativeStatement() {
                     if (rate == null) return null;
                     if (rate === 0) return <span className="cs-purchase-rate">0</span>;
                     return (
-                      <div className="cs-last-purchase-cell">
-                        {date && <span className="cs-purchase-date">{date}</span>}
+                      <div className="cs-last-purchase-cell cs-purchase-inline">
+                        {date && <span className="cs-purchase-date">{formatDate(date)}</span>}
                         <span className="cs-purchase-rate">₹ {formatRate(Math.round(rate))}</span>
                       </div>
                     );
                   };
+                  const l1Rate = r.l1Rate;
+                  const pctLowest    = origRow ? formatPercent(l1Rate, origRow.lowestPurchaseRate) : null;
+                  const pctLowestNum = pctLowest    !== null ? parseFloat(pctLowest)    : null;
+                  const pctLast      = origRow ? formatPercent(l1Rate, origRow.lastPurchaseRate)   : null;
+                  const pctLastNum   = pctLast      !== null ? parseFloat(pctLast)      : null;
                   return (
                     <tr key={i} className="cs-l1-tr">
                       <td className="cs-l1-sno">{i + 1}</td>
                       <td className="cs-l1-desc">{r.description || "—"}</td>
                       <td className="cs-l1-num">{r.totalMt > 0 ? parseFloat(r.totalMt).toFixed(2) : "—"}</td>
                       <td className="cs-l1-num cs-td-purchase">
-                        {origRow ? renderPurchaseCell(origRow.lowestPurchaseRate, origRow.lowestPurchaseDate) : null}
+                        {origRow && origRow.lowestPurchaseRate != null && origRow.lowestPurchaseRate !== 0
+                          ? (origRow.lowestPurchaseDate ? formatDate(origRow.lowestPurchaseDate) : "")
+                          : (origRow && origRow.lowestPurchaseRate === 0 ? "0" : null)}
                       </td>
                       <td className="cs-l1-num cs-td-purchase">
-                        {origRow ? renderPurchaseCell(origRow.lastPurchaseRate, origRow.lastPurchaseDate) : null}
+                        {origRow && origRow.lowestPurchaseRate != null && origRow.lowestPurchaseRate !== 0
+                          ? <span className="cs-purchase-rate">₹ {formatRate(Math.round(origRow.lowestPurchaseRate))}</span>
+                          : null}
+                      </td>
+                      <td className="cs-l1-num cs-td-purchase">
+                        {origRow && origRow.lastPurchaseRate != null && origRow.lastPurchaseRate !== 0
+                          ? (origRow.lastPurchaseDate ? formatDate(origRow.lastPurchaseDate) : "")
+                          : (origRow && origRow.lastPurchaseRate === 0 ? "0" : null)}
+                      </td>
+                      <td className="cs-l1-num cs-td-purchase">
+                        {origRow && origRow.lastPurchaseRate != null && origRow.lastPurchaseRate !== 0
+                          ? <span className="cs-purchase-rate">₹ {formatRate(Math.round(origRow.lastPurchaseRate))}</span>
+                          : null}
                       </td>
                       {suppliers.map(sup => {
                         const d = r.supplierData[sup];
@@ -999,6 +1152,16 @@ export default function ComparativeStatement() {
                           </>
                         );
                       })}
+                      <td className={`cs-l1-num${pctLowestNum !== null ? (pctLowestNum > 0 ? " cs-td-pct--up" : pctLowestNum < 0 ? " cs-td-pct--down" : " cs-td-pct--flat") : ""}`}>
+                        {pctLowestNum !== null
+                          ? <span className="cs-pct-value">{pctLowestNum > 0 ? "+" : pctLowestNum < 0 ? "-" : ""}{Math.abs(pctLowestNum)}%</span>
+                          : <span className="cs-no-quote">—</span>}
+                      </td>
+                      <td className={`cs-l1-num${pctLastNum !== null ? (pctLastNum > 0 ? " cs-td-pct-last--up" : pctLastNum < 0 ? " cs-td-pct-last--down" : " cs-td-pct-last--flat") : ""}`}>
+                        {pctLastNum !== null
+                          ? <span className="cs-pct-value">{pctLastNum > 0 ? "+" : pctLastNum < 0 ? "-" : ""}{Math.abs(pctLastNum)}%</span>
+                          : <span className="cs-no-quote">—</span>}
+                      </td>
                     </tr>
                   );
                 })}
@@ -1011,9 +1174,13 @@ export default function ComparativeStatement() {
                     {l1Summary.grandTotalMt > 0 ? parseFloat(l1Summary.grandTotalMt).toFixed(2) : "—"}
                   </td>
                   <td className="cs-l1-num cs-l1-totals-val">
+                  </td>
+                  <td className="cs-l1-num cs-l1-totals-val">
                     {qtyMtSummary.lowestPurchaseWeightedAvg !== null
                       ? <span className="cs-avg-value">₹ {formatRate(Math.round(qtyMtSummary.lowestPurchaseWeightedAvg))}</span>
                       : "—"}
+                  </td>
+                  <td className="cs-l1-num cs-l1-totals-val">
                   </td>
                   <td className="cs-l1-num cs-l1-totals-val">
                     {qtyMtSummary.lastPurchaseWeightedAvg !== null
@@ -1036,6 +1203,8 @@ export default function ComparativeStatement() {
                       </>
                     );
                   })}
+                  <td className="cs-l1-num" />
+                  <td className="cs-l1-num" />
                 </tr>
               </tfoot>
             </table>
