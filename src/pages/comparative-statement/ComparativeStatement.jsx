@@ -52,12 +52,8 @@ export default function ComparativeStatement() {
   }, [filterFY, filterEnquiryNo, filterDate, filterEndDate, allEntries]);
 
   // ── Build purchase rate lookup ─────────────────────────────────────────────
-  // Returns: lookup (exact key → data), sectionSet, partialMap (for higher-length fallback)
-  // Each lookup entry now also carries: altSection, altSize, altWidth, altLength
-  // so we know what was actually matched (for "Alternative item" display).
   const buildPurchaseLookup = () => {
     const sectionSet = new Set();
-    // dateMap key: "section||size||width||length"
     const dateMap = new Map();
 
     purchaseEntries.forEach(entry => {
@@ -103,7 +99,6 @@ export default function ComparativeStatement() {
       });
     });
 
-    // ── Build a secondary map: "section||size||width" → array of { length (numeric), lookupData, lengthVal }
     const partialMap = new Map();
     lookup.forEach((data, key) => {
       const parts = key.split("||");
@@ -127,21 +122,17 @@ export default function ComparativeStatement() {
   };
 
   // ── Helper: get purchase data for a row, with higher-length fallback ───────
-  // Returns: { ...lookupData, isAlternative: bool, altSection, altSize, altWidth, altLength }
-  // or null (section exists but no rate found) or undefined (section never in purchases)
   const getPurchaseData = (lookup, sectionSet, partialMap, section, size, width, length) => {
     const exactKey = `${section}||${size}||${width}||${length}`;
     if (lookup.has(exactKey)) {
       return { ...lookup.get(exactKey), isAlternative: false, altSection: section, altSize: size, altWidth: width, altLength: length };
     }
 
-    // Fallback: same section+size+width, any length that is >= enquiry length
     const partialKey = `${section}||${size}||${width}`;
     const enquiryLen = parseFloat(length) || 0;
     if (partialMap.has(partialKey)) {
       const candidates = partialMap.get(partialKey).filter(c => c.lengthNum >= enquiryLen);
       if (candidates.length > 0) {
-        // Pick the candidate with the smallest length that is still >= enquiry length
         candidates.sort((a, b) => a.lengthNum - b.lengthNum);
         const best = candidates[0];
         return {
@@ -155,9 +146,8 @@ export default function ComparativeStatement() {
       }
     }
 
-    // No match at all — if section exists in purchases, return null sentinel (rate = 0)
     if (sectionSet.has(section)) return null;
-    return undefined; // section never appeared in purchases
+    return undefined;
   };
 
   // ── Build pivot table data ─────────────────────────────────────────────────
@@ -186,16 +176,12 @@ export default function ComparativeStatement() {
           const purchaseData = getPurchaseData(purchaseLookup, sectionSet, partialMap, section, size, width, length);
           const sectionExists = sectionSet.has(section);
 
-          // purchaseData === undefined  → section never in purchases → show nothing
-          // purchaseData === null       → section exists but no matching rate → was 0, now still null/0
-          // purchaseData.isAlternative  → fallback used, show as Alternative item
           rowMap.set(key, {
             section, size, width, length, sectionMt,
             lowestPurchaseRate: purchaseData ? purchaseData.lowestRate : (sectionExists ? 0 : null),
             lowestPurchaseDate: purchaseData ? purchaseData.lowestDate : null,
             lastPurchaseRate:   purchaseData ? purchaseData.lastRate   : (sectionExists ? 0 : null),
             lastPurchaseDate:   purchaseData ? purchaseData.lastDate   : null,
-            // Alternative item info
             isAlternative: purchaseData ? purchaseData.isAlternative : false,
             altSection: purchaseData ? purchaseData.altSection : section,
             altSize:    purchaseData ? purchaseData.altSize    : size,
@@ -352,11 +338,11 @@ export default function ComparativeStatement() {
   };
 
   // ── Build alternative item label ───────────────────────────────────────────
-  // e.g. "MSPL - 25 x 2000 x 8000" (the actually matched purchase item)
+  // Format: "HRS - 3.15 x 1250 x 6300 - Alt"
   const buildAltLabel = (row) => {
     if (!row.isAlternative) return null;
     const dims = [row.altSize, row.altWidth, row.altLength].filter(Boolean).join(" x ");
-    return [row.altSection, dims].filter(Boolean).join(" - ");
+    return [row.altSection, dims].filter(Boolean).join(" - ") + " - Alt";
   };
 
   const uniqueFYs = [...new Set(allEntries.map(e => e.FinancialYear).filter(Boolean))].sort();
@@ -386,10 +372,7 @@ export default function ComparativeStatement() {
         .replace(/[^\x00-\x7F]/g, c => c === "₹" ? "Rs." : "");
     };
 
-    // ── Page 1: Comparative Statement ─────────────────────────────────────────
     const headingInfo = buildPdfHeadingInfo();
-
-    // Title and filter info on a SINGLE line
     const fullTitle = headingInfo
       ? `Comparative Statement - ${headingInfo}`
       : "Comparative Statement";
@@ -401,8 +384,6 @@ export default function ComparativeStatement() {
 
     const startY = 38;
 
-    // S.No col: minWidth 26, maxWidth 32 (wider so "S.No" fits on one line)
-    // Description col: minWidth 50, maxWidth 90 (reduced gap)
     const headRow1 = [
       { content: "S.No",       rowSpan: 2, styles: { halign: "center", valign: "middle" } },
       { content: "Description",rowSpan: 2, styles: { halign: "left",   valign: "middle" } },
@@ -429,7 +410,6 @@ export default function ComparativeStatement() {
       ]),
     ];
 
-    // ── Dynamic column widths for Comparative Statement ──
     const csCharWidth = 4.5;
     const totalCSCols = 7 + suppliers.length * 2 + 2;
     const csColMaxChars = new Array(totalCSCols).fill(0);
@@ -448,12 +428,12 @@ export default function ComparativeStatement() {
       }
     });
 
-    // Build body rows — description may include "\nAlternative item: ..." on next line
     const allCSBodyRows = [...rows.map((row, idx) => {
       const dims = [row.size, row.width, row.length].filter(Boolean).join(" x ");
       let description = cleanText([row.section, dims].filter(Boolean).join(" - ")) || "-";
       const altLabel = buildAltLabel(row);
-      if (altLabel) description += `\nAlt item: ${cleanText(altLabel)}`;
+      // ── CHANGED: no "Alt item:" prefix; altLabel already ends with " - Alt"
+      if (altLabel) description += `\n${cleanText(altLabel)}`;
 
       const pct     = formatPercent(row.minRate, row.lowestPurchaseRate);
       const pctNum  = pct  !== null ? parseFloat(pct)  : null;
@@ -520,7 +500,6 @@ export default function ComparativeStatement() {
       });
     });
 
-    // S.No min=26, max=32 (wider); Description min=50, max=90 (reduced gap)
     const csMinWidths = [26, 50, 18, 26, 30, 26, 30];
     suppliers.forEach(() => { csMinWidths.push(18, 26); });
     csMinWidths.push(22, 22);
@@ -545,7 +524,8 @@ export default function ComparativeStatement() {
       const dims = [row.size, row.width, row.length].filter(Boolean).join(" x ");
       let description = cleanText([row.section, dims].filter(Boolean).join(" - ")) || "-";
       const altLabel = buildAltLabel(row);
-      if (altLabel) description += `\nAlt item: ${cleanText(altLabel)}`;
+      // ── CHANGED: no "Alt item:" prefix
+      if (altLabel) description += `\n${cleanText(altLabel)}`;
 
       const pct        = formatPercent(row.minRate, row.lowestPurchaseRate);
       const pctNum     = pct     !== null ? parseFloat(pct)     : null;
@@ -681,7 +661,6 @@ export default function ComparativeStatement() {
     doc.addPage();
     const l1Y = 28;
 
-    // L1 title on single line
     const l1FullTitle = headingInfo
       ? `L1 Rate Summary - ${headingInfo}`
       : "L1 Rate Summary";
@@ -728,11 +707,11 @@ export default function ComparativeStatement() {
       const pctLast      = origRow ? formatPercent(l1Rate, origRow.lastPurchaseRate)   : null;
       const pctLastNum   = pctLast  !== null ? parseFloat(pctLast)  : null;
 
-      // Description with alt item label on next line if applicable
       let descContent = cleanText(r.description) || "-";
       if (origRow && origRow.isAlternative) {
         const altLabel = buildAltLabel(origRow);
-        if (altLabel) descContent += `\nAlt item: ${cleanText(altLabel)}`;
+        // ── CHANGED: no "Alt item:" prefix
+        if (altLabel) descContent += `\n${cleanText(altLabel)}`;
       }
 
       return [
@@ -799,7 +778,6 @@ export default function ComparativeStatement() {
       { content: "", styles: { fontStyle: "bold", halign: "center" } },
     ]);
 
-    // ── Dynamic column widths for L1 Summary ──────────────────────────────────
     const charWidth = 4.5;
     const totalL1Cols = 7 + suppliers.length * 3 + 2;
     const colMaxChars = new Array(totalL1Cols).fill(0);
@@ -829,7 +807,6 @@ export default function ComparativeStatement() {
       });
     });
 
-    // No col min=20, max=28; Description min=50, max=100 (reduced gap)
     const minWidths = [20, 50, 16, 28, 32, 28, 32];
     suppliers.forEach(() => { minWidths.push(16, 22, 28); });
     minWidths.push(24, 24);
@@ -904,10 +881,10 @@ export default function ComparativeStatement() {
       const pctLast    = formatPercent(row.minRate, row.lastPurchaseRate);
       const pctLastNum = pctLast !== null ? parseFloat(pctLast) : null;
 
-      // Description with alt item note
       let descStr = row.section || "";
       const altLabel = buildAltLabel(row);
-      if (altLabel) descStr += `\nAlt item: ${altLabel}`;
+      // ── CHANGED: no "Alt item:" prefix
+      if (altLabel) descStr += `\n${altLabel}`;
 
       const dr = [
         idx + 1, descStr, row.size || "", row.width || "", row.length || "",
@@ -991,7 +968,8 @@ export default function ComparativeStatement() {
       let descStr = r.description || "";
       if (origRow && origRow.isAlternative) {
         const altLabel = buildAltLabel(origRow);
-        if (altLabel) descStr += `\nAlt item: ${altLabel}`;
+        // ── CHANGED: no "Alt item:" prefix
+        if (altLabel) descStr += `\n${altLabel}`;
       }
 
       const dr = [
@@ -1174,10 +1152,10 @@ export default function ComparativeStatement() {
                     <td className="cs-td cs-td-sticky cs-td-sno">{idx + 1}</td>
                     <td className="cs-td cs-td-sticky cs-td-section">
                       <span className="cs-section-tag">{row.section || "—"}</span>
-                      {/* Alternative item label shown on next line in the same cell */}
+                      {/* ── CHANGED: render altLabel directly, no "Alt item:" prefix */}
                       {altLabel && (
                         <div className="cs-alt-item-label">
-                          Alt item: {altLabel}
+                          {altLabel}
                         </div>
                       )}
                     </td>
@@ -1362,10 +1340,10 @@ export default function ComparativeStatement() {
                       <td className="cs-l1-sno">{i + 1}</td>
                       <td className="cs-l1-desc">
                         {r.description || "—"}
-                        {/* Alternative item label on next line */}
+                        {/* ── CHANGED: render altLabel directly, no "Alt item:" prefix */}
                         {altLabel && (
                           <div className="cs-alt-item-label">
-                            Alt item: {altLabel}
+                            {altLabel}
                           </div>
                         )}
                       </td>
