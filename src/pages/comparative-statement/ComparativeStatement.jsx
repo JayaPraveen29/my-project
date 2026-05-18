@@ -53,11 +53,7 @@ export default function ComparativeStatement() {
 
   // ── Build purchase rate lookup ─────────────────────────────────────────────
   const buildPurchaseLookup = () => {
-    // sectionSet tracks which sections exist at all (for the "section exists but dims don't match → 0" rule)
     const sectionSet = new Set();
-
-    // Step 1: for each key+date combination, keep only the HIGHEST rate
-    // dateMap: key → Map<date, { rate, entryNo }>
     const dateMap = new Map();
 
     purchaseEntries.forEach(entry => {
@@ -82,7 +78,6 @@ export default function ComparativeStatement() {
           byDate.set(billDate, { rate, entryNo: entry.No });
         } else {
           const existing = byDate.get(billDate);
-          // Same section+size+width+length on the same date → keep the HIGHEST rate
           if (rate > existing.rate) {
             existing.rate = rate;
             existing.entryNo = entry.No;
@@ -91,8 +86,6 @@ export default function ComparativeStatement() {
       });
     });
 
-    // Step 2: from the per-date-highest values, build the final lookup
-    // (lowest rate across all dates, last rate by entry No)
     const lookup = new Map();
     dateMap.forEach((byDate, key) => {
       byDate.forEach(({ rate, entryNo }, billDate) => {
@@ -133,7 +126,6 @@ export default function ComparativeStatement() {
         const key = `${section}||${size}||${width}||${length}`;
         if (!rowMap.has(key)) {
           const purchaseData = purchaseLookup.get(key) || null;
-          // If section exists in purchases but this exact size/width/length doesn't match → show 0
           const sectionExists = sectionSet.has(section);
           rowMap.set(key, {
             section, size, width, length, sectionMt,
@@ -282,13 +274,10 @@ export default function ComparativeStatement() {
     return (((newRate - baseRate) / baseRate) * 100).toFixed(2);
   };
 
-  // Format date from YYYY-MM-DD or DD-MM-YYYY to DD-MM-YY (2-digit year)
   const formatDate = (dateStr) => {
     if (!dateStr) return "";
-    // Handle YYYY-MM-DD
     const isoMatch = String(dateStr).match(/^(\d{4})-(\d{2})-(\d{2})$/);
     if (isoMatch) return `${isoMatch[3]}-${isoMatch[2]}-${isoMatch[1].slice(2)}`;
-    // Handle DD-MM-YYYY
     const dmyMatch = String(dateStr).match(/^(\d{2})-(\d{2})-(\d{4})$/);
     if (dmyMatch) return `${dmyMatch[1]}-${dmyMatch[2]}-${dmyMatch[3].slice(2)}`;
     return dateStr;
@@ -297,27 +286,49 @@ export default function ComparativeStatement() {
   const uniqueFYs = [...new Set(allEntries.map(e => e.FinancialYear).filter(Boolean))].sort();
   const uniqueEnquiryNos = [...new Set(allEntries.map(e => e.No).filter(v => v != null))].sort((a, b) => a - b);
 
+  // ── Helper: build PDF heading info string ──────────────────────────────────
+  const buildPdfHeadingInfo = () => {
+    const parts = [];
+    if (filterFY) parts.push(`FY: ${filterFY}`);
+    if (filterEnquiryNo) {
+      const enquiryEntry = allEntries.find(e => String(e.No) === String(filterEnquiryNo));
+      const dateStr = enquiryEntry?.EnquiryDate ? `  Date: ${formatDate(enquiryEntry.EnquiryDate)}` : "";
+      parts.push(`Enquiry No: ${filterEnquiryNo}${dateStr}`);
+    }
+    if (filterDate) parts.push(`From: ${filterDate}`);
+    if (filterEndDate) parts.push(`To: ${filterEndDate}`);
+    return parts.join("   |   ");
+  };
+
   // ── Export PDF ─────────────────────────────────────────────────────────────
   const exportPDF = () => {
     const doc = new jsPDF("l", "pt", "a4");
+    const cleanText = (text) => {
+      if (!text) return "";
+      return String(text)
+        .replace(/[φΦ⌀∅Ø]/g, "dia.")
+        .replace(/[^\x00-\x7F]/g, c => c === "₹" ? "Rs." : "");
+    };
+
+    // ── Page 1: Comparative Statement ─────────────────────────────────────────
     doc.setFontSize(13);
     doc.setFont(undefined, "bold");
     doc.text("Comparative Statement", 40, 30);
     doc.setFont(undefined, "normal");
     doc.setFontSize(9);
-    let filterLine = [];
-    if (filterFY) filterLine.push(`FY: ${filterFY}`);
-    if (filterDate) filterLine.push(`Date: ${filterDate}`);
-    if (filterLine.length) doc.text(`Filters - ${filterLine.join("  |  ")}`, 40, 44);
-    const startY = filterLine.length ? 54 : 44;
 
+    const headingInfo = buildPdfHeadingInfo();
+    let startY = 44;
+    if (headingInfo) {
+      doc.text(headingInfo, 40, 44);
+      startY = 54;
+    }
+
+    // Merged description column header (Section + Size + Width + Length in one cell)
     const headRow1 = [
-      { content: "S.No",    rowSpan: 2, styles: { halign: "center", valign: "middle" } },
-      { content: "Section", rowSpan: 2, styles: { halign: "left",   valign: "middle" } },
-      { content: "Size",    rowSpan: 2, styles: { halign: "center", valign: "middle" } },
-      { content: "Width",   rowSpan: 2, styles: { halign: "center", valign: "middle" } },
-      { content: "Length",  rowSpan: 2, styles: { halign: "center", valign: "middle" } },
-      { content: "Qty\n(MT)", rowSpan: 2, styles: { halign: "center", valign: "middle" } },
+      { content: "S.No",       rowSpan: 2, styles: { halign: "center", valign: "middle" } },
+      { content: "Description",rowSpan: 2, styles: { halign: "left",   valign: "middle" } },
+      { content: "Qty\n(MT)",  rowSpan: 2, styles: { halign: "center", valign: "middle" } },
       { content: "Lowest Purchase", colSpan: 2, styles: { halign: "center", valign: "middle" } },
       { content: "Last Purchase",   colSpan: 2, styles: { halign: "center", valign: "middle" } },
       ...suppliers.map(sup => ({
@@ -340,62 +351,123 @@ export default function ComparativeStatement() {
       ]),
     ];
 
-    // col indices: 0=SNo,1=Sec,2=Size,3=Width,4=Length,5=Qty,
-    //              6=LowestDate,7=LowestAmt,8=LastDate,9=LastAmt,
-    //              10..=suppliers, lastCol/lastCol2=% cols
-    const fixedCols = 10;
-    const lastCol  = fixedCols + suppliers.length * 2;
-    const lastCol2 = lastCol + 1;
+    // ── Dynamic column widths for Comparative Statement (same logic as L1 Summary) ──
+    // col indices: 0=SNo,1=Desc,2=Qty,3=LowDate,4=LowAmt,5=LastDate,6=LastAmt,
+    //              7..= per supplier (MT, Rate/MT), last two = % cols
+    const csCharWidth = 4.5;
+    const totalCSCols = 7 + suppliers.length * 2 + 2;
+    const csColMaxChars = new Array(totalCSCols).fill(0);
 
-    // A4 landscape usable width ~762pt. Distribute remaining space across supplier cols.
-    const usableWidth = 762;
-    const fixedColsW  = 20 + 46 + 58 + 40 + 40 + 26 + 36 + 40 + 36 + 40; // 382
-    const pctColsW    = 36 + 36;                                             // 72
-    const remaining   = usableWidth - fixedColsW - pctColsW;
-    const nSup        = suppliers.length || 1;
-    const supTotal    = Math.max(Math.floor(remaining / nSup), 60);
-    const supMtW      = Math.round(supTotal * 0.38);
-    const supRateW    = supTotal - supMtW;
+    const csHeaderFlat = [
+      "S.No", "Description", "Qty\n(MT)",
+      "Date", "Amount", "Date", "Amount",
+      ...suppliers.flatMap(sup => [sup, "Rate/MT"]),
+      "% vs\nLowest\nPurchase", "% vs\nLast\nPurchase",
+    ];
+    csHeaderFlat.forEach((t, i) => {
+      if (i < totalCSCols) {
+        const lines = t.split("\n");
+        const maxLen = Math.max(...lines.map(l => l.length));
+        csColMaxChars[i] = Math.max(csColMaxChars[i], maxLen);
+      }
+    });
 
-    const columnStyles = {
-      0: { halign: "center", cellWidth: 20 },
-      1: { halign: "left",   cellWidth: 46 },
-      2: { halign: "center", cellWidth: 58 },
-      3: { halign: "center", cellWidth: 40 },
-      4: { halign: "center", cellWidth: 40 },
-      5: { halign: "center", cellWidth: 26 },
-      6: { halign: "center", cellWidth: 36 },
-      7: { halign: "center", cellWidth: 40 },
-      8: { halign: "center", cellWidth: 36 },
-      9: { halign: "center", cellWidth: 40 },
-      [lastCol]:  { halign: "center", cellWidth: 36 },
-      [lastCol2]: { halign: "center", cellWidth: 36 },
-    };
-    for (let i = 0; i < suppliers.length; i++) {
-      columnStyles[fixedCols + i * 2]     = { halign: "center", cellWidth: supMtW };
-      columnStyles[fixedCols + i * 2 + 1] = { halign: "center", cellWidth: supRateW };
-    }
+    // Scan all body rows + summary rows for max content width per column
+    const allCSBodyRows = [...rows.map((row, idx) => {
+      const dims = [row.size, row.width, row.length].filter(Boolean).join(" x ");
+      const description = cleanText([row.section, dims].filter(Boolean).join(" - ")) || "-";
+      const pct     = formatPercent(row.minRate, row.lowestPurchaseRate);
+      const pctNum  = pct  !== null ? parseFloat(pct)  : null;
+      const pctLast = formatPercent(row.minRate, row.lastPurchaseRate);
+      const pctLastNum = pctLast !== null ? parseFloat(pctLast) : null;
+      const cells = [
+        String(idx + 1),
+        description,
+        formatMT(row.sectionMt),
+        row.lowestPurchaseRate != null && row.lowestPurchaseRate !== 0 && row.lowestPurchaseDate ? formatDate(row.lowestPurchaseDate) : "",
+        row.lowestPurchaseRate != null && row.lowestPurchaseRate !== 0 ? formatRate(Math.round(row.lowestPurchaseRate)) : "",
+        row.lastPurchaseRate != null && row.lastPurchaseRate !== 0 && row.lastPurchaseDate ? formatDate(row.lastPurchaseDate) : "",
+        row.lastPurchaseRate != null && row.lastPurchaseRate !== 0 ? formatRate(Math.round(row.lastPurchaseRate)) : "",
+        ...suppliers.flatMap(sup => {
+          const rateObj = row.rates[sup];
+          const rate = rateObj ? rateObj.rate : null;
+          return [
+            rate > 0 ? formatMT(rateObj.mt) : "",
+            rate > 0 ? formatRate(rate) : "",
+          ];
+        }),
+        pctNum !== null ? `${pctNum > 0 ? "+" : pctNum < 0 ? "-" : ""}${Math.abs(pctNum)}%` : "",
+        pctLastNum !== null ? `${pctLastNum > 0 ? "+" : pctLastNum < 0 ? "-" : ""}${Math.abs(pctLastNum)}%` : "",
+      ];
+      return cells;
+    }),
+    // Summary row texts
+    ["", "Total MT / Avg Rate",
+      qtyMtSummary.totalSectionMt > 0 ? parseFloat(qtyMtSummary.totalSectionMt).toFixed(2) : "",
+      "", qtyMtSummary.lowestPurchaseWeightedAvg !== null ? formatRate(Math.round(qtyMtSummary.lowestPurchaseWeightedAvg)) : "",
+      "", qtyMtSummary.lastPurchaseWeightedAvg !== null ? formatRate(Math.round(qtyMtSummary.lastPurchaseWeightedAvg)) : "",
+      ...suppliers.flatMap(sup => {
+        let amt = 0, mt = 0;
+        rows.forEach(r => { const o = r.rates[sup]; if (o && o.rate > 0 && o.mt > 0) { amt += o.rate * o.mt; mt += o.mt; } });
+        return [mt > 0 ? parseFloat(mt).toFixed(2) : "", mt > 0 ? formatRate(Math.round(amt / mt)) : ""];
+      }),
+      "", "",
+    ],
+    // Avg quoted row texts
+    ["", "Avg of Quoted (L1)", "", "", "", "", "",
+      ...suppliers.flatMap(sup => {
+        const avgRate = l1Summary.supplierTotals[sup]?.weightedAvgRate;
+        return ["", avgRate != null ? formatRate(Math.round(avgRate)) : ""];
+      }),
+      "", "",
+    ],
+    ];
 
-    const cleanText = (text) => {
-      if (!text) return "";
-      return String(text)
-        .replace(/[φΦ⌀∅Ø]/g, "dia.")
-        .replace(/[^\x00-\x7F]/g, c => c === "₹" ? "Rs." : "");
-    };
+    allCSBodyRows.forEach(cells => {
+      cells.forEach((txt, i) => {
+        if (i < totalCSCols) {
+          const lines = String(txt).split("\n");
+          const maxLen = Math.max(...lines.map(l => l.length));
+          csColMaxChars[i] = Math.max(csColMaxChars[i], maxLen);
+        }
+      });
+    });
+
+    // Min/max constraints per column
+    const csMinWidths = [12, 70, 18, 26, 30, 26, 30];
+    suppliers.forEach(() => { csMinWidths.push(18, 26); });
+    csMinWidths.push(22, 22);
+
+    const csMaxWidths = [18, 130, 24, 38, 44, 38, 44];
+    suppliers.forEach(() => { csMaxWidths.push(30, 40); });
+    csMaxWidths.push(32, 32);
+
+    const columnStyles = {};
+    csColMaxChars.forEach((chars, i) => {
+      const computed = Math.ceil(chars * csCharWidth) + 6;
+      const minW = csMinWidths[i] || 18;
+      const maxW = csMaxWidths[i] || 50;
+      const cellWidth = Math.min(maxW, Math.max(minW, computed));
+      columnStyles[i] = {
+        halign: i === 0 ? "center" : i === 1 ? "left" : "center",
+        cellWidth,
+      };
+    });
 
     const body = rows.map((row, idx) => {
+      // Build merged description: Section - Size x Width x Length
+      const dims = [row.size, row.width, row.length].filter(Boolean).join(" x ");
+      const description = cleanText([row.section, dims].filter(Boolean).join(" - ")) || "-";
+
       const pct        = formatPercent(row.minRate, row.lowestPurchaseRate);
       const pctNum     = pct     !== null ? parseFloat(pct)     : null;
       const pctLast    = formatPercent(row.minRate, row.lastPurchaseRate);
       const pctLastNum = pctLast !== null ? parseFloat(pctLast) : null;
 
       return [
-        { content: idx + 1,                          styles: { halign: "center" } },
-        { content: cleanText(row.section) || "-",    styles: { halign: "left"   } },
-        { content: cleanText(row.size) || "-",       styles: { halign: "center" } },
-        { content: cleanText(row.width)  || "-",     styles: { halign: "center" } },
-        { content: cleanText(row.length) || "-",     styles: { halign: "center" } },
-        { content: formatMT(row.sectionMt),          styles: { halign: "center" } },
+        { content: idx + 1,       styles: { halign: "center" } },
+        { content: description,   styles: { halign: "left"   } },
+        { content: formatMT(row.sectionMt), styles: { halign: "center" } },
         // Lowest Purchase — Date
         {
           content: row.lowestPurchaseRate != null && row.lowestPurchaseRate !== 0 && row.lowestPurchaseDate
@@ -432,35 +504,28 @@ export default function ComparativeStatement() {
             },
           ];
         }),
+        // % vs Lowest — NO color in PDF
         {
           content: pctNum !== null ? `${pctNum > 0 ? "+" : pctNum < 0 ? "-" : ""}${Math.abs(pctNum)}%` : "",
-          styles: {
-            halign: "center",
-            textColor: pctNum !== null
-              ? pctNum > 0 ? [220, 38, 38] : pctNum < 0 ? [22, 163, 74] : [100, 100, 100]
-              : [150, 150, 150],
-          },
+          styles: { halign: "center", textColor: [0, 0, 0] },
         },
+        // % vs Last — NO color in PDF
         {
           content: pctLastNum !== null ? `${pctLastNum > 0 ? "+" : pctLastNum < 0 ? "-" : ""}${Math.abs(pctLastNum)}%` : "",
-          styles: {
-            halign: "center",
-            textColor: pctLastNum !== null
-              ? pctLastNum > 0 ? [234, 88, 12] : pctLastNum < 0 ? [22, 163, 74] : [100, 100, 100]
-              : [150, 150, 150],
-          },
+          styles: { halign: "center", textColor: [0, 0, 0] },
         },
       ];
     });
 
+    // Summary row: Total MT / Avg Rate
     const summaryRow = [
       { content: "", styles: { halign: "center" } },
-      { content: "Total MT / Avg Rate", colSpan: 4, styles: { fontStyle: "bold", halign: "left" } },
+      { content: "Total MT / Avg Rate", styles: { fontStyle: "bold", halign: "left" } },
       { content: qtyMtSummary.totalSectionMt > 0 ? parseFloat(qtyMtSummary.totalSectionMt).toFixed(2) : "", styles: { fontStyle: "bold", halign: "center" } },
       { content: "", styles: { halign: "center" } },
       { content: qtyMtSummary.lowestPurchaseWeightedAvg !== null ? formatRate(Math.round(qtyMtSummary.lowestPurchaseWeightedAvg)) : "", styles: { fontStyle: "bold", halign: "center" } },
       { content: "", styles: { halign: "center" } },
-      { content: qtyMtSummary.lastPurchaseWeightedAvg   !== null ? formatRate(Math.round(qtyMtSummary.lastPurchaseWeightedAvg))   : "", styles: { fontStyle: "bold", halign: "center" } },
+      { content: qtyMtSummary.lastPurchaseWeightedAvg !== null ? formatRate(Math.round(qtyMtSummary.lastPurchaseWeightedAvg)) : "", styles: { fontStyle: "bold", halign: "center" } },
       ...suppliers.flatMap(sup => {
         let amt = 0, mt = 0;
         rows.forEach(r => {
@@ -468,8 +533,31 @@ export default function ComparativeStatement() {
           if (o && o.rate > 0 && o.mt > 0) { amt += o.rate * o.mt; mt += o.mt; }
         });
         return [
-          { content: mt > 0 ? parseFloat(mt).toFixed(2)           : "", styles: { fontStyle: "bold", halign: "center" } },
-          { content: mt > 0 ? formatRate(Math.round(amt / mt))     : "", styles: { fontStyle: "bold", halign: "center" } },
+          { content: mt > 0 ? parseFloat(mt).toFixed(2) : "", styles: { fontStyle: "bold", halign: "center" } },
+          { content: mt > 0 ? formatRate(Math.round(amt / mt)) : "", styles: { fontStyle: "bold", halign: "center" } },
+        ];
+      }),
+      { content: "", styles: { halign: "center" } },
+      { content: "", styles: { halign: "center" } },
+    ];
+
+    // Avg quoted price row (L1 weighted avg per supplier)
+    const avgQuotedRow = [
+      { content: "", styles: { halign: "center" } },
+      { content: "Avg of Quoted (L1)", styles: { fontStyle: "bold", halign: "left" } },
+      { content: "", styles: { halign: "center" } },
+      { content: "", styles: { halign: "center" } },
+      { content: "", styles: { halign: "center" } },
+      { content: "", styles: { halign: "center" } },
+      { content: "", styles: { halign: "center" } },
+      ...suppliers.flatMap(sup => {
+        const avgRate = l1Summary.supplierTotals[sup]?.weightedAvgRate;
+        return [
+          { content: "", styles: { halign: "center" } },
+          {
+            content: avgRate != null ? formatRate(Math.round(avgRate)) : "",
+            styles: { fontStyle: "bold", halign: "center" },
+          },
         ];
       }),
       { content: "", styles: { halign: "center" } },
@@ -479,7 +567,7 @@ export default function ComparativeStatement() {
     autoTable(doc, {
       startY,
       head: [headRow1, headRow2],
-      body: [...body, summaryRow],
+      body: [...body, summaryRow, avgQuotedRow],
       theme: "grid",
       styles: {
         fontSize: 6.5,
@@ -509,14 +597,18 @@ export default function ComparativeStatement() {
       tableWidth: "wrap",
     });
 
-    // ── L1 Summary PDF ─────────────────────────────────────────────────────────
+    // ── Page 2: L1 Rate Summary ────────────────────────────────────────────────
     doc.addPage();
     const l1Y = 30;
-    doc.setFontSize(9);
+    doc.setFontSize(11);
     doc.setFont(undefined, "bold");
     doc.setTextColor(0, 0, 0);
     doc.text("L1 Rate Summary", 40, l1Y);
     doc.setFont(undefined, "normal");
+    doc.setFontSize(9);
+    if (headingInfo) {
+      doc.text(headingInfo, 40, l1Y + 12);
+    }
 
     const l1Head1 = [
       { content: "No.",                 rowSpan: 2, styles: { halign: "center", valign: "middle" } },
@@ -558,25 +650,21 @@ export default function ComparativeStatement() {
         { content: i + 1,                                                    styles: { halign: "center" } },
         { content: cleanText(r.description) || "-",                          styles: { halign: "left"   } },
         { content: r.totalMt > 0 ? parseFloat(r.totalMt).toFixed(2) : "-",  styles: { halign: "center" } },
-        // Lowest Purchase Date
         {
           content: origRow && origRow.lowestPurchaseRate != null && origRow.lowestPurchaseRate !== 0 && origRow.lowestPurchaseDate
             ? formatDate(origRow.lowestPurchaseDate) : (origRow && origRow.lowestPurchaseRate === 0 ? "0" : ""),
           styles: { halign: "center", textColor: [80, 80, 80] },
         },
-        // Lowest Purchase Amount
         {
           content: origRow && origRow.lowestPurchaseRate != null && origRow.lowestPurchaseRate !== 0
             ? formatRate(Math.round(origRow.lowestPurchaseRate)) : "",
           styles: { halign: "center" },
         },
-        // Last Purchase Date
         {
           content: origRow && origRow.lastPurchaseRate != null && origRow.lastPurchaseRate !== 0 && origRow.lastPurchaseDate
             ? formatDate(origRow.lastPurchaseDate) : (origRow && origRow.lastPurchaseRate === 0 ? "0" : ""),
           styles: { halign: "center", textColor: [80, 80, 80] },
         },
-        // Last Purchase Amount
         {
           content: origRow && origRow.lastPurchaseRate != null && origRow.lastPurchaseRate !== 0
             ? formatRate(Math.round(origRow.lastPurchaseRate)) : "",
@@ -591,17 +679,20 @@ export default function ComparativeStatement() {
             { content: hasData ? formatAmount(d.amount)       : "", styles: { halign: "center" } },
           ];
         }),
+        // % vs Lowest — NO color in PDF
         {
           content: pctLowestNum !== null ? `${pctLowestNum > 0 ? "+" : pctLowestNum < 0 ? "-" : ""}${Math.abs(pctLowestNum)}%` : "",
-          styles: { halign: "center", textColor: pctLowestNum !== null ? pctLowestNum > 0 ? [220, 38, 38] : pctLowestNum < 0 ? [22, 163, 74] : [100, 100, 100] : [150, 150, 150] },
+          styles: { halign: "center", textColor: [0, 0, 0] },
         },
+        // % vs Last — NO color in PDF
         {
           content: pctLastNum !== null ? `${pctLastNum > 0 ? "+" : pctLastNum < 0 ? "-" : ""}${Math.abs(pctLastNum)}%` : "",
-          styles: { halign: "center", textColor: pctLastNum !== null ? pctLastNum > 0 ? [234, 88, 12] : pctLastNum < 0 ? [22, 163, 74] : [100, 100, 100] : [150, 150, 150] },
+          styles: { halign: "center", textColor: [0, 0, 0] },
         },
       ];
     });
 
+    // Total MT / Avg Rate row
     l1Body.push([
       { content: "",                    styles: { fontStyle: "bold", halign: "center" } },
       { content: "Total MT / Avg Rate", styles: { fontStyle: "bold", halign: "left"   } },
@@ -622,37 +713,69 @@ export default function ComparativeStatement() {
       { content: "", styles: { fontStyle: "bold", halign: "center" } },
     ]);
 
-    // L1 col layout: No(16)+Desc(88)+Mt(22)+LowDate(34)+LowAmt(38)+LastDate(34)+LastAmt(38) = 270
-    // % cols: 30+30 = 60 => remaining for suppliers: 762-270-60 = 432
-    const l1FixedW    = 16 + 88 + 22 + 34 + 38 + 34 + 38; // 270
-    const l1PctW      = 30 + 30;                            // 60
-    const l1Remaining = usableWidth - l1FixedW - l1PctW;
-    const l1SupTotal  = Math.max(Math.floor(l1Remaining / nSup), 70);
-    const l1MtW       = Math.round(l1SupTotal * 0.28);
-    const l1RateW     = Math.round(l1SupTotal * 0.33);
-    const l1AmtW      = l1SupTotal - l1MtW - l1RateW;
 
-    const l1ColStyles = {
-      0: { halign: "center", cellWidth: 16 },
-      1: { halign: "left",   cellWidth: 88 },
-      2: { halign: "center", cellWidth: 22 },
-      3: { halign: "center", cellWidth: 34, textColor: [80, 80, 80] },
-      4: { halign: "center", cellWidth: 38 },
-      5: { halign: "center", cellWidth: 34, textColor: [80, 80, 80] },
-      6: { halign: "center", cellWidth: 38 },
-    };
-    suppliers.forEach((_, i) => {
-      const base = 7 + i * 3;
-      l1ColStyles[base]     = { halign: "center", cellWidth: l1MtW };
-      l1ColStyles[base + 1] = { halign: "center", cellWidth: l1RateW };
-      l1ColStyles[base + 2] = { halign: "center", cellWidth: l1AmtW };
+
+    // ── Dynamic column widths for L1 Summary ──────────────────────────────────
+    // Compute max content width per column using canvas text measurement approximation
+    // We use character count × fontSize as a proxy
+    const charWidth = 4.5; // pt per char at fontSize 6.5
+
+    // Build all cell texts per column index
+    const totalL1Cols = 7 + suppliers.length * 3 + 2;
+    const colMaxChars = new Array(totalL1Cols).fill(0);
+
+    // Header texts
+    const headerTexts = [
+      "No.", "Description of Item", "Mt.",
+      "Date", "Amount", "Date", "Amount",
+      ...suppliers.flatMap(sup => [sup.substring(0,8), "Mt", "Rate", "Amount"]),
+      "vs Lowest\nPurchase", "vs Last\nPurchase",
+    ];
+    headerTexts.forEach((t, i) => {
+      if (i < totalL1Cols) {
+        const lines = t.split("\n");
+        const maxLen = Math.max(...lines.map(l => l.length));
+        colMaxChars[i] = Math.max(colMaxChars[i], maxLen);
+      }
     });
-    const pctBase = 7 + suppliers.length * 3;
-    l1ColStyles[pctBase]     = { halign: "center", cellWidth: 30 };
-    l1ColStyles[pctBase + 1] = { halign: "center", cellWidth: 30 };
+
+    // Data texts
+    l1Body.forEach(rowArr => {
+      let colIdx = 0;
+      rowArr.forEach(cell => {
+        const txt = String(cell.content || "");
+        const lines = txt.split("\n");
+        const maxLen = Math.max(...lines.map(l => l.length));
+        if (colIdx < totalL1Cols) colMaxChars[colIdx] = Math.max(colMaxChars[colIdx], maxLen);
+        colIdx++;
+      });
+    });
+
+    // Compute widths with min/max constraints
+    const minWidths = [12, 70, 16, 28, 32, 28, 32];
+    suppliers.forEach(() => { minWidths.push(16, 22, 28); });
+    minWidths.push(24, 24);
+
+    const maxWidths = [20, 140, 26, 40, 46, 40, 46];
+    suppliers.forEach(() => { maxWidths.push(28, 34, 42); });
+    maxWidths.push(34, 34);
+
+    const l1ColStyles = {};
+    colMaxChars.forEach((chars, i) => {
+      const computed = Math.ceil(chars * charWidth) + 6; // +6 padding
+      const minW = minWidths[i] || 20;
+      const maxW = maxWidths[i] || 60;
+      const cellWidth = Math.min(maxW, Math.max(minW, computed));
+      l1ColStyles[i] = {
+        halign: i === 0 ? "center" : i === 1 ? "left" : "center",
+        cellWidth,
+      };
+    });
+
+    const l1StartY = headingInfo ? l1Y + 18 : l1Y + 6;
 
     autoTable(doc, {
-      startY: l1Y + 6,
+      startY: l1StartY,
       head: [l1Head1, l1Head2],
       body: l1Body,
       theme: "grid",
@@ -740,7 +863,15 @@ export default function ComparativeStatement() {
     });
     summaryRow.push("", "");
 
-    const ws = XLSX.utils.aoa_to_sheet([header1, header2, ...dataRows, summaryRow]);
+    // Avg quoted row for Excel
+    const avgQuotedRowExcel = ["", "Avg of Quoted (L1)", "", "", "", "", "", ""];
+    suppliers.forEach(sup => {
+      const avgRate = l1Summary.supplierTotals[sup]?.weightedAvgRate;
+      avgQuotedRowExcel.push("", avgRate != null ? formatRate(Math.round(avgRate)) : "", "");
+    });
+    avgQuotedRowExcel.push("", "");
+
+    const ws = XLSX.utils.aoa_to_sheet([header1, header2, ...dataRows, summaryRow, avgQuotedRowExcel]);
     const merges = [
       { s: { r: 0, c: 0 }, e: { r: 1, c: 0 } }, { s: { r: 0, c: 1 }, e: { r: 1, c: 1 } },
       { s: { r: 0, c: 2 }, e: { r: 1, c: 2 } }, { s: { r: 0, c: 3 }, e: { r: 1, c: 3 } },
@@ -815,17 +946,25 @@ export default function ComparativeStatement() {
     });
     l1TotRow.push("", "");
 
-    const wsL1 = XLSX.utils.aoa_to_sheet([l1H1, l1H2, ...l1DataRows, l1TotRow]);
+    // Avg of Quoted row for L1 Excel
+    const l1AvgRow = ["", "Avg of Quoted (L1)", "", "", ""];
+    suppliers.forEach(sup => {
+      const avgRate = l1Summary.supplierTotals[sup]?.weightedAvgRate;
+      l1AvgRow.push("", avgRate != null ? formatRate(Math.round(avgRate)) : "", "");
+    });
+    l1AvgRow.push("", "");
+
+    const wsL1 = XLSX.utils.aoa_to_sheet([l1H1, l1H2, ...l1DataRows, l1TotRow, l1AvgRow]);
     const l1Merges = [
       { s: { r: 0, c: 0 }, e: { r: 1, c: 0 } },
       { s: { r: 0, c: 1 }, e: { r: 1, c: 1 } },
       { s: { r: 0, c: 2 }, e: { r: 1, c: 2 } },
-      { s: { r: 0, c: 3 }, e: { r: 0, c: 4 } },  // Lowest Purchase
-      { s: { r: 0, c: 5 }, e: { r: 0, c: 6 } },  // Last Purchase
+      { s: { r: 0, c: 3 }, e: { r: 0, c: 4 } },
+      { s: { r: 0, c: 5 }, e: { r: 0, c: 6 } },
     ];
     let lc = 5;
     suppliers.forEach(() => { l1Merges.push({ s: { r: 0, c: lc }, e: { r: 0, c: lc + 2 } }); lc += 3; });
-    l1Merges.push({ s: { r: 0, c: lc }, e: { r: 0, c: lc + 1 } }); // % Increase
+    l1Merges.push({ s: { r: 0, c: lc }, e: { r: 0, c: lc + 1 } });
     wsL1["!merges"] = l1Merges;
     wsL1["!freeze"] = { ySplit: 2 };
     const l1ColW = [6, 32, 10, 20, 20];
@@ -993,6 +1132,7 @@ export default function ComparativeStatement() {
                         </>
                       );
                     })}
+                    {/* % columns — keep colors in frontend */}
                     <td className={`cs-td cs-td-pct${pctNum !== null ? (pctNum > 0 ? " cs-td-pct--up" : pctNum < 0 ? " cs-td-pct--down" : " cs-td-pct--flat") : ""}`}>
                       {pctNum !== null
                         ? <span className="cs-pct-value">{pctNum > 0 ? "+" : pctNum < 0 ? "-" : ""}{Math.abs(pctNum)}%</span>
@@ -1008,6 +1148,7 @@ export default function ComparativeStatement() {
               })}
             </tbody>
             <tfoot>
+              {/* Total MT / Avg Rate row */}
               <tr className="cs-tr cs-tr-summary">
                 <td className="cs-td cs-td-sticky cs-td-sno" />
                 <td className="cs-td cs-td-sticky cs-td-section cs-summary-label" colSpan={4}>
@@ -1016,15 +1157,13 @@ export default function ComparativeStatement() {
                 <td className="cs-td cs-td-sticky cs-td-mt cs-summary-total-mt">
                   <span className="cs-avg-value">{qtyMtSummary.totalSectionMt > 0 ? parseFloat(qtyMtSummary.totalSectionMt).toFixed(2) : "—"}</span>
                 </td>
-                <td className="cs-td cs-td-purchase cs-qty-mt-purchase">
-                </td>
+                <td className="cs-td cs-td-purchase cs-qty-mt-purchase" />
                 <td className="cs-td cs-td-purchase cs-qty-mt-purchase">
                   {qtyMtSummary.lowestPurchaseWeightedAvg !== null
                     ? <span className="cs-avg-value">₹ {formatRate(Math.round(qtyMtSummary.lowestPurchaseWeightedAvg))}</span>
                     : null}
                 </td>
-                <td className="cs-td cs-td-purchase cs-qty-mt-purchase">
-                </td>
+                <td className="cs-td cs-td-purchase cs-qty-mt-purchase" />
                 <td className="cs-td cs-td-purchase cs-qty-mt-purchase">
                   {qtyMtSummary.lastPurchaseWeightedAvg !== null
                     ? <span className="cs-avg-value">₹ {formatRate(Math.round(qtyMtSummary.lastPurchaseWeightedAvg))}</span>
@@ -1040,6 +1179,33 @@ export default function ComparativeStatement() {
                       </td>
                       <td key={`${sup}-sum-rate`} className="cs-td cs-td-rate cs-td-avg-rate">
                         {mt > 0 ? <span className="cs-avg-value">₹ {formatRate(Math.round(amt / mt))}</span> : null}
+                      </td>
+                    </>
+                  );
+                })}
+                <td className="cs-td cs-td-pct" />
+                <td className="cs-td cs-td-pct-last" />
+              </tr>
+              {/* Avg of Quoted (L1) row */}
+              <tr className="cs-tr cs-tr-avg-quoted">
+                <td className="cs-td cs-td-sticky cs-td-sno" />
+                <td className="cs-td cs-td-sticky cs-td-section cs-summary-label" colSpan={4}>
+                  Avg of Quoted (L1)
+                </td>
+                <td className="cs-td cs-td-sticky cs-td-mt" />
+                <td className="cs-td cs-td-purchase" />
+                <td className="cs-td cs-td-purchase" />
+                <td className="cs-td cs-td-purchase" />
+                <td className="cs-td cs-td-purchase" />
+                {suppliers.map(sup => {
+                  const avgRate = l1Summary.supplierTotals[sup]?.weightedAvgRate;
+                  return (
+                    <>
+                      <td key={`${sup}-avg-mt`} className="cs-td cs-td-supplier-mt" />
+                      <td key={`${sup}-avg-rate`} className="cs-td cs-td-rate cs-td-avg-rate">
+                        {avgRate != null
+                          ? <span className="cs-avg-value">₹ {formatRate(Math.round(avgRate))}</span>
+                          : null}
                       </td>
                     </>
                   );
@@ -1092,16 +1258,6 @@ export default function ComparativeStatement() {
               <tbody>
                 {l1Summary.rowDetails.map((r, i) => {
                   const origRow = rows[r.idx] !== undefined ? rows[r.idx] : rows[i];
-                  const renderPurchaseCell = (rate, date) => {
-                    if (rate == null) return null;
-                    if (rate === 0) return <span className="cs-purchase-rate">0</span>;
-                    return (
-                      <div className="cs-last-purchase-cell cs-purchase-inline">
-                        {date && <span className="cs-purchase-date">{formatDate(date)}</span>}
-                        <span className="cs-purchase-rate">₹ {formatRate(Math.round(rate))}</span>
-                      </div>
-                    );
-                  };
                   const l1Rate = r.l1Rate;
                   const pctLowest    = origRow ? formatPercent(l1Rate, origRow.lowestPurchaseRate) : null;
                   const pctLowestNum = pctLowest    !== null ? parseFloat(pctLowest)    : null;
@@ -1152,6 +1308,7 @@ export default function ComparativeStatement() {
                           </>
                         );
                       })}
+                      {/* % columns — keep colors in frontend */}
                       <td className={`cs-l1-num${pctLowestNum !== null ? (pctLowestNum > 0 ? " cs-td-pct--up" : pctLowestNum < 0 ? " cs-td-pct--down" : " cs-td-pct--flat") : ""}`}>
                         {pctLowestNum !== null
                           ? <span className="cs-pct-value">{pctLowestNum > 0 ? "+" : pctLowestNum < 0 ? "-" : ""}{Math.abs(pctLowestNum)}%</span>
@@ -1167,21 +1324,20 @@ export default function ComparativeStatement() {
                 })}
               </tbody>
               <tfoot>
+                {/* Total MT / Avg Rate */}
                 <tr className="cs-l1-totals">
                   <td className="cs-l1-sno" />
                   <td className="cs-l1-totals-label">Total MT / Avg Rate</td>
                   <td className="cs-l1-num cs-l1-totals-grand-mt">
                     {l1Summary.grandTotalMt > 0 ? parseFloat(l1Summary.grandTotalMt).toFixed(2) : "—"}
                   </td>
-                  <td className="cs-l1-num cs-l1-totals-val">
-                  </td>
+                  <td className="cs-l1-num cs-l1-totals-val" />
                   <td className="cs-l1-num cs-l1-totals-val">
                     {qtyMtSummary.lowestPurchaseWeightedAvg !== null
                       ? <span className="cs-avg-value">₹ {formatRate(Math.round(qtyMtSummary.lowestPurchaseWeightedAvg))}</span>
                       : "—"}
                   </td>
-                  <td className="cs-l1-num cs-l1-totals-val">
-                  </td>
+                  <td className="cs-l1-num cs-l1-totals-val" />
                   <td className="cs-l1-num cs-l1-totals-val">
                     {qtyMtSummary.lastPurchaseWeightedAvg !== null
                       ? <span className="cs-avg-value">₹ {formatRate(Math.round(qtyMtSummary.lastPurchaseWeightedAvg))}</span>
@@ -1206,6 +1362,7 @@ export default function ComparativeStatement() {
                   <td className="cs-l1-num" />
                   <td className="cs-l1-num" />
                 </tr>
+
               </tfoot>
             </table>
           </div>
