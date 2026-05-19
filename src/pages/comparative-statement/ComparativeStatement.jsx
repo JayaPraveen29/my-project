@@ -99,37 +99,75 @@ export default function ComparativeStatement() {
       });
     });
 
+    // ── partialMap: keyed by section||size||width → array of {lengthNum, lengthVal, lookupData}
     const partialMap = new Map();
+    // ── sizeMap: keyed by section||size → array of {widthNum, widthVal, lengthNum, lengthVal, lookupData}
+    const sizeMap = new Map();
+
     lookup.forEach((data, key) => {
       const parts = key.split("||");
       if (parts.length === 4) {
-        const partialKey = `${parts[0]}||${parts[1]}||${parts[2]}`;
-        const lengthVal = parts[3];
-        const lengthNum = parseFloat(lengthVal) || 0;
+        const [sec, sz, wd, ln] = parts;
+        const lengthNum = parseFloat(ln) || 0;
+        const widthNum  = parseFloat(wd) || 0;
+
+        // partialMap (section||size||width level)
+        const partialKey = `${sec}||${sz}||${wd}`;
         if (!partialMap.has(partialKey)) partialMap.set(partialKey, []);
         partialMap.get(partialKey).push({
           lengthNum,
-          lengthVal,
-          section: parts[0],
-          size: parts[1],
-          width: parts[2],
+          lengthVal: ln,
+          section: sec,
+          size: sz,
+          width: wd,
+          lookupData: data,
+        });
+
+        // sizeMap (section||size level)
+        const sizeKey = `${sec}||${sz}`;
+        if (!sizeMap.has(sizeKey)) sizeMap.set(sizeKey, []);
+        sizeMap.get(sizeKey).push({
+          widthNum,
+          widthVal: wd,
+          lengthNum,
+          lengthVal: ln,
+          section: sec,
+          size: sz,
           lookupData: data,
         });
       }
     });
 
-    return { lookup, sectionSet, partialMap };
+    return { lookup, sectionSet, partialMap, sizeMap };
   };
 
-  // ── Helper: get purchase data for a row, with higher-length fallback ───────
-  const getPurchaseData = (lookup, sectionSet, partialMap, section, size, width, length) => {
+  // ── Helper: get purchase data for a row ────────────────────────────────────
+  // Fallback chain:
+  //   1. Exact match          (section + size + width + length)
+  //   2. Near higher length   (same section + size + width, closest length >= enquiry length)
+  //   3. Near higher width    (same section + size, closest width >= enquiry width,
+  //                            then within that width closest length >= enquiry length,
+  //                            else any length available)
+  //   4. null / undefined
+  const getPurchaseData = (lookup, sectionSet, partialMap, sizeMap, section, size, width, length) => {
+    const enquiryLen = parseFloat(length) || 0;
+    const enquiryWid = parseFloat(width)  || 0;
+
+    // ── Step 1: Exact match ──────────────────────────────────────────────────
     const exactKey = `${section}||${size}||${width}||${length}`;
     if (lookup.has(exactKey)) {
-      return { ...lookup.get(exactKey), isAlternative: false, altSection: section, altSize: size, altWidth: width, altLength: length };
+      return {
+        ...lookup.get(exactKey),
+        isAlternative: false,
+        altSection: section,
+        altSize: size,
+        altWidth: width,
+        altLength: length,
+      };
     }
 
+    // ── Step 2: Near higher length (same section + size + width) ────────────
     const partialKey = `${section}||${size}||${width}`;
-    const enquiryLen = parseFloat(length) || 0;
     if (partialMap.has(partialKey)) {
       const candidates = partialMap.get(partialKey).filter(c => c.lengthNum >= enquiryLen);
       if (candidates.length > 0) {
@@ -146,7 +184,45 @@ export default function ComparativeStatement() {
       }
     }
 
+    // ── Step 3: Near higher width (same section + size) ──────────────────────
+    const sizeKey = `${section}||${size}`;
+    if (sizeMap.has(sizeKey)) {
+      // Only consider widths strictly greater than enquiry width
+      // (exact width already tried above in steps 1 & 2)
+      const widthCandidates = sizeMap.get(sizeKey).filter(c => c.widthNum > enquiryWid);
+
+      if (widthCandidates.length > 0) {
+        // Find the closest (smallest) width >= enquiry width
+        const minWidth = Math.min(...widthCandidates.map(c => c.widthNum));
+        const sameWidthGroup = widthCandidates.filter(c => c.widthNum === minWidth);
+
+        // Within that width group, prefer closest length >= enquiry length
+        const lengthMatch = sameWidthGroup.filter(c => c.lengthNum >= enquiryLen);
+        let best;
+        if (lengthMatch.length > 0) {
+          lengthMatch.sort((a, b) => a.lengthNum - b.lengthNum);
+          best = lengthMatch[0];
+        } else {
+          // No length >= enquiry length in this width group — take any (closest length)
+          sameWidthGroup.sort((a, b) => b.lengthNum - a.lengthNum);
+          best = sameWidthGroup[0];
+        }
+
+        return {
+          ...best.lookupData,
+          isAlternative: true,
+          altSection: best.section,
+          altSize: best.size,
+          altWidth: best.widthVal,
+          altLength: best.lengthVal,
+        };
+      }
+    }
+
+    // ── Step 4: Section exists in purchase data but no dimension match ───────
     if (sectionSet.has(section)) return null;
+
+    // ── Section not in purchase data at all ──────────────────────────────────
     return undefined;
   };
 
@@ -162,7 +238,7 @@ export default function ComparativeStatement() {
       });
     });
     const suppliers = Array.from(supplierSet).sort();
-    const { lookup: purchaseLookup, sectionSet, partialMap } = buildPurchaseLookup();
+    const { lookup: purchaseLookup, sectionSet, partialMap, sizeMap } = buildPurchaseLookup();
     const rowMap = new Map();
     filteredEntries.forEach(entry => {
       (entry.sections || []).forEach(sec => {
@@ -173,7 +249,7 @@ export default function ComparativeStatement() {
         const sectionMt = sec.mt || 0;
         const key = `${section}||${size}||${width}||${length}`;
         if (!rowMap.has(key)) {
-          const purchaseData = getPurchaseData(purchaseLookup, sectionSet, partialMap, section, size, width, length);
+          const purchaseData = getPurchaseData(purchaseLookup, sectionSet, partialMap, sizeMap, section, size, width, length);
           const sectionExists = sectionSet.has(section);
 
           rowMap.set(key, {
@@ -338,7 +414,6 @@ export default function ComparativeStatement() {
   };
 
   // ── Build alternative item label ───────────────────────────────────────────
-  // Format: "HRS - 3.15 x 1250 x 6300 - Alt"
   const buildAltLabel = (row) => {
     if (!row.isAlternative) return null;
     const dims = [row.altSize, row.altWidth, row.altLength].filter(Boolean).join(" x ");
@@ -432,7 +507,6 @@ export default function ComparativeStatement() {
       const dims = [row.size, row.width, row.length].filter(Boolean).join(" x ");
       let description = cleanText([row.section, dims].filter(Boolean).join(" - ")) || "-";
       const altLabel = buildAltLabel(row);
-      // ── CHANGED: no "Alt item:" prefix; altLabel already ends with " - Alt"
       if (altLabel) description += `\n${cleanText(altLabel)}`;
 
       const pct     = formatPercent(row.minRate, row.lowestPurchaseRate);
@@ -500,11 +574,11 @@ export default function ComparativeStatement() {
       });
     });
 
-    const csMinWidths = [26, 50, 18, 26, 30, 26, 30];
+    const csMinWidths = [26,90, 18, 26, 30, 26, 30];
     suppliers.forEach(() => { csMinWidths.push(18, 26); });
     csMinWidths.push(22, 22);
 
-    const csMaxWidths = [32, 90, 24, 38, 44, 38, 44];
+    const csMaxWidths = [32, 110, 24, 38, 44, 38, 44];
     suppliers.forEach(() => { csMaxWidths.push(30, 40); });
     csMaxWidths.push(32, 32);
 
@@ -524,7 +598,6 @@ export default function ComparativeStatement() {
       const dims = [row.size, row.width, row.length].filter(Boolean).join(" x ");
       let description = cleanText([row.section, dims].filter(Boolean).join(" - ")) || "-";
       const altLabel = buildAltLabel(row);
-      // ── CHANGED: no "Alt item:" prefix
       if (altLabel) description += `\n${cleanText(altLabel)}`;
 
       const pct        = formatPercent(row.minRate, row.lowestPurchaseRate);
@@ -710,7 +783,6 @@ export default function ComparativeStatement() {
       let descContent = cleanText(r.description) || "-";
       if (origRow && origRow.isAlternative) {
         const altLabel = buildAltLabel(origRow);
-        // ── CHANGED: no "Alt item:" prefix
         if (altLabel) descContent += `\n${cleanText(altLabel)}`;
       }
 
@@ -807,11 +879,11 @@ export default function ComparativeStatement() {
       });
     });
 
-    const minWidths = [20, 50, 16, 28, 32, 28, 32];
+    const minWidths = [20, 80, 16, 28, 32, 28, 32];
     suppliers.forEach(() => { minWidths.push(16, 22, 28); });
     minWidths.push(24, 24);
 
-    const maxWidths = [28, 100, 26, 40, 46, 40, 46];
+    const maxWidths = [28, 120, 26, 40, 46, 40, 46];
     suppliers.forEach(() => { maxWidths.push(28, 34, 42); });
     maxWidths.push(34, 34);
 
@@ -883,7 +955,6 @@ export default function ComparativeStatement() {
 
       let descStr = row.section || "";
       const altLabel = buildAltLabel(row);
-      // ── CHANGED: no "Alt item:" prefix
       if (altLabel) descStr += `\n${altLabel}`;
 
       const dr = [
@@ -968,7 +1039,6 @@ export default function ComparativeStatement() {
       let descStr = r.description || "";
       if (origRow && origRow.isAlternative) {
         const altLabel = buildAltLabel(origRow);
-        // ── CHANGED: no "Alt item:" prefix
         if (altLabel) descStr += `\n${altLabel}`;
       }
 
@@ -1152,7 +1222,6 @@ export default function ComparativeStatement() {
                     <td className="cs-td cs-td-sticky cs-td-sno">{idx + 1}</td>
                     <td className="cs-td cs-td-sticky cs-td-section">
                       <span className="cs-section-tag">{row.section || "—"}</span>
-                      {/* ── CHANGED: render altLabel directly, no "Alt item:" prefix */}
                       {altLabel && (
                         <div className="cs-alt-item-label">
                           {altLabel}
@@ -1340,7 +1409,6 @@ export default function ComparativeStatement() {
                       <td className="cs-l1-sno">{i + 1}</td>
                       <td className="cs-l1-desc">
                         {r.description || "—"}
-                        {/* ── CHANGED: render altLabel directly, no "Alt item:" prefix */}
                         {altLabel && (
                           <div className="cs-alt-item-label">
                             {altLabel}
