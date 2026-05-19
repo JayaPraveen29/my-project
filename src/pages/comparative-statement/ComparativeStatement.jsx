@@ -142,13 +142,6 @@ export default function ComparativeStatement() {
   };
 
   // ── Helper: get purchase data for a row ────────────────────────────────────
-  // Fallback chain:
-  //   1. Exact match          (section + size + width + length)
-  //   2. Near higher length   (same section + size + width, closest length >= enquiry length)
-  //   3. Near higher width    (same section + size, closest width >= enquiry width,
-  //                            then within that width closest length >= enquiry length,
-  //                            else any length available)
-  //   4. null / undefined
   const getPurchaseData = (lookup, sectionSet, partialMap, sizeMap, section, size, width, length) => {
     const enquiryLen = parseFloat(length) || 0;
     const enquiryWid = parseFloat(width)  || 0;
@@ -187,23 +180,18 @@ export default function ComparativeStatement() {
     // ── Step 3: Near higher width (same section + size) ──────────────────────
     const sizeKey = `${section}||${size}`;
     if (sizeMap.has(sizeKey)) {
-      // Only consider widths strictly greater than enquiry width
-      // (exact width already tried above in steps 1 & 2)
       const widthCandidates = sizeMap.get(sizeKey).filter(c => c.widthNum > enquiryWid);
 
       if (widthCandidates.length > 0) {
-        // Find the closest (smallest) width >= enquiry width
         const minWidth = Math.min(...widthCandidates.map(c => c.widthNum));
         const sameWidthGroup = widthCandidates.filter(c => c.widthNum === minWidth);
 
-        // Within that width group, prefer closest length >= enquiry length
         const lengthMatch = sameWidthGroup.filter(c => c.lengthNum >= enquiryLen);
         let best;
         if (lengthMatch.length > 0) {
           lengthMatch.sort((a, b) => a.lengthNum - b.lengthNum);
           best = lengthMatch[0];
         } else {
-          // No length >= enquiry length in this width group — take any (closest length)
           sameWidthGroup.sort((a, b) => b.lengthNum - a.lengthNum);
           best = sameWidthGroup[0];
         }
@@ -279,11 +267,24 @@ export default function ComparativeStatement() {
         });
       });
     });
-    const rows = Array.from(rowMap.values()).map(row => {
-      const quotedRates = Object.values(row.rates).map(r => r.rate).filter(r => r > 0);
-      const minRate = quotedRates.length ? Math.min(...quotedRates) : null;
-      return { ...row, minRate };
-    });
+
+    // ── Sort rows alphabetically by section, then size, width, length ────────
+    const rows = Array.from(rowMap.values())
+      .sort((a, b) => {
+        const secCmp = (a.section || "").localeCompare(b.section || "", undefined, { sensitivity: "base" });
+        if (secCmp !== 0) return secCmp;
+        const sizeCmp = (a.size || "").localeCompare(b.size || "", undefined, { sensitivity: "base" });
+        if (sizeCmp !== 0) return sizeCmp;
+        const widCmp = (parseFloat(a.width) || 0) - (parseFloat(b.width) || 0);
+        if (widCmp !== 0) return widCmp;
+        return (parseFloat(a.length) || 0) - (parseFloat(b.length) || 0);
+      })
+      .map(row => {
+        const quotedRates = Object.values(row.rates).map(r => r.rate).filter(r => r > 0);
+        const minRate = quotedRates.length ? Math.min(...quotedRates) : null;
+        return { ...row, minRate };
+      });
+
     return { suppliers, rows };
   };
 
@@ -437,6 +438,29 @@ export default function ComparativeStatement() {
     return parts.join("   |   ");
   };
 
+  // ── PCT cell styles helper ─────────────────────────────────────────────────
+  // "vs Lowest Purchase" column → up=red, down=green — text color only, NO fillColor
+  const pctLowestStyles = (pctNum) => ({
+    halign: "center",
+    fontStyle: pctNum !== null && pctNum !== 0 ? "bold" : "normal",
+    textColor:
+      pctNum === null  ? [0, 0, 0]      :
+      pctNum  >  0     ? [220, 38, 38]  :   // #dc2626
+      pctNum  <  0     ? [22, 163, 74]  :   // #16a34a
+                         [100, 116, 139],   // #64748b
+  });
+
+  // "vs Last Purchase" column → up=orange, down=green — text color only, NO fillColor
+  const pctLastStyles = (pctNum) => ({
+    halign: "center",
+    fontStyle: pctNum !== null && pctNum !== 0 ? "bold" : "normal",
+    textColor:
+      pctNum === null  ? [0, 0, 0]      :
+      pctNum  >  0     ? [234, 88, 12]  :   // #ea580c
+      pctNum  <  0     ? [22, 163, 74]  :   // #16a34a
+                         [100, 116, 139],   // #64748b
+  });
+
   // ── Export PDF ─────────────────────────────────────────────────────────────
   const exportPDF = () => {
     const doc = new jsPDF("l", "pt", "a4");
@@ -574,11 +598,11 @@ export default function ComparativeStatement() {
       });
     });
 
-    const csMinWidths = [26,90, 18, 26, 30, 26, 30];
+    const csMinWidths = [26,120, 18, 26, 30, 26, 30];
     suppliers.forEach(() => { csMinWidths.push(18, 26); });
     csMinWidths.push(22, 22);
 
-    const csMaxWidths = [32, 110, 24, 38, 44, 38, 44];
+    const csMaxWidths = [32, 130, 24, 38, 44, 38, 44];
     suppliers.forEach(() => { csMaxWidths.push(30, 40); });
     csMaxWidths.push(32, 32);
 
@@ -641,13 +665,15 @@ export default function ComparativeStatement() {
             },
           ];
         }),
+        // ── % vs Lowest Purchase ── text color only, NO background fill
         {
           content: pctNum !== null ? `${pctNum > 0 ? "+" : pctNum < 0 ? "-" : ""}${Math.abs(pctNum)}%` : "",
-          styles: { halign: "center", textColor: [0, 0, 0] },
+          styles: pctLowestStyles(pctNum),
         },
+        // ── % vs Last Purchase ── text color only, NO background fill
         {
           content: pctLastNum !== null ? `${pctLastNum > 0 ? "+" : pctLastNum < 0 ? "-" : ""}${Math.abs(pctLastNum)}%` : "",
-          styles: { halign: "center", textColor: [0, 0, 0] },
+          styles: pctLastStyles(pctLastNum),
         },
       ];
     });
@@ -819,13 +845,15 @@ export default function ComparativeStatement() {
             { content: hasData ? formatAmount(d.amount)       : "", styles: { halign: "center" } },
           ];
         }),
+        // ── % vs Lowest Purchase ── text color only, NO background fill
         {
           content: pctLowestNum !== null ? `${pctLowestNum > 0 ? "+" : pctLowestNum < 0 ? "-" : ""}${Math.abs(pctLowestNum)}%` : "",
-          styles: { halign: "center", textColor: [0, 0, 0] },
+          styles: pctLowestStyles(pctLowestNum),
         },
+        // ── % vs Last Purchase ── text color only, NO background fill
         {
           content: pctLastNum !== null ? `${pctLastNum > 0 ? "+" : pctLastNum < 0 ? "-" : ""}${Math.abs(pctLastNum)}%` : "",
-          styles: { halign: "center", textColor: [0, 0, 0] },
+          styles: pctLastStyles(pctLastNum),
         },
       ];
     });
@@ -879,11 +907,11 @@ export default function ComparativeStatement() {
       });
     });
 
-    const minWidths = [20, 80, 16, 28, 32, 28, 32];
+    const minWidths = [20, 120, 16, 28, 32, 28, 32];
     suppliers.forEach(() => { minWidths.push(16, 22, 28); });
     minWidths.push(24, 24);
 
-    const maxWidths = [28, 120, 26, 40, 46, 40, 46];
+    const maxWidths = [28, 130, 26, 40, 46, 40, 46];
     suppliers.forEach(() => { maxWidths.push(28, 34, 42); });
     maxWidths.push(34, 34);
 
