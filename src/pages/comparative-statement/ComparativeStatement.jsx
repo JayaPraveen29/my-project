@@ -15,6 +15,7 @@ export default function ComparativeStatement() {
   // Filters
   const [filterFY, setFilterFY] = useState("");
   const [filterEnquiryNo, setFilterEnquiryNo] = useState("");
+  const [filterCategory, setFilterCategory] = useState("All");
   const [filterDate, setFilterDate] = useState("");
   const [filterEndDate, setFilterEndDate] = useState("");
 
@@ -46,17 +47,22 @@ export default function ComparativeStatement() {
     let result = [...allEntries];
     if (filterFY) result = result.filter(e => e.FinancialYear === filterFY);
     if (filterEnquiryNo) result = result.filter(e => String(e.No) === String(filterEnquiryNo));
+    if (filterCategory !== "All") result = result.filter(e => (e.Category || "All") === filterCategory);
     if (filterDate) result = result.filter(e => e.EnquiryDate >= filterDate);
     if (filterEndDate) result = result.filter(e => e.EnquiryDate <= filterEndDate);
     setFilteredEntries(result);
-  }, [filterFY, filterEnquiryNo, filterDate, filterEndDate, allEntries]);
+  }, [filterFY, filterEnquiryNo, filterCategory, filterDate, filterEndDate, allEntries]);
 
   // ── Build purchase rate lookup ─────────────────────────────────────────────
   const buildPurchaseLookup = () => {
     const sectionSet = new Set();
     const dateMap = new Map();
 
-    purchaseEntries.forEach(entry => {
+    const scopedPurchaseEntries = filterCategory === "All"
+      ? purchaseEntries
+      : purchaseEntries.filter(e => (e.Category || "All") === filterCategory);
+
+    scopedPurchaseEntries.forEach(entry => {
       const billDate = entry["Bill Date"] || entry["Received On"] || "";
       if (filterEndDate && billDate && billDate > filterEndDate) return;
       (entry.items || []).forEach(item => {
@@ -428,6 +434,7 @@ export default function ComparativeStatement() {
   const buildPdfHeadingInfo = () => {
     const parts = [];
     if (filterFY) parts.push(`FY: ${filterFY}`);
+    if (filterCategory !== "All") parts.push(`Category: ${filterCategory}`);
     if (filterEnquiryNo) {
       const enquiryEntry = allEntries.find(e => String(e.No) === String(filterEnquiryNo));
       const dateStr = enquiryEntry?.EnquiryDate ? `  Date: ${formatDate(enquiryEntry.EnquiryDate)}` : "";
@@ -1171,7 +1178,16 @@ export default function ComparativeStatement() {
           <select className="cs-filter-select" value={filterEnquiryNo}
             onChange={e => { setFilterEnquiryNo(e.target.value); setFilterDate(""); }}>
             <option value="">All Enquiries</option>
-            {uniqueEnquiryNos.map(no => <option key={no} value={no}>Enquiry #{no}</option>)}
+            {uniqueEnquiryNos.map(no => <option key={no} value={no}>{no}</option>)}
+          </select>
+        </div>
+        <div className="cs-filter-group">
+          <label className="cs-filter-label">Category</label>
+          <select className="cs-filter-select" value={filterCategory}
+            onChange={e => setFilterCategory(e.target.value)}>
+            <option value="All">All</option>
+            <option value="CT">CT</option>
+            <option value="STRL">STRL</option>
           </select>
         </div>
         <div className="cs-filter-group">
@@ -1192,8 +1208,8 @@ export default function ComparativeStatement() {
             onChange={e => { setFilterEndDate(e.target.value); setFilterEnquiryNo(""); }}
           />
         </div>
-        {(filterFY || filterEnquiryNo || filterDate || filterEndDate) && (
-          <button className="cs-clear-btn" onClick={() => { setFilterFY(""); setFilterEnquiryNo(""); setFilterDate(""); setFilterEndDate(""); }}>
+        {(filterFY || filterEnquiryNo || filterCategory !== "All" || filterDate || filterEndDate) && (
+          <button className="cs-clear-btn" onClick={() => { setFilterFY(""); setFilterEnquiryNo(""); setFilterCategory("All"); setFilterDate(""); setFilterEndDate(""); }}>
             ✕ Clear Filters
           </button>
         )}

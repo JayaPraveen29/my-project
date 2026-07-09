@@ -23,6 +23,9 @@ const emptySection = () => ({
   supplierRates: [],
 });
 
+// ── Category options for the new dropdown ────────────────────────────────────
+const CATEGORY_OPTIONS = ["All", "CT", "STRL"];
+
 // ── Number format helpers ─────────────────────────────────────────────────────
 const formatMT = (val) => {
   if (val === "" || val == null) return "";
@@ -179,6 +182,7 @@ export default function SteelEnquiryEntry() {
   const [financialYear, setFinancialYear] = useState("2026-27");
   const [enquiryNo, setEnquiryNo]         = useState("");
   const [enquiryDate, setEnquiryDate]     = useState("");
+  const [category, setCategory]           = useState("All");
 
   // Sections (rows) and global supplier columns
   const [sections, setSections]   = useState([emptySection()]);
@@ -204,6 +208,11 @@ export default function SteelEnquiryEntry() {
   const allSizeValues     = allSizeDocs.map(d => d.value);
   const allWidthValues    = allWidthDocs.map(d => d.value);
   const allLengthValues   = allLengthDocs.map(d => d.value);
+
+  // Enquiries shown in the "Load" list, filtered by the selected Category
+  const visibleEnquiries = category === "All"
+    ? existingEnquiries
+    : existingEnquiries.filter(e => e.Category === category);
 
   // ── Fetch master data ────────────────────────────────────────────────────
   const fetchMaster = useCallback(async () => {
@@ -389,6 +398,7 @@ export default function SteelEnquiryEntry() {
     setEnquiryNo("");
     setEnquiryDate("");
     setFinancialYear("2026-27");
+    setCategory("All");
     setSections([emptySection()]);
     setSuppliers([]);
     setLoadedEnquiryId(null);
@@ -399,6 +409,7 @@ export default function SteelEnquiryEntry() {
     setEnquiryNo("");
     setEnquiryDate("");
     setFinancialYear("2026-27");
+    setCategory("All");
     setSections([emptySection()]);
     setSuppliers([]);
     setLoadedEnquiryId(null);
@@ -424,6 +435,7 @@ export default function SteelEnquiryEntry() {
     setEnquiryNo(String(enq.No || ""));
     setEnquiryDate(enq.EnquiryDate || "");
     setFinancialYear(enq.FinancialYear || "2026-27");
+    setCategory(enq.Category || "All");
 
     const supNames = [];
     (enq.sections || []).forEach(sec => {
@@ -470,6 +482,7 @@ export default function SteelEnquiryEntry() {
         No: enquiryNo.trim(),
         FinancialYear: financialYear,
         EnquiryDate: enquiryDate,
+        Category: category,
         sections: sections.map(s => ({
           section: s.sectionConfirmed || s.sectionText.trim(),
           size:    s.sizeConfirmed    || s.sizeText.trim(),
@@ -489,6 +502,7 @@ export default function SteelEnquiryEntry() {
       const existing = existingEnquiries.find(
         e => String(e.No).trim().toLowerCase() === enquiryNo.trim().toLowerCase()
           && e.FinancialYear === financialYear
+          && (e.Category || "All") === category
       );
       if (existing) {
         await updateDoc(doc(db, "enquiryEntries", existing.id), payload);
@@ -498,6 +512,7 @@ export default function SteelEnquiryEntry() {
         alert("Enquiry Saved Successfully!");
       }
       setEnquiryNo(""); setEnquiryDate("");
+      setCategory("All");
       setSections([emptySection()]); setSuppliers([]);
       setLoadedEnquiryId(null);
       await fetchMaster();
@@ -559,11 +574,11 @@ export default function SteelEnquiryEntry() {
               onClick={() => setShowLoadDropdown(v => !v)}
               type="button"
             >▾ Load</button>
-            {showLoadDropdown && existingEnquiries.length > 0 && (
+            {showLoadDropdown && visibleEnquiries.length > 0 && (
               <div className="see-load-dropdown">
                 <div className="see-load-dropdown-title">Select Enquiry to Load</div>
                 <div className="see-load-list">
-                  {existingEnquiries.map(e => (
+                  {visibleEnquiries.map(e => (
                     <div key={e.id} className={`see-load-opt${loadedEnquiryId === e.id ? " see-load-opt--active" : ""}`}>
                       <div className="see-load-opt-info" onClick={() => loadEnquiry(e)}>
                         <span className="see-load-no">#{e.No}</span>
@@ -582,6 +597,14 @@ export default function SteelEnquiryEntry() {
                 </div>
               </div>
             )}
+            {showLoadDropdown && visibleEnquiries.length === 0 && (
+              <div className="see-load-dropdown">
+                <div className="see-load-dropdown-title">Select Enquiry to Load</div>
+                <div className="see-load-list">
+                  <div className="see-load-opt">No enquiries found</div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -593,6 +616,19 @@ export default function SteelEnquiryEntry() {
             value={enquiryDate}
             onChange={e => setEnquiryDate(e.target.value)}
           />
+        </div>
+
+        <div className="see-meta-field">
+          <label className="see-meta-label">Category</label>
+          <select
+            className="see-meta-input see-meta-select"
+            value={category}
+            onChange={e => setCategory(e.target.value)}
+          >
+            {CATEGORY_OPTIONS.map(c => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
         </div>
 
         <div className="see-meta-field">
