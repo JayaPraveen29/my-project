@@ -15,7 +15,7 @@ export default function ComparativeStatement() {
   // Filters
   const [filterFY, setFilterFY] = useState("");
   const [filterEnquiryNo, setFilterEnquiryNo] = useState("");
-  const [filterCategory, setFilterCategory] = useState("All");
+  const [filterWorkType, setFilterWorkType] = useState("All");
   const [filterDate, setFilterDate] = useState("");
   const [filterEndDate, setFilterEndDate] = useState("");
 
@@ -47,20 +47,19 @@ export default function ComparativeStatement() {
     let result = [...allEntries];
     if (filterFY) result = result.filter(e => e.FinancialYear === filterFY);
     if (filterEnquiryNo) result = result.filter(e => String(e.No) === String(filterEnquiryNo));
-    if (filterCategory !== "All") result = result.filter(e => (e.Category || "All") === filterCategory);
     if (filterDate) result = result.filter(e => e.EnquiryDate >= filterDate);
     if (filterEndDate) result = result.filter(e => e.EnquiryDate <= filterEndDate);
     setFilteredEntries(result);
-  }, [filterFY, filterEnquiryNo, filterCategory, filterDate, filterEndDate, allEntries]);
+  }, [filterFY, filterEnquiryNo, filterDate, filterEndDate, allEntries]);
 
   // ── Build purchase rate lookup ─────────────────────────────────────────────
   const buildPurchaseLookup = () => {
     const sectionSet = new Set();
     const dateMap = new Map();
 
-    const scopedPurchaseEntries = filterCategory === "All"
+    const scopedPurchaseEntries = filterWorkType === "All"
       ? purchaseEntries
-      : purchaseEntries.filter(e => (e.Category || "All") === filterCategory);
+      : purchaseEntries.filter(e => (e["Work Type"] || "Unknown") === filterWorkType);
 
     scopedPurchaseEntries.forEach(entry => {
       const billDate = entry["Bill Date"] || entry["Received On"] || "";
@@ -429,12 +428,13 @@ export default function ComparativeStatement() {
 
   const uniqueFYs = [...new Set(allEntries.map(e => e.FinancialYear).filter(Boolean))].sort();
   const uniqueEnquiryNos = [...new Set(allEntries.map(e => e.No).filter(v => v != null))].sort((a, b) => a - b);
+  const uniqueWorkTypes = [...new Set(purchaseEntries.map(e => e["Work Type"] || "Unknown"))].sort();
 
   // ── Helper: build PDF heading info string ──────────────────────────────────
   const buildPdfHeadingInfo = () => {
     const parts = [];
     if (filterFY) parts.push(`FY: ${filterFY}`);
-    if (filterCategory !== "All") parts.push(`Category: ${filterCategory}`);
+    if (filterWorkType !== "All") parts.push(`Work Type: ${filterWorkType}`);
     if (filterEnquiryNo) {
       const enquiryEntry = allEntries.find(e => String(e.No) === String(filterEnquiryNo));
       const dateStr = enquiryEntry?.EnquiryDate ? `  Date: ${formatDate(enquiryEntry.EnquiryDate)}` : "";
@@ -1182,12 +1182,11 @@ export default function ComparativeStatement() {
           </select>
         </div>
         <div className="cs-filter-group">
-          <label className="cs-filter-label">Category</label>
-          <select className="cs-filter-select" value={filterCategory}
-            onChange={e => setFilterCategory(e.target.value)}>
+          <label className="cs-filter-label">Work Type</label>
+          <select className="cs-filter-select" value={filterWorkType}
+            onChange={e => setFilterWorkType(e.target.value)}>
             <option value="All">All</option>
-            <option value="CT">CT</option>
-            <option value="STRL">STRL</option>
+            {uniqueWorkTypes.map(wt => <option key={wt} value={wt}>{wt}</option>)}
           </select>
         </div>
         <div className="cs-filter-group">
@@ -1208,8 +1207,8 @@ export default function ComparativeStatement() {
             onChange={e => { setFilterEndDate(e.target.value); setFilterEnquiryNo(""); }}
           />
         </div>
-        {(filterFY || filterEnquiryNo || filterCategory !== "All" || filterDate || filterEndDate) && (
-          <button className="cs-clear-btn" onClick={() => { setFilterFY(""); setFilterEnquiryNo(""); setFilterCategory("All"); setFilterDate(""); setFilterEndDate(""); }}>
+        {(filterFY || filterEnquiryNo || filterWorkType !== "All" || filterDate || filterEndDate) && (
+          <button className="cs-clear-btn" onClick={() => { setFilterFY(""); setFilterEnquiryNo(""); setFilterWorkType("All"); setFilterDate(""); setFilterEndDate(""); }}>
             ✕ Clear Filters
           </button>
         )}
