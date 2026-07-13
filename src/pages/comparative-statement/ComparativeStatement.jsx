@@ -976,8 +976,12 @@ export default function ComparativeStatement() {
   // ── Export Excel ───────────────────────────────────────────────────────────
   const exportExcel = () => {
     const wb = XLSX.utils.book_new();
-    const header1 = ["S.No", "Section", "Size", "Width", "Length", "Qty (MT)", "Lowest Purchase (Rs./MT)", "Last Purchase (Rs./MT)"];
-    const header2 = ["", "", "", "", "", "", "", "Date | Rate"];
+
+    // ── Main Comparative Statement sheet ───────────────────────────────────────
+    // Header row 1 / row 2: Lowest Purchase & Last Purchase each get their own
+    // "Date" / "Amount" sub-columns, matching the on-screen table + PDF layout.
+    const header1 = ["S.No", "Section", "Size", "Width", "Length", "Qty (MT)", "Lowest Purchase", "", "Last Purchase", ""];
+    const header2 = ["", "", "", "", "", "", "Date", "Amount", "Date", "Amount"];
     suppliers.forEach(sup => { header1.push(sup, "", ""); header2.push("MT", "Rate (Rs./MT)", "Amount"); });
     header1.push("% vs Lowest Purchase", "% vs Last Purchase");
     header2.push("", "");
@@ -992,15 +996,20 @@ export default function ComparativeStatement() {
       const altLabel = buildAltLabel(row);
       if (altLabel) descStr += `\n${altLabel}`;
 
+      const lowestDateVal = row.lowestPurchaseRate != null && row.lowestPurchaseRate !== 0 && row.lowestPurchaseDate
+        ? formatDate(row.lowestPurchaseDate) : "";
+      const lowestAmtVal = row.lowestPurchaseRate != null && row.lowestPurchaseRate !== 0
+        ? formatRate(Math.round(row.lowestPurchaseRate)) : "";
+      const lastDateVal = row.lastPurchaseRate != null && row.lastPurchaseRate !== 0 && row.lastPurchaseDate
+        ? formatDate(row.lastPurchaseDate) : "";
+      const lastAmtVal = row.lastPurchaseRate != null && row.lastPurchaseRate !== 0
+        ? formatRate(Math.round(row.lastPurchaseRate)) : "";
+
       const dr = [
         idx + 1, descStr, row.size || "", row.width || "", row.length || "",
         row.sectionMt ? formatMT(row.sectionMt) : "",
-        row.lowestPurchaseRate != null && row.lowestPurchaseRate !== 0
-          ? `${row.lowestPurchaseDate ? formatDate(row.lowestPurchaseDate) + "  " : ""}${formatRate(Math.round(row.lowestPurchaseRate))}`
-          : "",
-        row.lastPurchaseRate != null && row.lastPurchaseRate !== 0
-          ? `${row.lastPurchaseDate ? formatDate(row.lastPurchaseDate) + "  " : ""}${formatRate(Math.round(row.lastPurchaseRate))}`
-          : "",
+        lowestDateVal, lowestAmtVal,
+        lastDateVal, lastAmtVal,
       ];
       suppliers.forEach(sup => {
         const rateObj = row.rates[sup];
@@ -1019,8 +1028,10 @@ export default function ComparativeStatement() {
 
     const summaryRow = [
       "", "Total MT / Avg Rate", "", "", "",
-      qtyMtSummary.totalSectionMt > 0           ? formatMT(qtyMtSummary.totalSectionMt)                              : "",
+      qtyMtSummary.totalSectionMt > 0 ? formatMT(qtyMtSummary.totalSectionMt) : "",
+      "",
       qtyMtSummary.lowestPurchaseWeightedAvg != null ? formatRate(Math.round(qtyMtSummary.lowestPurchaseWeightedAvg)) : "",
+      "",
       qtyMtSummary.lastPurchaseWeightedAvg   != null ? formatRate(Math.round(qtyMtSummary.lastPurchaseWeightedAvg))   : "",
     ];
     suppliers.forEach(sup => {
@@ -1030,7 +1041,7 @@ export default function ComparativeStatement() {
     });
     summaryRow.push("", "");
 
-    const avgQuotedRowExcel = ["", "Avg of Quoted (L1)", "", "", "", "", "", ""];
+    const avgQuotedRowExcel = ["", "Avg of Quoted (L1)", "", "", "", "", "", "", "", ""];
     suppliers.forEach(sup => {
       const avgRate = l1Summary.supplierTotals[sup]?.weightedAvgRate;
       avgQuotedRowExcel.push("", avgRate != null ? formatRate(Math.round(avgRate)) : "", "");
@@ -1039,18 +1050,22 @@ export default function ComparativeStatement() {
 
     const ws = XLSX.utils.aoa_to_sheet([header1, header2, ...dataRows, summaryRow, avgQuotedRowExcel]);
     const merges = [
-      { s: { r: 0, c: 0 }, e: { r: 1, c: 0 } }, { s: { r: 0, c: 1 }, e: { r: 1, c: 1 } },
-      { s: { r: 0, c: 2 }, e: { r: 1, c: 2 } }, { s: { r: 0, c: 3 }, e: { r: 1, c: 3 } },
-      { s: { r: 0, c: 4 }, e: { r: 1, c: 4 } }, { s: { r: 0, c: 5 }, e: { r: 1, c: 5 } },
-      { s: { r: 0, c: 6 }, e: { r: 1, c: 6 } }, { s: { r: 0, c: 7 }, e: { r: 1, c: 7 } },
+      { s: { r: 0, c: 0 }, e: { r: 1, c: 0 } }, // S.No
+      { s: { r: 0, c: 1 }, e: { r: 1, c: 1 } }, // Section
+      { s: { r: 0, c: 2 }, e: { r: 1, c: 2 } }, // Size
+      { s: { r: 0, c: 3 }, e: { r: 1, c: 3 } }, // Width
+      { s: { r: 0, c: 4 }, e: { r: 1, c: 4 } }, // Length
+      { s: { r: 0, c: 5 }, e: { r: 1, c: 5 } }, // Qty (MT)
+      { s: { r: 0, c: 6 }, e: { r: 0, c: 7 } }, // Lowest Purchase (Date + Amount)
+      { s: { r: 0, c: 8 }, e: { r: 0, c: 9 } }, // Last Purchase (Date + Amount)
     ];
-    let col = 8;
+    let col = 10;
     suppliers.forEach(() => { merges.push({ s: { r: 0, c: col }, e: { r: 0, c: col + 2 } }); col += 3; });
     merges.push({ s: { r: 0, c: col }, e: { r: 1, c: col } });
     merges.push({ s: { r: 0, c: col + 1 }, e: { r: 1, c: col + 1 } });
     ws["!merges"] = merges;
     ws["!freeze"] = { ySplit: 2 };
-    const colWidths = [6, 16, 12, 10, 10, 10, 18, 24];
+    const colWidths = [6, 16, 12, 10, 10, 10, 12, 14, 12, 14];
     suppliers.forEach(() => { colWidths.push(10, 16, 14); });
     colWidths.push(16, 16);
     ws["!cols"] = colWidths.map(w => ({ wch: w }));
@@ -1081,12 +1096,14 @@ export default function ComparativeStatement() {
         i + 1,
         descStr,
         r.totalMt > 0 ? parseFloat(r.totalMt).toFixed(2) : "",
+        origRow && origRow.lowestPurchaseRate != null && origRow.lowestPurchaseRate !== 0 && origRow.lowestPurchaseDate
+          ? formatDate(origRow.lowestPurchaseDate) : "",
         origRow && origRow.lowestPurchaseRate != null && origRow.lowestPurchaseRate !== 0
-          ? `${origRow.lowestPurchaseDate ? formatDate(origRow.lowestPurchaseDate) + "  " : ""}${formatRate(Math.round(origRow.lowestPurchaseRate))}`
-          : "",
+          ? formatRate(Math.round(origRow.lowestPurchaseRate)) : "",
+        origRow && origRow.lastPurchaseRate != null && origRow.lastPurchaseRate !== 0 && origRow.lastPurchaseDate
+          ? formatDate(origRow.lastPurchaseDate) : "",
         origRow && origRow.lastPurchaseRate != null && origRow.lastPurchaseRate !== 0
-          ? `${origRow.lastPurchaseDate ? formatDate(origRow.lastPurchaseDate) + "  " : ""}${formatRate(Math.round(origRow.lastPurchaseRate))}`
-          : "",
+          ? formatRate(Math.round(origRow.lastPurchaseRate)) : "",
       ];
       suppliers.forEach(sup => {
         const d = r.supplierData[sup];
@@ -1106,7 +1123,9 @@ export default function ComparativeStatement() {
 
     const l1TotRow = ["", "Total MT / Avg Rate", l1Summary.grandTotalMt > 0 ? parseFloat(l1Summary.grandTotalMt).toFixed(2) : ""];
     l1TotRow.push(
+      "",
       qtyMtSummary.lowestPurchaseWeightedAvg !== null ? formatRate(Math.round(qtyMtSummary.lowestPurchaseWeightedAvg)) : "",
+      "",
       qtyMtSummary.lastPurchaseWeightedAvg   !== null ? formatRate(Math.round(qtyMtSummary.lastPurchaseWeightedAvg))   : ""
     );
     suppliers.forEach(sup => {
@@ -1119,7 +1138,7 @@ export default function ComparativeStatement() {
     });
     l1TotRow.push("", "");
 
-    const l1AvgRow = ["", "Avg of Quoted (L1)", "", "", ""];
+    const l1AvgRow = ["", "Avg of Quoted (L1)", "", "", "", "", ""];
     suppliers.forEach(sup => {
       const avgRate = l1Summary.supplierTotals[sup]?.weightedAvgRate;
       l1AvgRow.push("", avgRate != null ? formatRate(Math.round(avgRate)) : "", "");
@@ -1128,18 +1147,18 @@ export default function ComparativeStatement() {
 
     const wsL1 = XLSX.utils.aoa_to_sheet([l1H1, l1H2, ...l1DataRows, l1TotRow, l1AvgRow]);
     const l1Merges = [
-      { s: { r: 0, c: 0 }, e: { r: 1, c: 0 } },
-      { s: { r: 0, c: 1 }, e: { r: 1, c: 1 } },
-      { s: { r: 0, c: 2 }, e: { r: 1, c: 2 } },
-      { s: { r: 0, c: 3 }, e: { r: 0, c: 4 } },
-      { s: { r: 0, c: 5 }, e: { r: 0, c: 6 } },
+      { s: { r: 0, c: 0 }, e: { r: 1, c: 0 } }, // No.
+      { s: { r: 0, c: 1 }, e: { r: 1, c: 1 } }, // Description of Item
+      { s: { r: 0, c: 2 }, e: { r: 1, c: 2 } }, // Mt.
+      { s: { r: 0, c: 3 }, e: { r: 0, c: 4 } }, // Lowest Purchase (Date + Amount)
+      { s: { r: 0, c: 5 }, e: { r: 0, c: 6 } }, // Last Purchase (Date + Amount)
     ];
-    let lc = 5;
+    let lc = 7;
     suppliers.forEach(() => { l1Merges.push({ s: { r: 0, c: lc }, e: { r: 0, c: lc + 2 } }); lc += 3; });
     l1Merges.push({ s: { r: 0, c: lc }, e: { r: 0, c: lc + 1 } });
     wsL1["!merges"] = l1Merges;
     wsL1["!freeze"] = { ySplit: 2 };
-    const l1ColW = [6, 32, 10, 20, 20];
+    const l1ColW = [6, 32, 10, 12, 14, 12, 14];
     suppliers.forEach(() => { l1ColW.push(10, 14, 16); });
     l1ColW.push(18, 18);
     wsL1["!cols"] = l1ColW.map(w => ({ wch: w }));
