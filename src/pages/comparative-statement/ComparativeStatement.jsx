@@ -518,8 +518,8 @@ export default function ComparativeStatement() {
       { content: "Date",   styles: { halign: "center", valign: "middle" } },
       { content: "Amount", styles: { halign: "center", valign: "middle" } },
       ...suppliers.flatMap(() => [
-        { content: "MT",      styles: { halign: "center", valign: "middle" } },
-        { content: "Rate/MT", styles: { halign: "center", valign: "middle" } },
+        { content: "MT",   styles: { halign: "center", valign: "middle" } },
+        { content: "Rate", styles: { halign: "center", valign: "middle" } },
       ]),
     ];
 
@@ -530,7 +530,7 @@ export default function ComparativeStatement() {
     const csHeaderFlat = [
       "S.No", "Description", "Qty\n(MT)",
       "Date", "Amount", "Date", "Amount",
-      ...suppliers.flatMap(sup => [sup, "Rate/MT"]),
+      ...suppliers.flatMap(sup => [sup, "Rate"]),
       "% vs\nLowest\nPurchase", "% vs\nLast\nPurchase",
     ];
     csHeaderFlat.forEach((t, i) => {
@@ -1145,7 +1145,7 @@ export default function ComparativeStatement() {
     // "Date" / "Amount" sub-columns, matching the on-screen table + PDF layout.
     const header1 = ["S.No", "Section", "Size", "Width", "Length", "Qty (MT)", "Lowest Purchase", "", "Last Purchase", ""];
     const header2 = ["", "", "", "", "", "", "Date", "Amount", "Date", "Amount"];
-    suppliers.forEach(sup => { header1.push(sup, "", ""); header2.push("MT", "Rate (Rs./MT)", "Amount"); });
+    suppliers.forEach(sup => { header1.push(sup, "", ""); header2.push("MT", "Rate", "Amount"); });
     header1.push("% vs Lowest Purchase", "% vs Last Purchase");
     header2.push("", "");
 
@@ -1507,7 +1507,7 @@ export default function ComparativeStatement() {
                 {suppliers.map(sup => (
                   <>
                     <th key={`${sup}-mt`}   className="cs-th cs-th-supplier-sub">MT</th>
-                    <th key={`${sup}-rate`} className="cs-th cs-th-supplier-sub">Rate (₹/MT)</th>
+                    <th key={`${sup}-rate`} className="cs-th cs-th-supplier-sub">Rate</th>
                   </>
                 ))}
               </tr>
