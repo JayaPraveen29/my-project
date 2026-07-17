@@ -475,9 +475,48 @@ export default function ComparativeStatement() {
                          [100, 116, 139],   // #64748b
   });
 
+  // ── Scale a set of jspdf-autotable columnStyles down so the table's total
+  // width fits inside the printable page width. autoTable's `tableWidth:
+  // "wrap"` sizes the table to the SUM of each column's cellWidth — it does
+  // NOT clamp that sum to the page, so with many suppliers the table (esp.
+  // the L1 Summary table, which has 3 columns per supplier) can run off the
+  // right edge of the page. This proportionally shrinks every column so the
+  // total fits, while keeping a sane minimum so text doesn't get crushed.
+  const fitColumnStyles = (colStyles, totalCols, availableWidth, minWidth = 14) => {
+    let total = 0;
+    for (let i = 0; i < totalCols; i++) total += colStyles[i]?.cellWidth || minWidth;
+    if (total > availableWidth) {
+      const scale = availableWidth / total;
+      for (let i = 0; i < totalCols; i++) {
+        if (colStyles[i]) {
+          colStyles[i].cellWidth = Math.max(minWidth, colStyles[i].cellWidth * scale);
+        }
+      }
+    }
+    return colStyles;
+  };
+
+  const clamp = (val, min, max) => Math.min(max, Math.max(min, val));
+
+  // ── PDF page sizing ─────────────────────────────────────────────────────────
+  // Root cause of the L1 table "going out of the table": both tables are drawn
+  // on a FIXED A4-landscape page, but their natural column width (esp. the L1
+  // table, which has 3 columns per supplier instead of 2) grows with every
+  // supplier added — nothing was scaling the PAGE to the content. Shrinking
+  // columns/fonts to force-fit a fixed page makes tables with many suppliers
+  // unreadable, and still clips at extreme counts.
+  // Instead: size each page to the table it holds. Standard A4 landscape is
+  // used as the floor (so small tables still print on a normal page), and the
+  // page grows only as wide as a given table actually needs, up to a sane
+  // ceiling (beyond that we fall back to the old shrink-to-fit behaviour so
+  // the PDF doesn't become absurdly large).
+  const A4_LANDSCAPE_WIDTH = 841.89;
+  const A4_LANDSCAPE_HEIGHT = 595.28;
+  const MAX_PAGE_WIDTH = 4000; // sane ceiling (~55in) before we fall back to shrinking
+
   // ── Export PDF ─────────────────────────────────────────────────────────────
   const exportPDF = () => {
-    const doc = new jsPDF("l", "pt", "a4");
+    const pageMargin = 40;
     const cleanText = (text) => {
       if (!text) return "";
       return String(text)
@@ -489,11 +528,6 @@ export default function ComparativeStatement() {
     const fullTitle = headingInfo
       ? `Comparative Statement - ${headingInfo}`
       : "Comparative Statement";
-
-    doc.setFontSize(11);
-    doc.setFont(undefined, "bold");
-    doc.text(fullTitle, 40, 28);
-    doc.setFont(undefined, "normal");
 
     const startY = 38;
 
@@ -645,6 +679,24 @@ export default function ComparativeStatement() {
         cellWidth,
       };
     });
+
+    // ── Size the page to this table's natural width instead of squeezing the
+    // table into a fixed A4 page. Only fall back to shrinking columns if the
+    // natural width would blow past our sane ceiling.
+    let csNaturalWidth = 0;
+    for (let i = 0; i < totalCSCols; i++) csNaturalWidth += columnStyles[i]?.cellWidth || 18;
+    const csPageWidth = clamp(csNaturalWidth + pageMargin * 2, A4_LANDSCAPE_WIDTH, MAX_PAGE_WIDTH);
+    const csAvailableWidth = csPageWidth - pageMargin * 2;
+    if (csNaturalWidth > csAvailableWidth) {
+      fitColumnStyles(columnStyles, totalCSCols, csAvailableWidth);
+    }
+
+    const doc = new jsPDF("l", "pt", [csPageWidth, A4_LANDSCAPE_HEIGHT]);
+
+    doc.setFontSize(11);
+    doc.setFont(undefined, "bold");
+    doc.text(fullTitle, 40, 28);
+    doc.setFont(undefined, "normal");
 
     const body = rows.flatMap((row, idx) => {
       const dims = [row.size, row.width, row.length].filter(Boolean).join(" x ");
@@ -831,23 +883,16 @@ export default function ComparativeStatement() {
       },
       alternateRowStyles: { fillColor: [255, 255, 255] },
       columnStyles,
-      margin: { left: 40, right: 40 },
+      margin: { left: pageMargin, right: pageMargin },
       tableWidth: "wrap",
     });
 
     // ── Page 2: L1 Rate Summary ────────────────────────────────────────────────
-    doc.addPage();
     const l1Y = 28;
 
     const l1FullTitle = headingInfo
       ? `L1 Rate Summary - ${headingInfo}`
       : "L1 Rate Summary";
-
-    doc.setFontSize(11);
-    doc.setFont(undefined, "bold");
-    doc.setTextColor(0, 0, 0);
-    doc.text(l1FullTitle, 40, l1Y);
-    doc.setFont(undefined, "normal");
 
     const l1Head1 = [
       { content: "No.",                 rowSpan: 2, styles: { halign: "center", valign: "middle" } },
@@ -1069,6 +1114,32 @@ export default function ComparativeStatement() {
       };
     });
 
+    // ── Give the L1 table its own page, sized to what it actually needs ─────
+    // This is the fix for "the L1 summary table is going out of the table":
+    // with 3 columns per supplier (Mt / Rate / Amount) instead of 2, this
+    // table's natural width grows faster than the main Comparative Statement
+    // table's, so a fixed A4-landscape page was too narrow and columns were
+    // being pushed past the page edge. Rather than squeezing columns/fonts
+    // down to fit, we size THIS page to the table (same approach as the CS
+    // table above), so every column keeps its natural, readable width. Only
+    // if that natural width blows past a sane ceiling do we fall back to
+    // proportional shrinking.
+    let l1NaturalWidth = 0;
+    for (let i = 0; i < totalL1Cols; i++) l1NaturalWidth += l1ColStyles[i]?.cellWidth || 20;
+    const l1PageWidth = clamp(l1NaturalWidth + pageMargin * 2, A4_LANDSCAPE_WIDTH, MAX_PAGE_WIDTH);
+    const l1AvailableWidth = l1PageWidth - pageMargin * 2;
+    if (l1NaturalWidth > l1AvailableWidth) {
+      fitColumnStyles(l1ColStyles, totalL1Cols, l1AvailableWidth, 12);
+    }
+
+    doc.addPage([l1PageWidth, A4_LANDSCAPE_HEIGHT], "l");
+
+    doc.setFontSize(11);
+    doc.setFont(undefined, "bold");
+    doc.setTextColor(0, 0, 0);
+    doc.text(l1FullTitle, 40, l1Y);
+    doc.setFont(undefined, "normal");
+
     const l1StartY = l1Y + 10;
 
     autoTable(doc, {
@@ -1100,7 +1171,7 @@ export default function ComparativeStatement() {
       },
       alternateRowStyles: { fillColor: [255, 255, 255] },
       columnStyles: l1ColStyles,
-      margin: { left: 40, right: 40 },
+      margin: { left: pageMargin, right: pageMargin },
       tableWidth: "wrap",
     });
 
@@ -1264,7 +1335,12 @@ export default function ComparativeStatement() {
     merges.push({ s: { r: 0, c: col + 1 }, e: { r: 1, c: col + 1 } });
     const csPctLowestCol = col;
     const csPctLastCol = col + 1;
-    ws["!merges"] = merges;
+    // ── Apply BOTH the header merges AND the alt-item body merges (S.No /
+    // Qty(MT) / each supplier's 3 cols spanning the 2 rows of an alt item).
+    // Previously `altBodyMerges` was built above but never assigned to
+    // `ws["!merges"]`, so it was silently discarded and alt-item rows in
+    // Excel never got the merged-cell treatment the CS/PDF views have.
+    ws["!merges"] = [...merges, ...altBodyMerges];
     ws["!freeze"] = { ySplit: 2 };
     const colWidths = [6, 16, 12, 10, 10, 10, 12, 14, 12, 14];
     suppliers.forEach(() => { colWidths.push(10, 16, 14); });
@@ -1290,53 +1366,97 @@ export default function ComparativeStatement() {
     XLSX.utils.book_append_sheet(wb, ws, "Comparative Statement");
 
     // ── L1 Summary Excel sheet ─────────────────────────────────────────────────
+    // Mirrors the Comparative Statement sheet exactly: alternative items get
+    // TWO rows (original spec row with blank purchase/% cells, then an
+    // "(Alt) ..." row carrying the actual purchase Date/Amount + % figures),
+    // with No. / Mt. / each supplier's Mt-Rate-Amount trio merged vertically
+    // across the pair — instead of cramming "(Alt)" into a single cell via \n.
     const l1H1 = ["No.", "Description of Item", "Mt.", "Lowest Purchase", "", "Last Purchase", ""];
     const l1H2 = ["", "", "", "Date", "Amount", "Date", "Amount"];
     suppliers.forEach(sup => { l1H1.push(sup, "", ""); l1H2.push("Mt", "Rate", "Amount"); });
     l1H1.push("% Increase", "");
     l1H2.push("vs Lowest Purchase", "vs Last Purchase");
 
-    const l1DataRows = l1Summary.rowDetails.map((r, i) => {
+    const l1DataRows = [];
+    const l1AltMerges = [];
+    let l1RowCursor = 2; // after the 2 header rows
+
+    l1Summary.rowDetails.forEach((r, i) => {
       const origRow = rows[r.idx] !== undefined ? rows[r.idx] : rows[i];
       const l1Rate       = r.l1Rate;
       const pctLowest    = origRow ? formatPercent(l1Rate, origRow.lowestPurchaseRate) : null;
       const pctLowestNum = pctLowest !== null ? parseFloat(pctLowest) : null;
       const pctLast      = origRow ? formatPercent(l1Rate, origRow.lastPurchaseRate)   : null;
       const pctLastNum   = pctLast  !== null ? parseFloat(pctLast)  : null;
+      const isAlt        = origRow && origRow.isAlternative;
 
-      let descStr = r.description || "";
-      if (origRow && origRow.isAlternative) {
-        const altLabel = buildAltLabel(origRow);
-        if (altLabel) descStr += `\n${altLabel}`;
-      }
+      const pctLowestStr = pctLowestNum !== null ? `${pctLowestNum > 0 ? "+" : pctLowestNum < 0 ? "-" : ""}${Math.abs(pctLowestNum)}%` : "";
+      const pctLastStr   = pctLastNum   !== null ? `${pctLastNum   > 0 ? "+" : pctLastNum   < 0 ? "-" : ""}${Math.abs(pctLastNum)}%`   : "";
 
-      const dr = [
-        i + 1,
-        descStr,
-        r.totalMt > 0 ? parseFloat(r.totalMt).toFixed(2) : "",
-        origRow && origRow.lowestPurchaseRate != null && origRow.lowestPurchaseRate !== 0 && origRow.lowestPurchaseDate
-          ? formatDate(origRow.lowestPurchaseDate) : "",
-        origRow && origRow.lowestPurchaseRate != null && origRow.lowestPurchaseRate !== 0
-          ? formatRate(Math.round(origRow.lowestPurchaseRate)) : "",
-        origRow && origRow.lastPurchaseRate != null && origRow.lastPurchaseRate !== 0 && origRow.lastPurchaseDate
-          ? formatDate(origRow.lastPurchaseDate) : "",
-        origRow && origRow.lastPurchaseRate != null && origRow.lastPurchaseRate !== 0
-          ? formatRate(Math.round(origRow.lastPurchaseRate)) : "",
-      ];
-      suppliers.forEach(sup => {
+      const supplierVals = suppliers.flatMap(sup => {
         const d = r.supplierData[sup];
         const hasData = d && d.rate;
-        dr.push(
+        return [
           hasData ? parseFloat(d.mt).toFixed(2) : "",
           hasData ? formatRate(d.rate)           : "",
-          hasData ? formatAmount(d.amount)       : ""
-        );
+          hasData ? formatAmount(d.amount)       : "",
+        ];
       });
-      dr.push(
-        pctLowestNum !== null ? `${pctLowestNum > 0 ? "+" : pctLowestNum < 0 ? "-" : ""}${Math.abs(pctLowestNum)}%` : "",
-        pctLastNum   !== null ? `${pctLastNum   > 0 ? "+" : pctLastNum   < 0 ? "-" : ""}${Math.abs(pctLastNum)}%`   : ""
-      );
-      return dr;
+
+      if (!isAlt) {
+        l1DataRows.push([
+          i + 1,
+          r.description || "",
+          r.totalMt > 0 ? parseFloat(r.totalMt).toFixed(2) : "",
+          origRow && origRow.lowestPurchaseRate != null && origRow.lowestPurchaseRate !== 0 && origRow.lowestPurchaseDate
+            ? formatDate(origRow.lowestPurchaseDate) : "",
+          origRow && origRow.lowestPurchaseRate != null && origRow.lowestPurchaseRate !== 0
+            ? formatRate(Math.round(origRow.lowestPurchaseRate)) : "",
+          origRow && origRow.lastPurchaseRate != null && origRow.lastPurchaseRate !== 0 && origRow.lastPurchaseDate
+            ? formatDate(origRow.lastPurchaseDate) : "",
+          origRow && origRow.lastPurchaseRate != null && origRow.lastPurchaseRate !== 0
+            ? formatRate(Math.round(origRow.lastPurchaseRate)) : "",
+          ...supplierVals,
+          pctLowestStr, pctLastStr,
+        ]);
+        l1RowCursor += 1;
+        return;
+      }
+
+      // ── Alt item: two rows, same pattern as the Comparative Statement sheet ──
+      const altLabel = buildAltLabel(origRow) || "";
+      l1DataRows.push([
+        i + 1, r.description || "", r.totalMt > 0 ? parseFloat(r.totalMt).toFixed(2) : "",
+        "", "", "", "",
+        ...supplierVals,
+        "", "",
+      ]);
+      l1DataRows.push([
+        "", `(Alt) ${altLabel}`, "",
+        origRow.lowestPurchaseRate != null && origRow.lowestPurchaseRate !== 0 && origRow.lowestPurchaseDate
+          ? formatDate(origRow.lowestPurchaseDate) : "",
+        origRow.lowestPurchaseRate != null && origRow.lowestPurchaseRate !== 0
+          ? formatRate(Math.round(origRow.lowestPurchaseRate)) : "",
+        origRow.lastPurchaseRate != null && origRow.lastPurchaseRate !== 0 && origRow.lastPurchaseDate
+          ? formatDate(origRow.lastPurchaseDate) : "",
+        origRow.lastPurchaseRate != null && origRow.lastPurchaseRate !== 0
+          ? formatRate(Math.round(origRow.lastPurchaseRate)) : "",
+        ...suppliers.flatMap(() => ["", "", ""]),
+        pctLowestStr, pctLastStr,
+      ]);
+
+      // No. (col 0) and Mt. (col 2) span both rows; each supplier's 3 cols
+      // (Mt / Rate / Amount) span both rows too — mirrors altBodyMerges above.
+      l1AltMerges.push({ s: { r: l1RowCursor, c: 0 }, e: { r: l1RowCursor + 1, c: 0 } });
+      l1AltMerges.push({ s: { r: l1RowCursor, c: 2 }, e: { r: l1RowCursor + 1, c: 2 } });
+      let scolL1 = 7; // suppliers start right after No./Desc/Mt./LowestDate/LowestAmt/LastDate/LastAmt
+      suppliers.forEach(() => {
+        l1AltMerges.push({ s: { r: l1RowCursor, c: scolL1 },     e: { r: l1RowCursor + 1, c: scolL1 } });
+        l1AltMerges.push({ s: { r: l1RowCursor, c: scolL1 + 1 }, e: { r: l1RowCursor + 1, c: scolL1 + 1 } });
+        l1AltMerges.push({ s: { r: l1RowCursor, c: scolL1 + 2 }, e: { r: l1RowCursor + 1, c: scolL1 + 2 } });
+        scolL1 += 3;
+      });
+      l1RowCursor += 2;
     });
 
     const l1TotRow = ["", "Total MT / Avg Rate", l1Summary.grandTotalMt > 0 ? parseFloat(l1Summary.grandTotalMt).toFixed(2) : ""];
@@ -1381,7 +1501,8 @@ export default function ComparativeStatement() {
     l1Merges.push({ s: { r: 0, c: lc }, e: { r: 0, c: lc + 1 } });
     const l1PctLowestCol = lc;
     const l1PctLastCol = lc + 1;
-    wsL1["!merges"] = l1Merges;
+    // Apply header merges + the per-alt-item body merges built above.
+    wsL1["!merges"] = [...l1Merges, ...l1AltMerges];
     wsL1["!freeze"] = { ySplit: 2 };
     const l1ColW = [6, 32, 10, 12, 14, 12, 14];
     suppliers.forEach(() => { l1ColW.push(10, 14, 16); });
